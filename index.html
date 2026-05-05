@@ -463,7 +463,7 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, apiKey:'', dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, apiKey:'', edamamAppId:'', edamamAppKey:'', dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -471,6 +471,8 @@ function load(){
   try{const r=localStorage.getItem('mrv3');S.recipes=r?JSON.parse(r):SAMPLE;if(!S.recipes.length)S.recipes=SAMPLE;}catch{S.recipes=SAMPLE;}
   try{const sh=localStorage.getItem('mrsh');S.shopping=sh?JSON.parse(sh):[];}catch{S.shopping=[];}
   try{S.apiKey=localStorage.getItem('mrak')||'';}catch{}
+  try{S.edamamAppId=localStorage.getItem('mredid')||'';}catch{}
+  try{S.edamamAppKey=localStorage.getItem('mredk')||'';}catch{}
   try{S.dark=localStorage.getItem('mrdm')==='1';}catch{}
   try{const cc=localStorage.getItem('mrcats');if(cc)S.customCats=JSON.parse(cc);}catch{}
   try{const ccol=localStorage.getItem('mrcatcol');if(ccol)S.customCatColors=JSON.parse(ccol);}catch{}
@@ -496,6 +498,12 @@ function saveR(){
 }
 function saveSh(){try{localStorage.setItem('mrsh',JSON.stringify(S.shopping));}catch{}}
 function saveKey(){try{localStorage.setItem('mrak',S.apiKey);}catch{}}
+function saveEdamam(){
+  S.edamamAppId=(document.getElementById('edamamId')?.value||'').trim();
+  S.edamamAppKey=(document.getElementById('edamamKey')?.value||'').trim();
+  try{localStorage.setItem('mredid',S.edamamAppId);localStorage.setItem('mredk',S.edamamAppKey);}catch{}
+  toast('Edamam Keys gespeichert ✓');
+}
 function saveDark(){try{localStorage.setItem('mrdm',S.dark?'1':'0');}catch{}}
 function saveCats(){try{localStorage.setItem('mrcats',JSON.stringify(S.customCats));localStorage.setItem('mrcatcol',JSON.stringify(S.customCatColors));}catch{}}
 
@@ -1562,7 +1570,10 @@ function renderForm(app){
       <div class="cf">
         <div class="fl" style="display:flex;align-items:center;justify-content:space-between">
           <span>Nährwerte (pro Portion)</span>
-          <button id="nutritionAiBtn" class="btn bp sm" style="font-size:.72rem">✨ KI schätzen</button>
+          <div style="display:flex;gap:.4rem">
+            <button id="nutritionEdamamBtn" class="btn bg sm" style="font-size:.72rem" title="Edamam Nährwert-Datenbank">🥗 Edamam</button>
+            <button id="nutritionAiBtn" class="btn bp sm" style="font-size:.72rem">✨ KI schätzen</button>
+          </div>
         </div>
         <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin:.2rem 0 .5rem;font-style:italic">Werden automatisch anhand der Zutaten geschätzt</div>
         <div class="fg" style="margin-bottom:0">
@@ -1591,10 +1602,14 @@ function renderForm(app){
       const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,
-          system:`Du bist ein Ernährungsexperte. Schätze die Nährwerte PRO PORTION für das gegebene Rezept.
-Antworte NUR mit JSON, kein Markdown: {"kcal":350,"protein":25,"carbs":40,"fat":12,"fiber":5,"salt":1.2}
-Alle Werte sind gerundete Ganzzahlen außer Salz (eine Dezimalstelle). Basiere dich auf den Zutatenmengen geteilt durch ${servings} Portionen.`,
-          messages:[{role:'user',content:`Rezept: ${title}\nPortionen: ${servings}\nZutaten:\n${ingredients}`}]})});
+          system:`Du bist ein präziser Ernährungsrechner. Berechne die Nährwerte PRO PORTION Schritt für Schritt:
+1. Ermittle für jede Zutat die Kalorien und Makros anhand der exakten Menge
+2. Summiere alle Zutaten
+3. Teile durch ${servings} Portionen
+Antworte NUR mit JSON, kein Markdown, keine Erklärung: {"kcal":350,"protein":25,"carbs":40,"fat":12,"fiber":5,"salt":1.2}
+Alle Werte gerundete Ganzzahlen außer Salz (eine Dezimalstelle).`,
+          messages:[{role:'user',content:`Rezept: ${title}\nPortionen: ${servings}\nZutaten:\n${ingredients}`}],
+          temperature:0})});
       const d=await resp.json();
       const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').replace(/```json?|```/g,'').trim();
       const n=JSON.parse(txt);
@@ -1612,7 +1627,52 @@ Alle Werte sind gerundete Ganzzahlen außer Salz (eine Dezimalstelle). Basiere d
     }
     btn.textContent='✨ KI schätzen';btn.disabled=false;
   });
-  // Bold button
+
+  // ── Edamam Nährwert-Button ──
+  document.getElementById('nutritionEdamamBtn')?.addEventListener('click', async()=>{
+    const btn=document.getElementById('nutritionEdamamBtn');
+    const status=document.getElementById('nutritionStatus');
+    const ingredients=(document.getElementById('f-ing')?.value||'').trim();
+    const servings=parseInt(document.getElementById('f-srv')?.value||'1')||1;
+    if(!ingredients){status.textContent='⚠ Bitte zuerst Zutaten eingeben.';return;}
+    if(!S.edamamAppId||!S.edamamAppKey){
+      status.textContent='⚠ Edamam App ID & Key in den Einstellungen hinterlegen.';
+      status.style.color='var(--danger)';return;
+    }
+    btn.textContent='⏳ Lädt…';btn.disabled=true;
+    status.textContent='';
+    try{
+      const ingLines=ingredients.split('\n').map(l=>l.trim()).filter(Boolean);
+      const body={title:document.getElementById('f-ti')?.value||'Rezept',ingr:ingLines};
+      const url=`https://api.edamam.com/api/nutrition-details?app_id=${encodeURIComponent(S.edamamAppId)}&app_key=${encodeURIComponent(S.edamamAppKey)}`;
+      const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(!resp.ok){
+        const err=await resp.json().catch(()=>({}));
+        throw new Error(err.message||'Edamam Fehler '+resp.status);
+      }
+      const d=await resp.json();
+      const tot=d.totalNutrients||{};
+      const cal=Math.round((d.calories||0)/servings);
+      const prot=Math.round((tot.PROCNT?.quantity||0)/servings);
+      const carb=Math.round((tot.CHOCDF?.quantity||0)/servings);
+      const fat=Math.round((tot.FAT?.quantity||0)/servings);
+      const fiber=Math.round((tot.FIBTG?.quantity||0)/servings);
+      const salt=Math.round((tot.NA?.quantity||0)/servings*0.00254*10)/10; // mg Na → g Salz
+      document.getElementById('f-kcal').value=cal||'';
+      document.getElementById('f-prot').value=prot||'';
+      document.getElementById('f-carb').value=carb||'';
+      document.getElementById('f-fat').value=fat||'';
+      document.getElementById('f-fiber').value=fiber||'';
+      document.getElementById('f-salt').value=salt||'';
+      status.textContent='✓ Edamam-Datenbank – exakte Berechnung.';
+      status.style.color='var(--ok)';
+    }catch(e){
+      status.textContent='⚠ '+e.message;
+      status.style.color='var(--danger)';
+    }
+    btn.textContent='🥗 Edamam';btn.disabled=false;
+  });
+
   document.getElementById('boldBtn')?.addEventListener('click',()=>{
     const ta=document.getElementById('f-st');if(!ta)return;
     const s=ta.selectionStart,e=ta.selectionEnd,v=ta.value;
@@ -1743,6 +1803,7 @@ function renderShop(app){
             <div class="stx${it.done?' dn':''}">${esc(it.text)}</div>
             ${it.from?`<div class="ssrc">aus: ${esc(it.from)}</div>`:''}
           </div>
+          <button onclick="event.stopPropagation();editShItem(${it.idx})" style="background:none;border:none;font-size:.8rem;color:var(--faint);cursor:pointer;padding:.2rem .35rem;flex-shrink:0" title="Bearbeiten">✏️</button>
           <button onclick="event.stopPropagation();showShopCatPicker(${it.idx})" style="background:none;border:none;font-size:.8rem;color:var(--faint);cursor:pointer;padding:.2rem .35rem;flex-shrink:0" title="Kategorie ändern">📂</button>
           <button class="srm" onclick="event.stopPropagation();rmSh(${it.idx})">✕</button>
         </div>`).join('')}
@@ -1864,6 +1925,16 @@ function renderSettings(app){
         <button class="btn bp sm" style="margin-top:.6rem" onclick="saveKey2()">Key speichern</button>
       </div>
     </div>
+    <div class="ss"><div class="st2">Edamam Nährwert-Datenbank</div>
+      <div class="sr2" style="flex-direction:column;align-items:flex-start">
+        <div class="sl">App ID & App Key</div>
+        <div class="ss2">Kostenloser Account auf <a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a> → „Nutrition Analysis API"</div>
+        <input class="aki" type="text" id="edamamId" value="${esc(S.edamamAppId)}" placeholder="App ID" style="margin-top:.5rem;width:100%">
+        <input class="aki" type="password" id="edamamKey" value="${esc(S.edamamAppKey)}" placeholder="App Key" style="margin-top:.4rem;width:100%">
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.35rem;font-family:var(--ui);font-style:italic">Kostenfrei bis 400 Anfragen/Monat. Keys werden nur lokal gespeichert.</div>
+        <button class="btn bg sm" style="margin-top:.6rem" onclick="saveEdamam()">Keys speichern</button>
+      </div>
+    </div>
     <div class="ss"><div class="st2">Daten</div>
       <div class="sr2"><div><div class="sl">🗜 Fotos komprimieren</div><div class="ss2">Spart Speicherplatz – Qualität bleibt gut</div></div><button class="btn bg sm" onclick="recompressAllPhotos()">Komprimieren</button></div>
       <div class="sr2"><div><div class="sl">📦 Vollständiges Backup</div><div class="ss2">Rezepte + Einstellungen + Kategorien</div></div>
@@ -1871,6 +1942,16 @@ function renderSettings(app){
           <button class="btn bp sm" onclick="exportFullBackup()">Export</button>
           <button class="btn bg sm" id="backupImportBtn">Import</button>
           <input type="file" id="backupFile" accept=".json" style="display:none">
+        </div>
+      </div>
+      <div class="sr2"><div><div class="sl">🏷 Einkaufskategorien</div><div class="ss2">Alle Zuweisungen exportieren / importieren</div></div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end">
+          <div style="display:flex;gap:.4rem">
+            <button class="btn bp sm" onclick="exportShopCats()">Export</button>
+            <button class="btn bg sm" id="shopCatsImportBtn">Import</button>
+            <input type="file" id="shopCatsFile" accept=".json" style="display:none">
+          </div>
+          <button class="btn bg sm" style="width:100%" onclick="showShopCatManager()">🏷 Zuweisungen verwalten</button>
         </div>
       </div>
       <div class="sr2"><div><div class="sl" style="color:var(--danger)">🗑 Alle Rezepte löschen</div><div class="ss2">Nicht rückgängig zu machen</div></div><button class="btn bdo sm" onclick="delAll()">Löschen</button></div>
@@ -2011,6 +2092,35 @@ function renderSettings(app){
   document.getElementById('dtgl').addEventListener('click',()=>{S.dark=!S.dark;saveDark();applyTheme();renderApp();});
   document.getElementById('wltgl')?.addEventListener('click',()=>toggleWakeLock());
   document.getElementById('backupImportBtn')?.addEventListener('click',()=>document.getElementById('backupFile')?.click());
+  document.getElementById('shopCatsImportBtn')?.addEventListener('click',()=>document.getElementById('shopCatsFile')?.click());
+  document.getElementById('shopCatsFile')?.addEventListener('change',async e=>{
+    const f=e.target.files[0];if(!f)return;
+    e.target.value='';
+    try{
+      const data=JSON.parse(await f.text());
+      if(!data.__shopCats)throw new Error('Keine gültige Einkaufskategorien-Datei.');
+      // Support both v1 (customShopCats object) and v2 (entries array)
+      let incoming=[];
+      if(data.version===2&&Array.isArray(data.entries)){
+        incoming=data.entries.map(e=>({text:e.text,catIdx:e.categoryIndex}));
+      } else if(data.customShopCats){
+        incoming=Object.entries(data.customShopCats).map(([text,catIdx])=>({text,catIdx}));
+      }
+      if(!incoming.length){toast('Keine Einträge in der Datei.','err');return;}
+      const existing=S.customShopCats||{};
+      const conflicts=incoming.filter(x=>existing[x.text]!==undefined&&existing[x.text]!==x.catIdx);
+      const newItems=incoming.filter(x=>existing[x.text]===undefined);
+      const same=incoming.filter(x=>existing[x.text]===x.catIdx);
+      if(!conflicts.length){
+        // No conflicts – just add
+        incoming.forEach(x=>{existing[x.text]=x.catIdx;});
+        S.customShopCats=existing;saveShopCats();
+        toast(`${newItems.length} neu, ${same.length} unverändert importiert ✓`);return;
+      }
+      // Show conflict resolution modal
+      showShopCatImportModal(conflicts,newItems,same,existing,incoming);
+    }catch(err){toast('⚠ Fehler: '+err.message,'err');}
+  });
   document.getElementById('backupFile')?.addEventListener('change',async e=>{
     const f=e.target.files[0];if(!f)return;
     try{
@@ -2022,6 +2132,9 @@ function renderSettings(app){
         if(data.settings.dark!==undefined){S.dark=data.settings.dark;saveDark();applyTheme();}
         if(data.settings.apiKey){S.apiKey=data.settings.apiKey;saveKey();}
         if(data.settings.customCats!==undefined){S.customCats=data.settings.customCats;S.customCatColors=data.settings.customCatColors||{};saveCats();}
+        if(data.settings.customShopCats){S.customShopCats=data.settings.customShopCats;try{localStorage.setItem('mrcatcol',JSON.stringify(S.customShopCats));}catch{}}
+        if(data.settings.edamamAppId){S.edamamAppId=data.settings.edamamAppId;try{localStorage.setItem('mredid',S.edamamAppId);}catch{}}
+        if(data.settings.edamamAppKey){S.edamamAppKey=data.settings.edamamAppKey;try{localStorage.setItem('mredk',S.edamamAppKey);}catch{}}
       }
       toast('Backup wiederhergestellt ✓');render();
     }catch(err){alert('⚠ Fehler: '+err.message);}
@@ -2064,6 +2177,36 @@ function togPick(i){window._shopChecks[i].checked=!window._shopChecks[i].checked
 
 function togSh(i){S.shopping[i].done=!S.shopping[i].done;saveSh();renderApp();renderNav();}
 function rmSh(i){S.shopping.splice(i,1);saveSh();renderApp();}
+
+function editShItem(idx){
+  const it=S.shopping[idx];if(!it)return;
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:200';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.4rem 1.2rem 2rem;width:100%;max-width:500px;font-family:var(--font)';
+  md.innerHTML=`
+    <div style="font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:1rem">Eintrag bearbeiten</div>
+    <input id="shEditInp" style="width:100%;padding:.7rem .9rem;border-radius:10px;border:1.5px solid var(--accent);background:var(--surface2);color:var(--text);font-size:1rem;font-family:var(--font);box-sizing:border-box" value="${esc(it.text)}" autocomplete="off">
+    <div style="display:flex;gap:.6rem;margin-top:.9rem">
+      <button id="shEditCancel" style="flex:1;padding:.65rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--muted);font-family:var(--font);font-size:.9rem;cursor:pointer">Abbrechen</button>
+      <button id="shEditSave" style="flex:2;padding:.65rem;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:.9rem;font-weight:600;cursor:pointer">Speichern</button>
+    </div>`;
+  ov.appendChild(md);
+  document.body.appendChild(ov);
+  const inp=md.querySelector('#shEditInp');
+  setTimeout(()=>{inp.focus();inp.select();},80);
+  function close(){document.body.removeChild(ov);}
+  function save(){
+    const val=inp.value.trim();
+    if(!val)return;
+    S.shopping[idx].text=val;
+    saveSh();close();renderApp();
+  }
+  md.querySelector('#shEditSave').addEventListener('click',save);
+  md.querySelector('#shEditCancel').addEventListener('click',close);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')save();if(e.key==='Escape')close();});
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+}
 function clearDone(){S.shopping=S.shopping.filter(x=>!x.done);saveSh();renderApp();}
 function clearAllSh(){if(confirm('Einkaufsliste leeren?')){S.shopping=[];saveSh();renderApp();}}
 function copySh(){const t=S.shopping.filter(x=>!x.done).map(x=>'☐ '+x.text).join('\n');navigator.clipboard?.writeText(t).then(()=>alert('Kopiert!'));}
@@ -2213,11 +2356,165 @@ async function exportFullBackup(){
     const backup={
       __backup:true, version:1, exportedAt:Date.now(),
       recipes:S.recipes,
-      settings:{dark:S.dark, apiKey:keyChoice==='yes'?S.apiKey:'', customCats:S.customCats, customCatColors:S.customCatColors}
+      settings:{dark:S.dark, apiKey:keyChoice==='yes'?S.apiKey:'', customCats:S.customCats, customCatColors:S.customCatColors, customShopCats:S.customShopCats, edamamAppId:S.edamamAppId, edamamAppKey:S.edamamAppKey}
     };
     doSave(filename, JSON.stringify(backup,null,2));
   });
 }
+
+function exportShopCats(){
+  const date=new Date().toISOString().slice(0,10);
+  const custom=S.customShopCats||{};
+  // Merge FOOD_DB (auto) with custom (manual), custom overrides
+  const all={...FOOD_DB,...custom};
+  const entries=Object.entries(all).sort((a,b)=>a[0].localeCompare(b[0],'de')).map(([text,catIdx])=>({
+    text,
+    categoryIndex:catIdx,
+    categoryName:SHOP_CATS[catIdx]||'Unbekannt',
+    source:custom[text]!==undefined?'manual':'auto'
+  }));
+  const manualCount=entries.filter(e=>e.source==='manual').length;
+  const autoCount=entries.length-manualCount;
+  const data={__shopCats:true, version:2, exportedAt:Date.now(), exportedAtReadable:new Date().toLocaleString('de-DE'), entries};
+  showSaveDialog('einkaufskategorien-'+date+'.json', filename=>{
+    doSave(filename, JSON.stringify(data,null,2));
+    toast(`${manualCount} manuell + ${autoCount} auto exportiert ✓`);
+  });
+}
+
+function showShopCatImportModal(conflicts,newItems,same,existing,incoming){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:300;padding:1rem';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:16px;padding:1.2rem;width:100%;max-width:480px;max-height:85dvh;overflow-y:auto;font-family:var(--font)';
+  let idx=0;const decisions={};
+  function renderConflict(){
+    if(idx>=conflicts.length){finish();return;}
+    const c=conflicts[idx];
+    const oldName=SHOP_CATS[existing[c.text]]||'?';
+    const newName=SHOP_CATS[c.catIdx]||'?';
+    md.innerHTML=`
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem;font-family:var(--ui)">${idx+1} von ${conflicts.length} Konflikten</div>
+      <div style="font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:.3rem">⚡ Konflikt</div>
+      <div style="background:var(--surface2);border-radius:10px;padding:.8rem;margin-bottom:.9rem;font-size:.9rem">
+        <div style="font-weight:600;margin-bottom:.4rem">"${c.text}"</div>
+        <div style="color:var(--muted);font-size:.8rem">Aktuell: <strong style="color:var(--text)">${oldName}</strong></div>
+        <div style="color:var(--muted);font-size:.8rem">Neu: <strong style="color:var(--accent)">${newName}</strong></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.5rem">
+        <button id="cfKeep" style="padding:.65rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--text);font-family:var(--font);font-size:.88rem;cursor:pointer;text-align:left">⬅ Behalten: <strong>${oldName}</strong></button>
+        <button id="cfOver" style="padding:.65rem;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:.88rem;cursor:pointer;text-align:left">➡ Überschreiben: <strong>${newName}</strong></button>
+        <div style="display:flex;gap:.4rem;margin-top:.2rem">
+          <button id="cfKeepAll" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--muted);font-family:var(--font);font-size:.78rem;cursor:pointer">Alle behalten</button>
+          <button id="cfOverAll" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--accent);background:none;color:var(--accent);font-family:var(--font);font-size:.78rem;cursor:pointer">Alle überschreiben</button>
+          <button id="cfSkip" style="flex:1;padding:.5rem;border-radius:10px;border:none;background:none;color:var(--faint);font-family:var(--font);font-size:.78rem;cursor:pointer">Abbrechen</button>
+        </div>
+      </div>`;
+    md.querySelector('#cfKeep').onclick=()=>{decisions[c.text]='keep';idx++;renderConflict();};
+    md.querySelector('#cfOver').onclick=()=>{decisions[c.text]='over';idx++;renderConflict();};
+    md.querySelector('#cfKeepAll').onclick=()=>{conflicts.slice(idx).forEach(x=>{decisions[x.text]='keep';});finish();};
+    md.querySelector('#cfOverAll').onclick=()=>{conflicts.slice(idx).forEach(x=>{decisions[x.text]='over';});finish();};
+    md.querySelector('#cfSkip').onclick=()=>{document.body.removeChild(ov);};
+  }
+  function finish(){
+    document.body.removeChild(ov);
+    const ex=S.customShopCats||{};
+    newItems.forEach(x=>{ex[x.text]=x.catIdx;});
+    conflicts.forEach(c=>{if(decisions[c.text]==='over')ex[c.text]=c.catIdx;});
+    S.customShopCats=ex;saveShopCats();
+    const overwritten=Object.values(decisions).filter(v=>v==='over').length;
+    const kept=Object.values(decisions).filter(v=>v==='keep').length;
+    toast(`${newItems.length} neu, ${overwritten} überschrieben, ${kept} behalten, ${same.length} unverändert ✓`);
+  }
+  ov.appendChild(md);document.body.appendChild(ov);
+  renderConflict();
+}
+
+function showShopCatManager(){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;z-index:300';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem 1rem 2rem;width:100%;max-width:540px;max-height:88dvh;display:flex;flex-direction:column;font-family:var(--font)';
+  function renderList(){
+    const custom=S.customShopCats||{};
+    const all={...FOOD_DB,...custom};
+    const manualCount=Object.keys(custom).length;
+    // Group by category index
+    const grouped={};
+    Object.entries(all).forEach(([text,catIdx])=>{
+      if(!grouped[catIdx])grouped[catIdx]=[];
+      grouped[catIdx].push({text,catIdx,isManual:custom[text]!==undefined});
+    });
+    // Sort categories by index, entries alphabetically within
+    const catHtml=Object.keys(grouped).sort((a,b)=>Number(a)-Number(b)).map(catIdx=>{
+      const items=grouped[catIdx].sort((a,b)=>a.text.localeCompare(b.text,'de'));
+      return `<div style="margin-bottom:.8rem">
+        <div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:.35rem 0 .3rem;border-bottom:1px solid var(--border);margin-bottom:.2rem">${SHOP_CATS[catIdx]||'?'}</div>
+        ${items.map(({text,isManual})=>`
+          <div style="display:flex;align-items:center;gap:.4rem;padding:.4rem 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1;min-width:0;display:flex;align-items:center;gap:.35rem">
+              <div style="font-size:.86rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${text}</div>
+              ${isManual?'<span style="font-size:.6rem;background:var(--accent);color:#fff;border-radius:4px;padding:1px 4px;flex-shrink:0">✎</span>':''}
+            </div>
+            <button data-edit="${text.replace(/"/g,'&quot;')}" data-cat="${catIdx}" style="background:var(--surface2);border:none;border-radius:8px;padding:.3rem .5rem;font-size:.75rem;color:var(--text);cursor:pointer">✏️</button>
+            ${isManual?`<button data-del="${text.replace(/"/g,'&quot;')}" style="background:none;border:none;font-size:.85rem;color:var(--faint);cursor:pointer;padding:.3rem .4rem">✕</button>`:'<div style="width:1.5rem"></div>'}
+          </div>`).join('')}
+      </div>`;
+    }).join('');
+    md.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+        <div style="font-size:1rem;font-weight:700;color:var(--text)">🏷 Kategorie-Zuweisungen</div>
+        <button id="scmClose" style="background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer">✕</button>
+      </div>
+      <div style="font-size:.73rem;color:var(--muted);margin-bottom:.7rem;font-family:var(--ui)">${Object.keys(all).length} gesamt · <span style="color:var(--accent)">${manualCount} manuell ✎</span> · ${Object.keys(all).length-manualCount} automatisch</div>
+      <div style="overflow-y:auto;flex:1">${catHtml}</div>`;
+    md.querySelector('#scmClose').onclick=()=>document.body.removeChild(ov);
+    md.querySelectorAll('[data-del]').forEach(btn=>{
+      btn.onclick=()=>{
+        const t=btn.dataset.del;
+        if(confirm('"'+t+'" – manuelle Zuweisung entfernen?')){
+          delete S.customShopCats[t];saveShopCats();renderList();
+        }
+      };
+    });
+    md.querySelectorAll('[data-edit]').forEach(btn=>{
+      btn.onclick=()=>{
+        const t=btn.dataset.edit;
+        const cur=custom[t]!==undefined?custom[t]:Number(btn.dataset.cat);
+        showShopCatPickerForText(t,cur,renderList);
+      };
+    });
+  }
+  ov.appendChild(md);document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{if(e.target===ov)document.body.removeChild(ov);});
+  renderList();
+}
+
+function showShopCatPickerForText(text,current,onSave){
+  const ov2=document.createElement('div');
+  ov2.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:400';
+  const md2=document.createElement('div');
+  md2.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem;width:100%;max-width:500px;max-height:80dvh;overflow-y:auto;font-family:var(--font)';
+  md2.innerHTML='<div style="font-size:.85rem;font-weight:700;color:var(--text);margin-bottom:.8rem">Kategorie für \u201e'+text+'\u201c</div>'
+    +'<div style="display:flex;flex-direction:column;gap:.35rem">'
+    +SHOP_CATS.map((c,i)=>'<button data-ci="'+i+'" style="background:'+(current===i?'var(--accent)':'var(--surface2)')
+      +';color:'+(current===i?'#fff':'var(--text)')
+      +';border:none;border-radius:10px;padding:.55rem .9rem;text-align:left;cursor:pointer;font-family:var(--font);font-size:.9rem;font-weight:'+(current===i?'700':'400')+'">'+c+'</button>').join('')
+    +'</div>'
+    +'<button id="scp2Cancel" style="width:100%;margin-top:.6rem;background:none;border:none;color:var(--faint);font-family:var(--font);font-size:.82rem;cursor:pointer;padding:.4rem">Abbrechen</button>';
+  ov2.appendChild(md2);document.body.appendChild(ov2);
+  md2.querySelectorAll('[data-ci]').forEach(btn=>{
+    btn.onclick=()=>{
+      if(!S.customShopCats)S.customShopCats={};
+      S.customShopCats[text]=Number(btn.dataset.ci);
+      saveShopCats();document.body.removeChild(ov2);
+      if(onSave)onSave();
+    };
+  });
+  md2.querySelector('#scp2Cancel').onclick=()=>document.body.removeChild(ov2);
+  ov2.addEventListener('click',e=>{if(e.target===ov2)document.body.removeChild(ov2);});
+}
+
 
 function exportRecipeJSON(id){
   const r=S.recipes.find(x=>x.id===id);if(!r)return;
