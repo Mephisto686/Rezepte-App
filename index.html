@@ -318,7 +318,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     <div style="font-size:2rem;margin-bottom:.5rem">🗑️</div>
     <div style="font-size:1rem;font-weight:bold;margin-bottom:.5rem;color:var(--text)">Rezept löschen?</div>
     <p style="color:var(--muted);font-size:.87rem;font-family:var(--ui);margin-bottom:1rem">Nicht rückgängig zu machen.</p>
-    <div class="md-acts"><button class="btn bn" id="delCancel">Abbrechen</button><button class="btn bd" id="delConfirm">Löschen</button></div>
+    <div class="md-acts"><button class="btn bn" id="delCancel">${t('btn_cancel')}</button><button class="btn bd" id="delConfirm">${t('btn_delete')}</button></div>
   </div>
 </div>
 
@@ -338,8 +338,8 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     <div class="md-t">📥 Rezept importieren <button class="md-x" id="importClose">✕</button></div>
     <div class="itabs">
       <button class="itab on" data-tab="json">🗂 JSON</button>
-      <button class="itab" data-tab="photo">📸 Foto</button>
-      <button class="itab" data-tab="url">🔗 Link</button>
+      <button class="itab" data-tab="photo">${S.lang==='en'?'📸 Photo':'📸 Foto'}</button>
+      <button class="itab" data-tab="url">${S.lang==='en'?'🔗 Link':'🔗 Link'}</button>
       <button class="itab" data-tab="pdf">📄 PDF</button>
     </div>
     <!-- Photo -->
@@ -353,7 +353,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       <div id="photoRes"></div>
       <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:.8rem">
         <button class="btn bp" id="photoAnalyze" style="display:none">✨ KI analysieren</button>
-        <button class="btn bp" id="photoAdd" style="display:none">+ Hinzufügen</button>
+        <button class="btn bp" id="photoAdd" style="display:none">${t('btn_save')}</button>
       </div>
     </div>
     <!-- URL -->
@@ -410,7 +410,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     </div>
     <div id="shopPickList" style="max-height:55dvh;overflow-y:auto"></div>
     <div class="md-acts" style="margin-top:1rem">
-      <button class="btn bn" id="shopPickCancel">Abbrechen</button>
+      <button class="btn bn" id="shopPickCancel">${t('btn_cancel')}</button>
       <button class="btn bp" id="shopPickConfirm">In Einkaufsliste</button>
     </div>
   </div>
@@ -463,7 +463,7 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, apiKey:'', edamamAppId:'', edamamAppKey:'', dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -472,6 +472,7 @@ function load(){
   try{const sh=localStorage.getItem('mrsh');S.shopping=sh?JSON.parse(sh):[];}catch{S.shopping=[];}
   try{S.apiKey=localStorage.getItem('mrak')||'';}catch{}
   try{S.edamamAppId=localStorage.getItem('mredid')||'';}catch{}
+  try{S.lang=localStorage.getItem('mrlang')||'de';}catch{}
   try{S.edamamAppKey=localStorage.getItem('mredk')||'';}catch{}
   try{S.dark=localStorage.getItem('mrdm')==='1';}catch{}
   try{const cc=localStorage.getItem('mrcats');if(cc)S.customCats=JSON.parse(cc);}catch{}
@@ -502,13 +503,56 @@ function saveEdamam(){
   S.edamamAppId=(document.getElementById('edamamId')?.value||'').trim();
   S.edamamAppKey=(document.getElementById('edamamKey')?.value||'').trim();
   try{localStorage.setItem('mredid',S.edamamAppId);localStorage.setItem('mredk',S.edamamAppKey);}catch{}
-  toast('Edamam Keys gespeichert ✓');
+  toast(t('toast_keys_saved'));
 }
 function saveDark(){try{localStorage.setItem('mrdm',S.dark?'1':'0');}catch{}}
 function saveCats(){try{localStorage.setItem('mrcats',JSON.stringify(S.customCats));localStorage.setItem('mrcatcol',JSON.stringify(S.customCatColors));}catch{}}
 
 // ══════════════ UTILS ══════════════
 const uid=()=>'r'+Date.now()+Math.random().toString(36).slice(2,5);
+
+// ══════════════ TRANSLATIONS ══════════════
+const LANG={
+  de:{
+    nav_recipes:'Rezepte',nav_favorites:'Favoriten',nav_ai:'KI-Suche',nav_import:'Import',nav_list:'Liste',nav_more:'Mehr',
+    hdr_recipes:'🍳 Meine Rezepte',hdr_new:'Neues Rezept',hdr_edit:'Bearbeiten',hdr_shopping:'🛒 Einkaufsliste',hdr_ai:'✨ KI-Rezeptsuche',hdr_import:'📥 Importieren',hdr_settings:'⚙️ Einstellungen',hdr_saving:'Speichern…',
+    btn_save:'Speichern',btn_cancel:'Abbrechen',btn_delete:'Löschen',btn_export:'Export',btn_import:'Import',btn_close:'Schließen',btn_reset:'Zurücksetzen',btn_compress:'Komprimieren',btn_add_cat:'+ Neue Kategorie',btn_default:'↺ Standard',btn_save_key:'Key speichern',btn_save_keys:'Keys speichern',btn_save_tags:'Speichern',btn_manage:'🏷 Zuweisungen verwalten',btn_ai_est:'✨ KI schätzen',btn_edamam:'🥗 Edamam',
+    det_portions:'Portionen',det_portion:'Portion',det_portions_pl:'Portionen',det_ingredients:'Zutaten',det_steps:'Zubereitung',det_notes:'📝 Notizen',det_experiences:'📓 Erfahrungen',det_no_exp:'Noch keine Erfahrungen eingetragen.',det_nutrition:'Nährwerte pro Portion',det_not_cooked:'🍽 Noch nicht zubereitet',det_cooked:'✅ Schon zubereitet',det_prep:'🔪 Vorbereitung',det_cook:'🍳 Kochzeit',det_total:'⏱ Gesamt',det_min:'Min.',det_reset_steps:'Zurücksetzen',det_selected:'ausgewählt',det_shop_arrow:'🛒 In Einkaufsliste →',
+    nut_kcal:'kcal',nut_protein:'Eiweiß',nut_carbs:'Kohlenhydr.',nut_fat:'Fett',nut_fiber:'Ballaststoffe',nut_salt:'Salz',
+    form_title:'Titel',form_category:'Kategorie',form_servings:'Portionen',form_prep:'Vorbereitungszeit (Min.)',form_cook:'Kochzeit (Min.)',form_ingredients:'Zutaten',form_ing_hint:'Eine Zutat pro Zeile, z.B. 200g Mehl',form_steps:'Zubereitung',form_steps_hint:'Einen Schritt pro Zeile',form_tags:'Tags',form_tag_add:'Tag hinzufügen…',form_photo:'Foto',form_photo_change:'📷 Foto ändern',form_photo_add:'📷 Foto hinzufügen',form_photo_remove:'Foto entfernen',form_nutrition:'Nährwerte (pro Portion)',form_nut_auto:'Werden automatisch anhand der Zutaten geschätzt',form_notes:'Notizen / Tipps (optional)',form_notes_hint:'Schmeckt am nächsten Tag noch besser!',form_favorite:'Favorit',form_cooked:'Zubereitet',
+    flt_title:'Filter',flt_reset:'Zurücksetzen',flt_close:'Schließen',flt_favs:'❤️ Favoriten',flt_favs_only:'Nur Favoriten',flt_rating:'★ Mindestbewertung',flt_all:'Alle',flt_status:'🍽 Status',flt_not_cooked:'Noch nicht zubereitet',flt_cooked:'Schon zubereitet',flt_time:'⏱ Gesamtzeit',flt_cats:'📂 Kategorien',flt_tags:'🏷 Tags',flt_tag_search:'Tag suchen…',
+    sh_empty:'Einkaufsliste ist leer.',sh_add_ph:'Produkt hinzufügen…',sh_copy:'📋 Kopieren',sh_clear_done:'Erledigte löschen',sh_clear_all:'Alle löschen',sh_from:'aus:',sh_open:'offen',sh_done_lbl:'Erledigt',sh_pick_title:'Zutaten zur Einkaufsliste',sh_pick_confirm:'Hinzufügen',sh_edit_title:'Eintrag bearbeiten',sh_auto_detect:'↺ Automatisch erkennen',
+    set_tags:'🏷 Tags',set_tags_hint:'Tippe einen Tag um ihn umzubenennen. ✕ zum Löschen.',set_no_tags:'Noch keine Tags vorhanden.',set_cats:'📂 Kategorien',set_cats_hint:'Ziehen zum Sortieren · Farbe tippen · ✕ zum Löschen',set_display:'Darstellung',set_dark:'🌙 Dark Mode',set_wakelock:'💡 Bildschirm aktiv halten',set_wakelock_hint:'Verhindert das Ausschalten beim Kochen',set_lang:'🌐 Sprache / Language',set_ai:'KI-Import (Foto & Link)',set_api_key:'Anthropic API Key',set_api_hint:'Benötigt für Foto- und Link-Import',set_api_local:'Key wird nur lokal auf diesem Gerät gespeichert.',set_edamam:'Edamam Nährwert-Datenbank',set_edamam_hint:'Kostenfrei bis 400 Anfragen/Monat. Keys werden nur lokal gespeichert.',set_data:'Daten',set_compress:'🗜 Fotos komprimieren',set_compress_hint:'Spart Speicherplatz – Qualität bleibt gut',set_backup:'📦 Vollständiges Backup',set_backup_hint:'Rezepte + Einstellungen + Kategorien',set_shop_cats:'🏷 Einkaufskategorien',set_shop_cats_hint:'Alle Zuweisungen exportieren / importieren',set_delete_all:'🗑 Alle Rezepte löschen',set_delete_hint:'Nicht rückgängig zu machen',set_footer:'Meine Rezepte · Alle Daten lokal gespeichert',
+    list_search:'Titel oder Zutat…',list_filter:'🔽 Filter',list_sort:'⠿ Sortieren',list_sort_done:'⠿ Fertig',list_select:'☑ Auswählen',list_select_done:'✕ Fertig',list_empty:'Noch keine Rezepte. Tippe + um zu starten!',list_no_results:'Keine Rezepte gefunden.',
+    ai_placeholder:'Was möchtest du kochen?',ai_search:'Suchen',ai_searching:'Suche läuft…',
+    confirm_del:'Rezept wirklich löschen?',confirm_del_all:'Alle Rezepte wirklich löschen?',confirm_reset_cats:'Kategorien auf Standard zurücksetzen?',
+    toast_saved:'Gespeichert ✓',toast_deleted:'Gelöscht',toast_copied:'Kopiert ✓',toast_tags_saved:'Tags gespeichert ✓',toast_cats_saved:'Kategorien gespeichert ✓',toast_backup_ok:'Backup wiederhergestellt ✓',toast_keys_saved:'Edamam Keys gespeichert ✓',
+    step_promote:'↑ Titel',step_demote:'↓ Schritt',
+    no_photos:'Keine Fotos vorhanden.',photos_compressed:'Fotos komprimiert ✓',
+    recipe_count_single:'Rezept',recipe_count_plural:'Rezepte',
+  },
+  en:{
+    nav_recipes:'Recipes',nav_favorites:'Favorites',nav_ai:'AI Search',nav_import:'Import',nav_list:'List',nav_more:'More',
+    hdr_recipes:'🍳 My Recipes',hdr_new:'New Recipe',hdr_edit:'Edit',hdr_shopping:'🛒 Shopping List',hdr_ai:'✨ AI Recipe Search',hdr_import:'📥 Import',hdr_settings:'⚙️ Settings',hdr_saving:'Saving…',
+    btn_save:'Save',btn_cancel:'Cancel',btn_delete:'Delete',btn_export:'Export',btn_import:'Import',btn_close:'Close',btn_reset:'Reset',btn_compress:'Compress',btn_add_cat:'+ New Category',btn_default:'↺ Default',btn_save_key:'Save Key',btn_save_keys:'Save Keys',btn_save_tags:'Save',btn_manage:'🏷 Manage Assignments',btn_ai_est:'✨ AI Estimate',btn_edamam:'🥗 Edamam',
+    det_portions:'Servings',det_portion:'Serving',det_portions_pl:'Servings',det_ingredients:'Ingredients',det_steps:'Instructions',det_notes:'📝 Notes',det_experiences:'📓 Experiences',det_no_exp:'No experiences recorded yet.',det_nutrition:'Nutrition per Serving',det_not_cooked:'🍽 Not yet cooked',det_cooked:'✅ Already cooked',det_prep:'🔪 Prep',det_cook:'🍳 Cook time',det_total:'⏱ Total',det_min:'min.',det_reset_steps:'Reset',det_selected:'selected',det_shop_arrow:'🛒 Add to Shopping List →',
+    nut_kcal:'kcal',nut_protein:'Protein',nut_carbs:'Carbs',nut_fat:'Fat',nut_fiber:'Fiber',nut_salt:'Salt',
+    form_title:'Title',form_category:'Category',form_servings:'Servings',form_prep:'Prep time (min)',form_cook:'Cook time (min)',form_ingredients:'Ingredients',form_ing_hint:'One ingredient per line, e.g. 200g flour',form_steps:'Instructions',form_steps_hint:'One step per line',form_tags:'Tags',form_tag_add:'Add tag…',form_photo:'Photo',form_photo_change:'📷 Change photo',form_photo_add:'📷 Add photo',form_photo_remove:'Remove photo',form_nutrition:'Nutrition (per serving)',form_nut_auto:'Estimated automatically from ingredients',form_notes:'Notes / Tips (optional)',form_notes_hint:'Tastes even better the next day!',form_favorite:'Favorite',form_cooked:'Cooked',
+    flt_title:'Filter',flt_reset:'Reset',flt_close:'Close',flt_favs:'❤️ Favorites',flt_favs_only:'Favorites only',flt_rating:'★ Min. rating',flt_all:'All',flt_status:'🍽 Status',flt_not_cooked:'Not yet cooked',flt_cooked:'Already cooked',flt_time:'⏱ Total time',flt_cats:'📂 Categories',flt_tags:'🏷 Tags',flt_tag_search:'Search tags…',
+    sh_empty:'Shopping list is empty.',sh_add_ph:'Add product…',sh_copy:'📋 Copy',sh_clear_done:'Remove done',sh_clear_all:'Clear all',sh_from:'from:',sh_open:'open',sh_done_lbl:'Done',sh_pick_title:'Add Ingredients to List',sh_pick_confirm:'Add',sh_edit_title:'Edit item',sh_auto_detect:'↺ Auto detect',
+    set_tags:'🏷 Tags',set_tags_hint:'Tap a tag to rename it. ✕ to delete.',set_no_tags:'No tags yet.',set_cats:'📂 Categories',set_cats_hint:'Drag to sort · Tap color · ✕ to delete',set_display:'Display',set_dark:'🌙 Dark Mode',set_wakelock:'💡 Keep screen awake',set_wakelock_hint:'Prevents screen off while cooking',set_lang:'🌐 Language / Sprache',set_ai:'AI Import (Photo & Link)',set_api_key:'Anthropic API Key',set_api_hint:'Required for photo and link import',set_api_local:'Key is stored locally on this device only.',set_edamam:'Edamam Nutrition Database',set_edamam_hint:'Free up to 400 requests/month. Keys stored locally only.',set_data:'Data',set_compress:'🗜 Compress photos',set_compress_hint:'Saves storage – quality stays good',set_backup:'📦 Full Backup',set_backup_hint:'Recipes + Settings + Categories',set_shop_cats:'🏷 Shopping Categories',set_shop_cats_hint:'Export / import all assignments',set_delete_all:'🗑 Delete all recipes',set_delete_hint:'Cannot be undone',set_footer:'My Recipes · All data stored locally',
+    list_search:'Title or ingredient…',list_filter:'🔽 Filter',list_sort:'⠿ Sort',list_sort_done:'⠿ Done',list_select:'☑ Select',list_select_done:'✕ Done',list_empty:'No recipes yet. Tap + to get started!',list_no_results:'No recipes found.',
+    ai_placeholder:'What do you want to cook?',ai_search:'Search',ai_searching:'Searching…',
+    confirm_del:'Really delete this recipe?',confirm_del_all:'Delete all recipes? This cannot be undone.',confirm_reset_cats:'Reset categories to default?',
+    toast_saved:'Saved ✓',toast_deleted:'Deleted',toast_copied:'Copied ✓',toast_tags_saved:'Tags saved ✓',toast_cats_saved:'Categories saved ✓',toast_backup_ok:'Backup restored ✓',toast_keys_saved:'Edamam keys saved ✓',
+    step_promote:'↑ Header',step_demote:'↓ Step',
+    no_photos:'No photos found.',photos_compressed:'Photos compressed ✓',
+    recipe_count_single:'Recipe',recipe_count_plural:'Recipes',
+  }
+};
+function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
+function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
+
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const mins=r=>{const t=(+r.prepTime||0)+(+r.cookTime||0);return t>0?t+'m':'–';};
 const allTags=()=>[...new Set(S.recipes.flatMap(r=>r.tags||[]))].sort();
@@ -636,7 +680,7 @@ async function recompressBase64(dataUrl,maxW=640,q=0.55){
 async function recompressAllPhotos(){
   const withPhotos=S.recipes.filter(r=>r.photo);
   if(!withPhotos.length){toast('Keine Fotos vorhanden.');return;}
-  toast('Fotos werden komprimiert…');
+  toast(S.lang==='en'?'Compressing photos…':'Fotos werden komprimiert…');
   let count=0;
   for(const r of withPhotos){
     const before=r.photo.length;
@@ -652,11 +696,11 @@ async function recompressAllPhotos(){
 
 function r2txt(r){
   const L=['🍳 '+r.title.toUpperCase(),'═'.repeat(Math.min(r.title.length+2,38)),
-    'Kategorie: '+r.category+' | Portionen: '+r.servings+' | Gesamt: '+mins(r)];
+    (S.lang==='en'?'Category: ':'Kategorie: ')+r.category+(S.lang==='en'?' | Servings: ':' | Portionen: ')+r.servings+(S.lang==='en'?' | Total: ':' | Gesamt: ')+mins(r)];
   if(r.tags?.length)L.push('Tags: '+r.tags.join(', '));L.push('');
-  if(r.ingredients){L.push('ZUTATEN','─'.repeat(10));r.ingredients.split('\n').filter(l=>l.trim()).forEach(l=>L.push('· '+l));L.push('');}
+  if(r.ingredients){L.push(S.lang==='en'?'INGREDIENTS':'ZUTATEN','─'.repeat(10));r.ingredients.split('\n').filter(l=>l.trim()).forEach(l=>L.push('· '+l));L.push('');}
   if(r.steps){
-    L.push('ZUBEREITUNG','─'.repeat(10));
+    L.push(S.lang==='en'?'INSTRUCTIONS':'ZUBEREITUNG','─'.repeat(10));
     let stepNum=1;
     r.steps.split('\n').filter(l=>l.trim()).forEach(l=>{
       const t=l.trim();
@@ -674,7 +718,7 @@ function r2txt(r){
   }
   if(r.nutrition&&Object.values(r.nutrition).some(v=>v)){
     const n=r.nutrition;
-    L.push('NÄHRWERTE (pro Portion)','─'.repeat(10));
+    L.push(S.lang==='en'?'NUTRITION (per serving)':'NÄHRWERTE (pro Portion)','─'.repeat(10));
     if(n.kcal)L.push('Kalorien: '+n.kcal+' kcal');
     if(n.protein)L.push('Eiweiß: '+n.protein+'g');
     if(n.carbs)L.push('Kohlenhydrate: '+n.carbs+'g');
@@ -683,7 +727,7 @@ function r2txt(r){
     if(n.salt)L.push('Salz: '+n.salt+'g');
     L.push('');
   }
-  if(r.notes){L.push('NOTIZEN','─'.repeat(10),r.notes);}
+  if(r.notes){L.push(S.lang==='en'?'NOTES':'NOTIZEN','─'.repeat(10),r.notes);}
   return L.join('\n');
 }
 
@@ -698,19 +742,19 @@ function renderHdr(){
   const inDetail=S.view==='detail'||S.view==='form';
   back.style.display=inDetail?'block':'none';
   fab.style.display=(S.view==='list'||S.view==='favorites')?'flex':'none';
-  if(S.saving){acts.innerHTML=`<span class="svg">Speichern…</span>`;return;}
+  if(S.saving){acts.innerHTML=`<span class="svg">${t('hdr_saving')}</span>`;return;}
   if(S.view==='list'||S.view==='favorites'){
-    tit.textContent='🍳 Meine Rezepte';sub.textContent=S.recipes.length+' Rezept'+(S.recipes.length!==1?'e':'');
+    tit.textContent=t('hdr_recipes');sub.textContent=S.recipes.length+' '+(S.recipes.length!==1?t('recipe_count_plural'):t('recipe_count_single'));
     acts.innerHTML='';
   } else if(S.view==='detail'){
     const r=S.recipes.find(x=>x.id===S.selId);tit.textContent=r?r.title:'';sub.textContent=r?r.category:'';
     acts.innerHTML=`<button class="btn bo sm" onclick="shareR()">📤</button><button class="btn bo sm" onclick="exportRecipeJSON('${S.selId}')">JSON</button><button class="btn bo sm" onclick="exportRecipePDF('${S.selId}')">PDF</button><button class="btn bo sm" onclick="openEdit('${S.selId}')">✏️</button><button class="btn bdo sm" onclick="askDel('${S.selId}')">🗑</button>`;  } else if(S.view==='form'){
-    tit.textContent=S.editId?'Bearbeiten':'Neues Rezept';sub.textContent='';
-    acts.innerHTML=`<button class="btn bp" onclick="submitForm()">Speichern</button>`;
-  } else if(S.view==='shopping'){tit.textContent='🛒 Einkaufsliste';sub.textContent='';acts.innerHTML='';}
-  else if(S.view==='aisearch'){tit.textContent='✨ KI-Rezeptsuche';sub.textContent='';acts.innerHTML='';}
-  else if(S.view==='import'){tit.textContent='📥 Importieren';sub.textContent='';acts.innerHTML='';}
-  else if(S.view==='settings'){tit.textContent='⚙️ Einstellungen';sub.textContent='';acts.innerHTML='';}
+    tit.textContent=S.editId?t('hdr_edit'):t('hdr_new');sub.textContent='';
+    acts.innerHTML=`<button class="btn bp" onclick="submitForm()">${t('btn_save')}</button>`;
+  } else if(S.view==='shopping'){tit.textContent=t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
+  else if(S.view==='aisearch'){tit.textContent=t('hdr_ai');sub.textContent='';acts.innerHTML='';}
+  else if(S.view==='import'){tit.textContent=t('hdr_import');sub.textContent='';acts.innerHTML='';}
+  else if(S.view==='settings'){tit.textContent=t('hdr_settings');sub.textContent='';acts.innerHTML='';}
 }
 
 function renderNav(){
@@ -718,8 +762,11 @@ function renderNav(){
     const n=b.dataset.nav;
     b.classList.toggle('on',S.view===n||(n==='list'&&(S.view==='detail'||S.view==='form')));
   });  const cnt=S.shopping.filter(x=>!x.done).length;
-  document.getElementById('shopLbl').innerHTML='Liste'+(cnt?`<span class="badge">${cnt}</span>`:'');
+  document.getElementById('shopLbl').innerHTML=t('nav_list')+(cnt?`<span class="badge">${cnt}</span>`:'');
   document.getElementById('bnav').style.display=S.view==='form'?'none':'flex';
+  // Update nav labels for language
+  const navMap={navLblRecipes:'nav_recipes',navLblFavs:'nav_favorites',navLblAi:'nav_ai',navLblImport:'nav_import',navLblMore:'nav_more'};
+  Object.entries(navMap).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.textContent=t(key);});
 }
 
 function renderApp(){
@@ -765,49 +812,49 @@ function showFilterPanel(onApply){
 
     md.innerHTML=`
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem">
-        <div style="font-size:1rem;font-weight:700;color:var(--text)">Filter</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text)">${t('flt_title')}</div>
         <div style="display:flex;gap:.5rem;align-items:center">
-          <button id="fClear" class="btn bg sm">Zurücksetzen</button>
+          <button id="fClear" class="btn bg sm">${t('btn_reset')}</button>
           <button id="fClose" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--muted);line-height:1;padding:0">✕</button>
         </div>
       </div>
 
-      ${sec('fav','❤️ Favoriten',f.favOnly,`
-        <button class="f-fav-btn" style="${btnStyle(f.favOnly)}">Nur Favoriten</button>
+      ${sec('fav',t('flt_favs'),f.favOnly,`
+        <button class="f-fav-btn" style="${btnStyle(f.favOnly)}">${t('flt_favs_only')}</button>
       `)}
 
-      ${sec('rating','★ Mindestbewertung',f.rating>0,`
+      ${sec('rating',t('flt_rating'),f.rating>0,`
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-          ${[0,3,4,5].map(i=>`<button class="f-rating-btn" data-r="${i}" style="${btnStyle(f.rating===i)}">${i===0?'Alle':'★'.repeat(i)}</button>`).join('')}
+          ${[0,3,4,5].map(i=>`<button class="f-rating-btn" data-r="${i}" style="${btnStyle(f.rating===i)}">${i===0?t('flt_all'):'★'.repeat(i)}</button>`).join('')}
         </div>
       `)}
 
-      ${sec('status','🍽 Status',f.cooked!=='all',`
+      ${sec('status',t('flt_status'),f.cooked!=='all',`
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-          ${[['all','Alle'],['new','Noch nicht zubereitet'],['done','Schon zubereitet']].map(([v,l])=>`<button class="f-cooked-btn" data-v="${v}" style="${btnStyle(f.cooked===v)}">${l}</button>`).join('')}
+          ${[['all',t('flt_all')],['new',t('flt_not_cooked')],['done',t('flt_cooked')]].map(([v,l])=>`<button class="f-cooked-btn" data-v="${v}" style="${btnStyle(f.cooked===v)}">${l}</button>`).join('')}
         </div>
       `)}
 
-      ${sec('time','⏱ Gesamtzeit',f.maxTime>0,`
+      ${sec('time',t('flt_time'),f.maxTime>0,`
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-          ${[[0,'Alle'],[15,'≤ 15 Min.'],[30,'≤ 30 Min.'],[60,'≤ 60 Min.']].map(([v,l])=>`<button class="f-time-btn" data-v="${v}" style="${btnStyle(f.maxTime===v)}">${l}</button>`).join('')}
+          ${[[0,t('flt_all')],[15,'≤ 15 Min.'],[30,'≤ 30 Min.'],[60,'≤ 60 Min.']].map(([v,l])=>`<button class="f-time-btn" data-v="${v}" style="${btnStyle(f.maxTime===v)}">${l}</button>`).join('')}
         </div>
       `)}
 
-      ${sec('cats','📂 Kategorien',f.cats.length>0,`
+      ${sec('cats',t('flt_cats'),f.cats.length>0,`
         <div style="display:flex;flex-wrap:wrap;gap:.35rem">
           ${getCats().map(c=>`<button class="f-cat-btn" data-cat="${esc(c)}" style="${btnStyle(f.cats.includes(c))};display:inline-flex;align-items:center;gap:.3rem"><span style="width:8px;height:8px;border-radius:50%;background:${getCatColor(c)};flex-shrink:0"></span>${esc(c)}</button>`).join('')}
         </div>
       `)}
 
-      ${tags.length?sec('tags','🏷 Tags'+(f.tags.length?' ('+f.tags.length+')':''),f.tags.length>0,`
-        <input id="fTagSearch" style="width:100%;padding:.4rem .65rem;border:1px solid var(--border2);border-radius:8px;background:var(--bg);font-family:var(--font);font-size:.85rem;color:var(--text);outline:none;margin-bottom:.45rem" placeholder="Tag suchen…">
+      ${tags.length?sec('tags',t('flt_tags')+(f.tags.length?' ('+f.tags.length+')':''),f.tags.length>0,`
+        <input id="fTagSearch" style="width:100%;padding:.4rem .65rem;border:1px solid var(--border2);border-radius:8px;background:var(--bg);font-family:var(--font);font-size:.85rem;color:var(--text);outline:none;margin-bottom:.45rem" placeholder="${t('flt_tag_search')}">
         <div style="display:flex;flex-wrap:wrap;gap:.35rem">
           ${tags.map(t=>`<button class="f-tag-btn" data-tag="${esc(t)}" style="${btnStyle(f.tags.includes(t))}">${esc(t)}</button>`).join('')}
         </div>
       `):''}
 
-      <button id="fClose2" class="btn bg" style="width:100%;justify-content:center;margin-top:1rem">Schließen</button>`;
+      <button id="fClose2" class="btn bg" style="width:100%;justify-content:center;margin-top:1rem">${t('btn_close')}</button>`;
     // Section toggle
     md.querySelectorAll('.f-sec-hdr').forEach(hdr=>{
       hdr.addEventListener('click',()=>{
@@ -847,17 +894,18 @@ function renderList(app){
       <div class="sw">
         <div style="position:relative;width:100%">
           <span style="position:absolute;left:.9rem;top:50%;transform:translateY(-50%);font-size:1rem;pointer-events:none;z-index:1">🔍</span>
-          <input class="si" id="srch" type="search" placeholder="Titel oder Zutat…" value="${esc(S.search)}" style="width:100%;padding-left:2.4rem">
+          <input class="si" id="srch" type="search" placeholder="${t('list_search')}" value="${esc(S.search)}" style="width:100%;padding-left:2.4rem">
         </div>
         <div class="sr" style="gap:.45rem">
           <button id="filterBtn" class="btn sm" style="flex:1;justify-content:center;background:${activeFilterCount()>0?'var(--accent)':'var(--surface)'};color:${activeFilterCount()>0?'#fff':'var(--muted)'};border:none;box-shadow:var(--shadow);position:relative;font-weight:${activeFilterCount()>0?'700':'500'}">
-            🔽 Filter${activeFilterCount()>0?`<span style="position:absolute;top:3px;right:6px;width:8px;height:8px;background:#fff;border-radius:50%;opacity:.9"></span>`:''}
+            ${t('list_filter')}${activeFilterCount()>0?`<span style="position:absolute;top:3px;right:6px;width:8px;height:8px;background:#fff;border-radius:50%;opacity:.9"></span>`:''}
           </button>
-          <button id="sortModeBtn" class="btn sm" style="flex:1;justify-content:center;background:${S.sortMode?'var(--accent)':'var(--surface)'};color:${S.sortMode?'#fff':'var(--muted)'};border:none;box-shadow:var(--shadow);font-weight:${S.sortMode?'700':'500'}">${S.sortMode?'⠿ Fertig':'⠿ Sortieren'}</button>
-          <button id="selModeBtn" class="btn sm" style="flex:1;justify-content:center;background:${S.selectMode?'var(--accent)':'var(--surface)'};color:${S.selectMode?'#fff':'var(--muted)'};border:none;box-shadow:var(--shadow);font-weight:${S.selectMode?'700':'500'}">${S.selectMode?'✕ Fertig':'☑ Auswählen'}</button>
+          <button id="sortModeBtn" class="btn sm" style="flex:1;justify-content:center;background:${S.sortMode?'var(--accent)':'var(--surface)'};color:${S.sortMode?'#fff':'var(--muted)'};border:none;box-shadow:var(--shadow);font-weight:${S.sortMode?'700':'500'}">${S.sortMode?t('list_sort_done'):t('list_sort')}</button>
+          <button id="selModeBtn" class="btn sm" style="flex:1;justify-content:center;background:${S.selectMode?'var(--accent)':'var(--surface)'};color:${S.selectMode?'#fff':'var(--muted)'};border:none;box-shadow:var(--shadow);font-weight:${S.selectMode?'700':'500'}">${S.selectMode?t('list_select_done'):t('list_select')}</button>
         </div>
       </div>
       <div id="rezepteGrid"></div>`;
+    document.getElementById('srch').setAttribute('placeholder',t('list_search'));
     document.getElementById('srch').addEventListener('input',e=>{S.search=e.target.value;renderGrid();});
     document.getElementById('filterBtn').addEventListener('click',()=>showFilterPanel(()=>renderGrid()));
     document.getElementById('sortModeBtn')?.addEventListener('click',()=>{
@@ -866,7 +914,7 @@ function renderList(app){
       // Update button styles live
       const sb=document.getElementById('sortModeBtn');
       const sel=document.getElementById('selModeBtn');
-      if(sb){sb.style.background=S.sortMode?'var(--accent)':'var(--surface)';sb.style.color=S.sortMode?'#fff':'var(--muted)';sb.style.fontWeight=S.sortMode?'700':'500';sb.textContent=S.sortMode?'⠿ Fertig':'⠿ Sortieren';}
+      if(sb){sb.style.background=S.sortMode?'var(--accent)':'var(--surface)';sb.style.color=S.sortMode?'#fff':'var(--muted)';sb.style.fontWeight=S.sortMode?'700':'500';sb.textContent=S.sortMode?t('list_sort_done'):t('list_sort');}
       if(sel){sel.style.background='var(--surface)';sel.style.color='var(--muted)';sel.style.fontWeight='500';}
       renderGrid();
     });
@@ -876,7 +924,7 @@ function renderList(app){
       // Update button styles live
       const sb=document.getElementById('sortModeBtn');
       const sel=document.getElementById('selModeBtn');
-      if(sel){sel.style.background=S.selectMode?'var(--accent)':'var(--surface)';sel.style.color=S.selectMode?'#fff':'var(--muted)';sel.style.fontWeight=S.selectMode?'700':'500';sel.textContent=S.selectMode?'✕ Fertig':'☑ Auswählen';}
+      if(sel){sel.style.background=S.selectMode?'var(--accent)':'var(--surface)';sel.style.color=S.selectMode?'#fff':'var(--muted)';sel.style.fontWeight=S.selectMode?'700':'500';sel.textContent=S.selectMode?t('list_select_done'):t('list_select');}
       if(sb){sb.style.background='var(--surface)';sb.style.color='var(--muted)';sb.style.fontWeight='500';}
       renderGrid();
     });
@@ -1048,7 +1096,7 @@ function renderList(app){
       // 🗑 Löschen
       document.getElementById('selDelBtn').addEventListener('click',()=>{
         if(!S.selected.size)return;
-        if(!confirm(S.selected.size+' Rezept'+(S.selected.size!==1?'e':'')+' wirklich löschen?'))return;
+        if(!confirm(S.selected.size+' '+(S.lang==='en'?'recipe'+(S.selected.size!==1?'s':'')+' really delete?':'Rezept'+(S.selected.size!==1?'e':'')+' wirklich löschen?')))return;
         S.recipes=S.recipes.filter(r=>!S.selected.has(r.id));
         saveR();exitSel();
       });
@@ -1146,7 +1194,7 @@ function renderStepSections(stepsText, stepsDone, sectionState){
       <div class="step-sec-hdr" data-sec="${secKey}">
         <span class="step-sec-arr${collapsed?'':' open'}">▶</span>
         <span class="step-sec-title">${esc(sec.header)}</span>
-        <button class="step-toggle-btn" data-action="demote" data-line="${esc(sec.header)}" title="Zu normalem Schritt" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui)">↓ Schritt</button>
+        <button class="step-toggle-btn" data-action="demote" data-line="${esc(sec.header)}" title="${t('step_demote')}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui)">${t('step_demote')}</button>
       </div>
       <div class="step-sec-body${collapsed?' closed':''}">${stepsHtml}</div>
     </div>`;
@@ -1157,7 +1205,7 @@ function stepRow(line,idx,done){
   return `<div class="step-row${done?' step-done':''}" data-step="${idx}" style="display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid var(--border);cursor:pointer">
     <div class="step-circle" data-num="${idx+1}" style="width:26px;height:26px;border-radius:50%;border:2px solid ${done?'var(--accent)':'var(--border2)'};background:${done?'var(--accent)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:${done?'#fff':'var(--muted)'};font-size:.78rem;margin-top:.15rem;transition:all .2s">${done?'✓':String(idx+1)}</div>
     <span class="step-txt" style="font-size:.9rem;line-height:1.75;color:${done?'var(--muted)':'var(--text2)'};${done?'text-decoration:line-through;':''}transition:all .2s;flex:1">${boldify(line)}</span>
-    <button class="step-toggle-btn" data-action="promote" data-line="${esc(line)}" title="Als Überschrift" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui);margin-top:.2rem;opacity:.5">↑ Titel</button>
+    <button class="step-toggle-btn" data-action="promote" data-line="${esc(line)}" title="${t('step_promote')}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui);margin-top:.2rem;opacity:.5">${t('step_promote')}</button>
   </div>`;
 }
 
@@ -1180,23 +1228,23 @@ function renderDetail(app){
           ${[1,2,3,4,5].map(i=>`<button data-star="${i}" style="background:none;border:none;font-size:1.6rem;cursor:pointer;padding:.05rem;line-height:1;color:${(r.rating||0)>=i?'#f59e0b':'rgba(255,255,255,.25)'}">${(r.rating||0)>=i?'★':'☆'}</button>`).join('')}
         </div>
         <button id="cookedBtn" style="background:${r.cooked!==true?'rgba(59,130,246,.3)':'rgba(34,197,94,.3)'};color:${r.cooked!==true?'#93c5fd':'#86efac'};border:1px solid ${r.cooked!==true?'rgba(59,130,246,.5)':'rgba(34,197,94,.5)'};border-radius:20px;padding:.25rem .75rem;font-family:var(--ui);font-size:.75rem;cursor:pointer;font-weight:600;transition:all .2s">
-          ${r.cooked!==true?'🍽 Noch nicht zubereitet':'✅ Schon zubereitet'}
+          ${r.cooked!==true?t('det_not_cooked'):t('det_cooked')}
         </button>
       </div>
       <div class="d-meta">
-        ${r.prepTime?`<span>🔪 Vorbereitung: ${r.prepTime} Min.</span>`:''}
-        ${r.cookTime?`<span>🍳 Kochzeit: ${r.cookTime} Min.</span>`:''}
-        ${(+r.prepTime||0)+(+r.cookTime||0)>0?`<span>⏱ Gesamt: ${(+r.prepTime||0)+(+r.cookTime||0)} Min.</span>`:''}
+        ${r.prepTime?`<span>${t('det_prep')}: ${r.prepTime} ${t('det_min')}</span>`:''}
+        ${r.cookTime?`<span>${t('det_cook')}: ${r.cookTime} ${t('det_min')}</span>`:''}
+        ${(+r.prepTime||0)+(+r.cookTime||0)>0?`<span>${t('det_total')}: ${(+r.prepTime||0)+(+r.cookTime||0)} ${t('det_min')}</span>`:''}
       </div>
       ${r.nutrition&&Object.values(r.nutrition).some(v=>v)?`
       <div style="margin-top:.6rem;padding-top:.6rem;border-top:1px solid rgba(255,255,255,.1)">
         <div style="font-size:.62rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:1px;margin-bottom:.4rem">Nährwerte pro Portion</div>
         <div style="display:flex;gap:.6rem;flex-wrap:nowrap;overflow-x:auto">
           ${r.nutrition.kcal?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.kcal}</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">kcal</div></div>`:''}
-          ${r.nutrition.protein?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.protein}g</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">Eiweiß</div></div>`:''}
-          ${r.nutrition.carbs?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.carbs}g</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">Kohlenhydr.</div></div>`:''}
+          ${r.nutrition.protein?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.protein}g</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">${t('nut_protein')}</div></div>`:''}
+          ${r.nutrition.carbs?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.carbs}g</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">${t('nut_carbs')}</div></div>`:''}
           ${r.nutrition.fat?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.fat}g</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">Fett</div></div>`:''}
-          ${r.nutrition.fiber?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.fiber}g</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">Ballaststoffe</div></div>`:''}
+          ${r.nutrition.fiber?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.fiber}g</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">${t('nut_fiber')}</div></div>`:''}
           ${r.nutrition.salt?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.salt}g</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">Salz</div></div>`:''}
         </div>
       </div>`:''}
@@ -1204,14 +1252,14 @@ function renderDetail(app){
     <div class="d-body">
       ${ings.length?`<div class="sec">
         <div class="scale-row">
-          <span class="scale-lbl">Portionen</span>
+          <span class="scale-lbl">${t('det_portions')}</span>
           <div class="sctrl">
             <button class="sbtn" onclick="chgSc(-1)">−</button>
             <span class="sval">${sc%1===0?sc:sc.toFixed(1)} Portion${sc!==1?'en':''}</span>
             <button class="sbtn" onclick="chgSc(1)">+</button>
           </div>
         </div>
-        <div class="st">Zutaten</div>
+        <div class="st">${t('det_ingredients')}</div>
         <div id="ingList">
         ${ings.map((l,i)=>{
           const sel=!!(S.ingSelected?.[r.id]||{})[i];
@@ -1229,7 +1277,7 @@ function renderDetail(app){
       ${r.steps?`<div class="sec">
         <div class="st" style="display:flex;justify-content:space-between;align-items:center">
           <span>Zubereitung</span>
-          ${Object.keys(S.stepsDone[r.id]||{}).length?`<button style="background:none;border:none;font-family:var(--ui);font-size:.72rem;color:var(--faint);cursor:pointer" id="resetSteps">Zurücksetzen</button>`:''}
+          ${Object.keys(S.stepsDone[r.id]||{}).length?`<button style="background:none;border:none;font-family:var(--ui);font-size:.72rem;color:var(--faint);cursor:pointer" id="resetSteps">${t('det_reset_steps')}</button>`:''}
         </div>
         <div id="stepsList">${renderStepSections(r.steps, S.stepsDone[r.id]||{}, S.stepSections?.[r.id]||{})}</div>
       </div>`:''}
@@ -1367,7 +1415,7 @@ function renderDetail(app){
     // Update reset button
     const anyDone=Object.values(S.stepsDone[r.id]).some(Boolean);
     let rb=document.getElementById('resetSteps');
-    if(!rb&&anyDone){document.querySelector('.st')?.insertAdjacentHTML('beforeend',`<button style="background:none;border:none;font-family:var(--ui);font-size:.72rem;color:var(--faint);cursor:pointer" id="resetSteps">Zurücksetzen</button>`);}
+    if(!rb&&anyDone){document.querySelector('.st')?.insertAdjacentHTML('beforeend',`<button style="background:none;border:none;font-family:var(--ui);font-size:.72rem;color:var(--faint);cursor:pointer" id="resetSteps">${t('det_reset_steps')}</button>`);}
     if(rb&&!anyDone)rb.remove();
   });
   document.getElementById('catBadge')?.addEventListener('click',()=>{
@@ -1402,7 +1450,7 @@ function renderDetail(app){
       cookedBtn.style.background=newCooked?'rgba(34,197,94,.3)':'rgba(59,130,246,.3)';
       cookedBtn.style.color=newCooked?'#86efac':'#93c5fd';
       cookedBtn.style.borderColor=newCooked?'rgba(34,197,94,.5)':'rgba(59,130,246,.5)';
-      cookedBtn.textContent=newCooked?'✅ Schon zubereitet':'🍽 Noch nicht zubereitet';
+      cookedBtn.textContent=newCooked?t('det_cooked'):t('det_not_cooked');
     }
   });
 
@@ -1527,20 +1575,20 @@ function renderDetail(app){
 function renderForm(app){
   const f=S.formData,tags=S.formTags,photo=S.formPhoto||f.photo;
   app.innerHTML=`<div class="fc">
-    <h3>${S.editId?'Rezept bearbeiten':'Neues Rezept'}</h3>
+    <h3>${S.editId?t('hdr_edit'):t('hdr_new')}</h3>
     <div class="fg">
-      <div class="cf"><div class="fl">Rezeptname *</div><input class="fi" id="f-t" value="${esc(f.title)}" placeholder="z.B. Kartoffelsuppe"></div>
-      <div><div class="fl">Kategorie</div><select class="fs" id="f-c">${getCats().map(c=>`<option${c===f.category?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
-      <div><div class="fl">Portionen</div><input class="fi" id="f-s" type="number" min="1" value="${esc(f.servings)}"></div>
-      <div><div class="fl">Vorbereitung (Min.)</div><input class="fi" id="f-p" type="number" min="0" value="${esc(f.prepTime)}" placeholder="15"></div>
-      <div><div class="fl">Kochzeit (Min.)</div><input class="fi" id="f-k" type="number" min="0" value="${esc(f.cookTime)}" placeholder="30"></div>
+      <div class="cf"><div class="fl">${t('form_title')} *</div><input class="fi" id="f-t" value="${esc(f.title)}" placeholder="${t('form_title')}"></div>
+      <div><div class="fl">${t('form_category')}</div><select class="fs" id="f-c">${getCats().map(c=>`<option${c===f.category?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
+      <div><div class="fl">${t('form_servings')}</div><input class="fi" id="f-s" type="number" min="1" value="${esc(f.servings)}"></div>
+      <div><div class="fl">${t('form_prep')}</div><input class="fi" id="f-p" type="number" min="0" value="${esc(f.prepTime)}" placeholder="15"></div>
+      <div><div class="fl">${t('form_cook')}</div><input class="fi" id="f-k" type="number" min="0" value="${esc(f.cookTime)}" placeholder="30"></div>
       <div class="cf">
-        <div class="fl">Tags</div>
+        <div class="fl">${t('form_tags')}</div>
         <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.5rem" id="tagChips">
           ${allTags().map(t=>{const sel=S.formTags.includes(t);return`<button type="button" class="tag-chip-sel${sel?' active':''}" data-tagsel="${esc(t)}" style="padding:.25rem .65rem;border-radius:20px;font-size:.78rem;font-family:var(--ui);cursor:pointer;border:1px solid ${sel?'var(--accent)':'var(--border2)'};background:${sel?'var(--accent)':'var(--surface2)'};color:${sel?'#fff':'var(--muted)'};transition:all .15s">${esc(t)}</button>`;}).join('')}
         </div>
         <div style="display:flex;gap:.4rem">
-          <input class="fi" id="tagNewInp" placeholder="Neuer Tag…" style="flex:1;padding:.45rem .65rem">
+          <input class="fi" id="tagNewInp" placeholder="${t('form_tag_add')}" style="flex:1;padding:.45rem .65rem">
           <button type="button" id="tagNewAdd" class="btn bg sm">+ Hinzufügen</button>
         </div>
         <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin-top:.3rem;font-style:italic">Tippe vorhandene Tags an oder erstelle neue</div>
@@ -1550,44 +1598,44 @@ function renderForm(app){
         </div>`:''}
       </div>
       <div class="cf">
-        <div class="fl">Foto (optional)</div>
+        <div class="fl">${t('form_photo')} (optional)</div>
         <div class="pa" onclick="document.getElementById('pup').click()">
-          ${photo?`<img class="pp" src="${photo}"><small style="font-family:var(--ui)">Tippen zum Ändern</small>`:'📷 Foto hinzufügen'}
+          ${photo?`<img class="pp" src="${photo}"><small style="font-family:var(--ui)">Tippen zum Ändern</small>`:t('form_photo_add')}
         </div>
         <input type="file" id="pup" accept="image/*" style="display:none">
-        ${photo?`<button class="btn bg sm" style="margin-top:.4rem" onclick="S.formPhoto=null;S.formData.photo=null;renderApp()">✕ Foto entfernen</button>`:''}
+        ${photo?`<button class="btn bg sm" style="margin-top:.4rem" onclick="S.formPhoto=null;S.formData.photo=null;renderApp()">${t('form_photo_remove')}</button>`:''}
       </div>
-      <div class="cf"><div class="fl">Zutaten (eine pro Zeile)</div><textarea class="ft" id="f-i" rows="7" placeholder="500g Hackfleisch&#10;2 Zwiebeln&#10;...">${esc(f.ingredients)}</textarea></div>
+      <div class="cf"><div class="fl">${t('form_ingredients')}</div><textarea class="ft" id="f-i" rows="7" placeholder="${t('form_ing_hint')}">${esc(f.ingredients)}</textarea></div>
       <div class="cf">
         <div class="fl" style="display:flex;align-items:center;justify-content:space-between">
-          <span>Zubereitung</span>
+          <span>${t('det_steps')}</span>
           <button id="boldBtn" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:.15rem .5rem;font-family:var(--ui);font-size:.8rem;font-weight:bold;cursor:pointer;color:var(--text)">B Fett</button>
         </div>
         <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin:.25rem 0 .35rem;font-style:italic">Tipp: **Text** = fett · **Überschrift** als ganze Zeile = Abschnitt</div>
-        <textarea class="ft" id="f-st" rows="9" placeholder="**Für die Sauce:**&#10;1. Zwiebeln anschwitzen.&#10;2. ...">${esc(f.steps)}</textarea>
+        <textarea class="ft" id="f-st" rows="9" placeholder="${t('form_steps_hint')}">${esc(f.steps)}</textarea>
       </div>
-      <div class="cf"><div class="fl">Notizen / Tipps (optional)</div><textarea class="ft" id="f-n" rows="7" placeholder="Schmeckt am nächsten Tag noch besser!" style="min-height:140px">${esc(f.notes)}</textarea></div>
+      <div class="cf"><div class="fl">${t('form_notes')}</div><textarea class="ft" id="f-n" rows="7" placeholder="${t('form_notes_hint')}" style="min-height:140px">${esc(f.notes)}</textarea></div>
       <div class="cf">
         <div class="fl" style="display:flex;align-items:center;justify-content:space-between">
-          <span>Nährwerte (pro Portion)</span>
+          <span>${t('form_nutrition')}</span>
           <div style="display:flex;gap:.4rem">
-            <button id="nutritionEdamamBtn" class="btn bg sm" style="font-size:.72rem" title="Edamam Nährwert-Datenbank">🥗 Edamam</button>
-            <button id="nutritionAiBtn" class="btn bp sm" style="font-size:.72rem">✨ KI schätzen</button>
+            <button id="nutritionEdamamBtn" class="btn bg sm" style="font-size:.72rem" title="Edamam Nährwert-Datenbank">${t('btn_edamam')}</button>
+            <button id="nutritionAiBtn" class="btn bp sm" style="font-size:.72rem">${t('btn_ai_est')}</button>
           </div>
         </div>
-        <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin:.2rem 0 .5rem;font-style:italic">Werden automatisch anhand der Zutaten geschätzt</div>
+        <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin:.2rem 0 .5rem;font-style:italic">${t('form_nut_auto')}</div>
         <div class="fg" style="margin-bottom:0">
-          <div><div class="fl">kcal</div><input class="fi" id="f-kcal" type="number" min="0" value="${esc(f.nutrition?.kcal||'')}" placeholder="350"></div>
-          <div><div class="fl">Eiweiß (g)</div><input class="fi" id="f-prot" type="number" min="0" value="${esc(f.nutrition?.protein||'')}" placeholder="25"></div>
-          <div><div class="fl">Kohlenhydrate (g)</div><input class="fi" id="f-carb" type="number" min="0" value="${esc(f.nutrition?.carbs||'')}" placeholder="40"></div>
-          <div><div class="fl">Fett (g)</div><input class="fi" id="f-fat" type="number" min="0" value="${esc(f.nutrition?.fat||'')}" placeholder="12"></div>
-          <div><div class="fl">Ballaststoffe (g)</div><input class="fi" id="f-fiber" type="number" min="0" value="${esc(f.nutrition?.fiber||'')}" placeholder="5"></div>
-          <div><div class="fl">Salz (g)</div><input class="fi" id="f-salt" type="number" min="0" value="${esc(f.nutrition?.salt||'')}" placeholder="1.2"></div>
+          <div><div class="fl">${t('nut_kcal')}</div><input class="fi" id="f-kcal" type="number" min="0" value="${esc(f.nutrition?.kcal||'')}" placeholder="350"></div>
+          <div><div class="fl">${t('nut_protein')} (g)</div><input class="fi" id="f-prot" type="number" min="0" value="${esc(f.nutrition?.protein||'')}" placeholder="25"></div>
+          <div><div class="fl">${t('nut_carbs')} (g)</div><input class="fi" id="f-carb" type="number" min="0" value="${esc(f.nutrition?.carbs||'')}" placeholder="40"></div>
+          <div><div class="fl">${t('nut_fat')} (g)</div><input class="fi" id="f-fat" type="number" min="0" value="${esc(f.nutrition?.fat||'')}" placeholder="12"></div>
+          <div><div class="fl">${t('nut_fiber')} (g)</div><input class="fi" id="f-fiber" type="number" min="0" value="${esc(f.nutrition?.fiber||'')}" placeholder="5"></div>
+          <div><div class="fl">${t('nut_salt')} (g)</div><input class="fi" id="f-salt" type="number" min="0" value="${esc(f.nutrition?.salt||'')}" placeholder="1.2"></div>
         </div>
         <div id="nutritionStatus" style="font-family:var(--ui);font-size:.78rem;margin-top:.5rem;color:var(--muted)"></div>
       </div>
     </div>
-    <div id="ferr" class="err" style="display:none">⚠ Bitte einen Rezeptnamen eingeben.</div>
+    <div id="ferr" class="err" style="display:none">${S.lang==="en"?"⚠ Please enter a recipe name.":"⚠ Bitte einen Rezeptnamen eingeben."}</div>
   </div>`;
   document.getElementById('nutritionAiBtn')?.addEventListener('click',async()=>{
     const ingredients=document.getElementById('f-i')?.value||'';
@@ -1619,7 +1667,7 @@ Alle Werte gerundete Ganzzahlen außer Salz (eine Dezimalstelle).`,
       document.getElementById('f-fat').value=n.fat||'';
       document.getElementById('f-fiber').value=n.fiber||'';
       document.getElementById('f-salt').value=n.salt||'';
-      document.getElementById('nutritionStatus').textContent='✓ Geschätzt – bitte prüfen und ggf. anpassen.';
+      document.getElementById('nutritionStatus').textContent=t('lang')==='en'?'✓ Estimated – please check and adjust.':'✓ Geschätzt – bitte prüfen und ggf. anpassen.';
       document.getElementById('nutritionStatus').style.color='var(--ok)';
     }catch(e){
       document.getElementById('nutritionStatus').textContent='⚠ Fehler: '+e.message;
@@ -1811,16 +1859,16 @@ function renderShop(app){
   }).join('');
   app.innerHTML=`
     <div class="shop-hdr">
-      <h2 style="font-size:1rem">Einkaufsliste <small style="color:var(--muted);font-family:var(--font);font-size:.78rem">${items.length-done} offen</small></h2>
+      <h2 style="font-size:1rem">Einkaufsliste <small style="color:var(--muted);font-family:var(--font);font-size:.78rem">${items.length-done} ${t('sh_open')}</small></h2>
       <div style="display:flex;gap:.45rem;flex-wrap:wrap">
-        ${done>0?`<button class="btn bg sm" onclick="clearDone()">Erledigte löschen</button>`:''}
-        ${items.length>0?`<button class="btn bg sm" onclick="copySh()">📋 Kopieren</button>`:''}
-        ${items.length>0?`<button class="btn bdo sm" onclick="clearAllSh()">Alle löschen</button>`:''}
+        ${done>0?`<button class="btn bg sm" onclick="clearDone()">${t('sh_clear_done')}</button>`:''}
+        ${items.length>0?`<button class="btn bg sm" onclick="copySh()">${t('sh_copy')}</button>`:''}
+        ${items.length>0?`<button class="btn bdo sm" onclick="clearAllSh()">${t('sh_clear_all')}</button>`:''}
       </div>
     </div>
     ${items.length===0?`<div class="empty"><div class="ei">🛒</div><p>Einkaufsliste ist leer.</p></div>`:groupedHtml}
     <div class="sadd">
-      <input class="sadd-i" id="saddi" placeholder="Produkt hinzufügen…">
+      <input class="sadd-i" id="saddi" placeholder="${t('sh_add_ph')}">
       <button class="btn bp" onclick="addShM()">+</button>
     </div>`;
   document.getElementById('saddi')?.addEventListener('keydown',e=>{if(e.key==='Enter')addShM();});
@@ -1837,8 +1885,8 @@ function showShopCatPicker(idx){
     <div style="display:flex;flex-direction:column;gap:.35rem">
       ${SHOP_CATS.map((c,i)=>`<button data-ci="${i}" style="background:${current===i?'var(--accent)':'var(--surface2)'};color:${current===i?'#fff':'var(--text)'};border:none;border-radius:10px;padding:.55rem .9rem;text-align:left;cursor:pointer;font-family:var(--font);font-size:.9rem;font-weight:${current===i?'700':'400'}">${c}</button>`).join('')}
     </div>
-    <button id="scpReset" style="width:100%;margin-top:.5rem;background:none;border:1px solid var(--border2);border-radius:10px;color:var(--muted);font-family:var(--font);font-size:.82rem;cursor:pointer;padding:.45rem">↺ Automatisch erkennen</button>
-    <button id="scpCancel" style="width:100%;margin-top:.4rem;background:none;border:none;color:var(--faint);font-family:var(--font);font-size:.82rem;cursor:pointer;padding:.4rem">Abbrechen</button>`;
+    <button id="scpReset" style="width:100%;margin-top:.5rem;background:none;border:1px solid var(--border2);border-radius:10px;color:var(--muted);font-family:var(--font);font-size:.82rem;cursor:pointer;padding:.45rem">${t('sh_auto_detect')}</button>
+    <button id="scpCancel" style="width:100%;margin-top:.4rem;background:none;border:none;color:var(--faint);font-family:var(--font);font-size:.82rem;cursor:pointer;padding:.4rem">${t('btn_cancel')}</button>`;
   ov.appendChild(md);document.body.appendChild(ov);
   md.querySelectorAll('[data-ci]').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -1880,7 +1928,7 @@ function renderSettings(app){
         <div style="font-size:.75rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">Tippe einen Tag um ihn umzubenennen. ✕ zum Löschen.</div>
         ${allTags().length===0?'<div style="color:var(--muted);font-family:var(--ui);font-size:.85rem">Noch keine Tags vorhanden.</div>':''}
         ${tagListHtml}
-        <button class="btn bp sm" style="margin-top:.7rem;width:100%" id="tagSaveAllBtn">Speichern</button>
+        <button class="btn bp sm" style="margin-top:.7rem;width:100%" id="tagSaveAllBtn">${t('btn_save_tags')}</button>
       </div>
     </div>
     <div class="acc-sec" style="margin-bottom:.5rem">
@@ -1903,58 +1951,64 @@ function renderSettings(app){
             </div>`}).join('')}
         </div>
         <div style="display:flex;gap:.6rem;margin-top:.7rem;flex-wrap:wrap">
-          <button class="btn bp sm" id="catSaveBtn">Speichern</button>
-          <button class="btn bg sm" id="catAddBtn">+ Neue Kategorie</button>
-          <button class="btn bg sm" id="catResetBtn" style="color:var(--muted)">↺ Standard</button>
+          <button class="btn bp sm" id="catSaveBtn">${t('btn_save')}</button>
+          <button class="btn bg sm" id="catAddBtn">${t('btn_add_cat')}</button>
+          <button class="btn bg sm" id="catResetBtn" style="color:var(--muted)">${t('btn_default')}</button>
         </div>
       </div>
     </div>
-    <div class="ss"><div class="st2">Darstellung</div>
-      <div class="sr2"><div><div class="sl">🌙 Dark Mode</div></div><button class="tgl${S.dark?' on':''}" id="dtgl"></button></div>
-      <div class="sr2"><div><div class="sl">💡 Bildschirm aktiv halten</div><div class="ss2">Verhindert das Ausschalten beim Kochen</div></div><button class="tgl${S.wakeLock?' on':''}" id="wltgl"></button></div>
+    <div class="ss"><div class="st2">${t('set_display')}</div>
+      <div class="sr2"><div><div class="sl">${t('set_dark')}</div></div><button class="tgl${S.dark?' on':''}" id="dtgl"></button></div>
+      <div class="sr2"><div><div class="sl">${t('set_wakelock')}</div><div class="ss2">${t('set_wakelock_hint')}</div></div><button class="tgl${S.wakeLock?' on':''}" id="wltgl"></button></div>
+      <div class="sr2"><div><div class="sl">${t('set_lang')}</div></div>
+        <div style="display:flex;gap:.4rem">
+          <button onclick="setLang('de')" style="padding:.3rem .85rem;border-radius:20px;border:2px solid ${S.lang==='de'?'var(--accent)':'var(--border2)'};background:${S.lang==='de'?'var(--accent)':'var(--surface2)'};color:${S.lang==='de'?'#fff':'var(--muted)'};font-family:var(--font);font-size:.82rem;font-weight:${S.lang==='de'?'700':'400'};cursor:pointer">🇩🇪 DE</button>
+          <button onclick="setLang('en')" style="padding:.3rem .85rem;border-radius:20px;border:2px solid ${S.lang==='en'?'var(--accent)':'var(--border2)'};background:${S.lang==='en'?'var(--accent)':'var(--surface2)'};color:${S.lang==='en'?'#fff':'var(--muted)'};font-family:var(--font);font-size:.82rem;font-weight:${S.lang==='en'?'700':'400'};cursor:pointer">🇬🇧 EN</button>
+        </div>
+      </div>
     </div>
-    <div class="ss"><div class="st2">KI-Import (Foto & Link)</div>
+    <div class="ss"><div class="st2">${t('set_ai')}</div>
       <div class="sr2" style="flex-direction:column;align-items:flex-start">
-        <div class="sl">Anthropic API Key</div>
-        <div class="ss2">Benötigt für Foto- und Link-Import</div>
+        <div class="sl">${t('set_api_key')}</div>
+        <div class="ss2">${t('set_api_hint')}</div>
         <div class="akw" style="width:100%">
           <input class="aki" type="password" id="akinp" value="${esc(S.apiKey)}" placeholder="sk-ant-…">
           <button class="ake" id="akshow">👁</button>
         </div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:.35rem;font-family:var(--ui);font-style:italic">Key wird nur lokal auf diesem Gerät gespeichert.</div>
-        <button class="btn bp sm" style="margin-top:.6rem" onclick="saveKey2()">Key speichern</button>
+        <button class="btn bp sm" style="margin-top:.6rem" onclick="saveKey2()">${t('btn_save_key')}</button>
       </div>
     </div>
-    <div class="ss"><div class="st2">Edamam Nährwert-Datenbank</div>
+    <div class="ss"><div class="st2">${t('set_edamam')}</div>
       <div class="sr2" style="flex-direction:column;align-items:flex-start">
         <div class="sl">App ID & App Key</div>
-        <div class="ss2">Kostenloser Account auf <a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a> → „Nutrition Analysis API"</div>
+        <div class="ss2">${S.lang==='en'?'Free account at ':'Kostenloser Account auf '}<a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a>${S.lang==='en'?' → "Nutrition Analysis API"':' → „Nutrition Analysis API"'}</div>
         <input class="aki" type="text" id="edamamId" value="${esc(S.edamamAppId)}" placeholder="App ID" style="margin-top:.5rem;width:100%">
         <input class="aki" type="password" id="edamamKey" value="${esc(S.edamamAppKey)}" placeholder="App Key" style="margin-top:.4rem;width:100%">
         <div style="font-size:.72rem;color:var(--muted);margin-top:.35rem;font-family:var(--ui);font-style:italic">Kostenfrei bis 400 Anfragen/Monat. Keys werden nur lokal gespeichert.</div>
-        <button class="btn bg sm" style="margin-top:.6rem" onclick="saveEdamam()">Keys speichern</button>
+        <button class="btn bg sm" style="margin-top:.6rem" onclick="saveEdamam()">${t('btn_save_keys')}</button>
       </div>
     </div>
-    <div class="ss"><div class="st2">Daten</div>
-      <div class="sr2"><div><div class="sl">🗜 Fotos komprimieren</div><div class="ss2">Spart Speicherplatz – Qualität bleibt gut</div></div><button class="btn bg sm" onclick="recompressAllPhotos()">Komprimieren</button></div>
-      <div class="sr2"><div><div class="sl">📦 Vollständiges Backup</div><div class="ss2">Rezepte + Einstellungen + Kategorien</div></div>
+    <div class="ss"><div class="st2">${t('set_data')}</div>
+      <div class="sr2"><div><div class="sl">${t('set_compress')}</div><div class="ss2">${t('set_compress_hint')}</div></div><button class="btn bg sm" onclick="recompressAllPhotos()">${t('btn_compress')}</button></div>
+      <div class="sr2"><div><div class="sl">${t('set_backup')}</div><div class="ss2">${t('set_backup_hint')}</div></div>
         <div style="display:flex;gap:.4rem">
           <button class="btn bp sm" onclick="exportFullBackup()">Export</button>
           <button class="btn bg sm" id="backupImportBtn">Import</button>
           <input type="file" id="backupFile" accept=".json" style="display:none">
         </div>
       </div>
-      <div class="sr2"><div><div class="sl">🏷 Einkaufskategorien</div><div class="ss2">Alle Zuweisungen exportieren / importieren</div></div>
+      <div class="sr2"><div><div class="sl">${t('set_shop_cats')}</div><div class="ss2">${t('set_shop_cats_hint')}</div></div>
         <div style="display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end">
           <div style="display:flex;gap:.4rem">
             <button class="btn bp sm" onclick="exportShopCats()">Export</button>
             <button class="btn bg sm" id="shopCatsImportBtn">Import</button>
             <input type="file" id="shopCatsFile" accept=".json" style="display:none">
           </div>
-          <button class="btn bg sm" style="width:100%" onclick="showShopCatManager()">🏷 Zuweisungen verwalten</button>
+          <button class="btn bg sm" style="width:100%" onclick="showShopCatManager()">${t('btn_manage')}</button>
         </div>
       </div>
-      <div class="sr2"><div><div class="sl" style="color:var(--danger)">🗑 Alle Rezepte löschen</div><div class="ss2">Nicht rückgängig zu machen</div></div><button class="btn bdo sm" onclick="delAll()">Löschen</button></div>
+      <div class="sr2"><div><div class="sl" style="color:var(--danger)">${t('set_delete_all')}</div><div class="ss2">${t('set_delete_hint')}</div></div><button class="btn bdo sm" onclick="delAll()">${t('btn_delete')}</button></div>
     </div>
     <div style="text-align:center;color:var(--muted);font-size:.75rem;font-family:var(--ui);margin-top:2rem;padding-bottom:1rem">Meine Rezepte · Alle Daten lokal gespeichert</div>`;
   // Category management
@@ -1972,12 +2026,12 @@ function renderSettings(app){
       const oldTag=inp.dataset.oldtag,newTag=(inp.value||'').trim();
       if(newTag&&newTag!==oldTag)S.recipes=S.recipes.map(r=>({...r,tags:(r.tags||[]).map(t=>t===oldTag?newTag:t)}));
     });
-    saveR();toast("Tags gespeichert ✓");renderApp();
+    saveR();toast(t('toast_tags_saved'));renderApp();
   });
   document.querySelectorAll('[data-tagdel]').forEach(btn=>{
     btn.addEventListener('click',()=>{
       const t=btn.dataset.tagdel;
-      if(!confirm(`Tag „${t}" aus allen Rezepten entfernen?`))return;
+      if(!confirm((S.lang==='en'?'Remove tag "'+t+'" from all recipes?':`Tag „${t}" aus allen Rezepten entfernen?`)))return;
       S.recipes=S.recipes.map(r=>({...r,tags:(r.tags||[]).filter(x=>x!==t)}));
       saveR();renderApp();
     });
@@ -2043,7 +2097,7 @@ function renderSettings(app){
     S.customCats=newCats;
     // Fix recipes whose category no longer exists
     S.recipes=S.recipes.map(r=>({...r,category:newCats.includes(r.category)?r.category:fallbackCat()}));
-    saveCats();saveR();toast("Kategorien gespeichert ✓");renderApp();
+    saveCats();saveR();toast(t('toast_cats_saved'));renderApp();
   });
 
   document.getElementById('catAddBtn')?.addEventListener('click',()=>{
@@ -2106,7 +2160,7 @@ function renderSettings(app){
       } else if(data.customShopCats){
         incoming=Object.entries(data.customShopCats).map(([text,catIdx])=>({text,catIdx}));
       }
-      if(!incoming.length){toast('Keine Einträge in der Datei.','err');return;}
+      if(!incoming.length){toast(S.lang==='en'?'No entries in file.':'Keine Einträge in der Datei.','err');return;}
       const existing=S.customShopCats||{};
       const conflicts=incoming.filter(x=>existing[x.text]!==undefined&&existing[x.text]!==x.catIdx);
       const newItems=incoming.filter(x=>existing[x.text]===undefined);
@@ -2188,8 +2242,8 @@ function editShItem(idx){
     <div style="font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:1rem">Eintrag bearbeiten</div>
     <input id="shEditInp" style="width:100%;padding:.7rem .9rem;border-radius:10px;border:1.5px solid var(--accent);background:var(--surface2);color:var(--text);font-size:1rem;font-family:var(--font);box-sizing:border-box" value="${esc(it.text)}" autocomplete="off">
     <div style="display:flex;gap:.6rem;margin-top:.9rem">
-      <button id="shEditCancel" style="flex:1;padding:.65rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--muted);font-family:var(--font);font-size:.9rem;cursor:pointer">Abbrechen</button>
-      <button id="shEditSave" style="flex:2;padding:.65rem;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:.9rem;font-weight:600;cursor:pointer">Speichern</button>
+      <button id="shEditCancel" style="flex:1;padding:.65rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--muted);font-family:var(--font);font-size:.9rem;cursor:pointer">${t('btn_cancel')}</button>
+      <button id="shEditSave" style="flex:2;padding:.65rem;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:.9rem;font-weight:600;cursor:pointer">${t('btn_save')}</button>
     </div>`;
   ov.appendChild(md);
   document.body.appendChild(ov);
@@ -2257,17 +2311,17 @@ function exportRecipePDF(id){
     <h1>${r.title}</h1>
     <div class="meta">👥 ${r.servings} Portionen &nbsp;·&nbsp; ⏱ ${mins(r)} &nbsp;${r.tags?.length?'·&nbsp; 🏷 '+r.tags.join(', '):''}</div>
   </div>
-  ${ingLines?`<h2>Zutaten</h2><ul>${ingLines}</ul>`:''}
-  ${stepsHtml?`<h2>Zubereitung</h2>${stepsHtml}`:''}
+  ${ingLines?`<h2>${t('det_ingredients')}</h2><ul>${ingLines}</ul>`:''}
+  ${stepsHtml?`<h2>${t('det_steps')}</h2>${stepsHtml}`:''}
   ${r.notes?`<h2>Notizen</h2><div class="notes">${r.notes.replace(/</g,'&lt;')}</div>`:''}
   ${r.nutrition&&Object.values(r.nutrition).some(v=>v)?`
   <h2>Nährwerte pro Portion</h2>
   <div style="display:flex;gap:1.2rem;flex-wrap:wrap;background:#faf7f2;border-radius:8px;padding:.8rem 1rem;border:1px solid #e0cdb4">
     ${r.nutrition.kcal?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.kcal}</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">kcal</div></div>`:''}
-    ${r.nutrition.protein?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.protein}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">Eiweiß</div></div>`:''}
+    ${r.nutrition.protein?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.protein}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">${t('nut_protein')}</div></div>`:''}
     ${r.nutrition.carbs?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.carbs}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">Kohlenhydrate</div></div>`:''}
     ${r.nutrition.fat?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.fat}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">Fett</div></div>`:''}
-    ${r.nutrition.fiber?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.fiber}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">Ballaststoffe</div></div>`:''}
+    ${r.nutrition.fiber?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.fiber}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">${t('nut_fiber')}</div></div>`:''}
     ${r.nutrition.salt?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.salt}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">Salz</div></div>`:''}
   </div>`:''}
   </body></html>`;
@@ -2286,8 +2340,8 @@ function showSaveDialog(defaultName, onSave){
     <div class="fl" style="margin-bottom:.35rem">Dateiname</div>
     <input id="saveNameInp" class="fi" style="width:100%;margin-bottom:1rem" value="${esc(defaultName)}">
     <div style="display:flex;gap:.6rem">
-      <button id="saveCancelBtn" class="btn bn" style="flex:1">Abbrechen</button>
-      <button id="saveConfirmBtn" class="btn bp" style="flex:1">Speichern</button>
+      <button id="saveCancelBtn" class="btn bn" style="flex:1">${t('btn_cancel')}</button>
+      <button id="saveConfirmBtn" class="btn bp" style="flex:1">${t('btn_save')}</button>
     </div>`;
   ov.appendChild(md);document.body.appendChild(ov);
   const close=()=>document.body.removeChild(ov);
@@ -2301,19 +2355,38 @@ function showSaveDialog(defaultName, onSave){
 }
 
 function doSave(filename, content){
-  // Use File System Access API if available (shows OS save dialog)
-  if(window.showSaveFilePicker){
-    window.showSaveFilePicker({suggestedName:filename,types:[{description:'JSON',accept:{'application/json':['.json']}}]})
-      .then(async fh=>{const w=await fh.createWritable();await w.write(content);await w.close();})
-      .catch(e=>{if(e.name!=='AbortError')fallbackSave(filename,content);});
-  } else {
-    fallbackSave(filename,content);
-  }
+  // Skip File System Access API – not reliable in embedded browsers (Hermit etc.)
+  // Use most compatible approach directly
+  fallbackSave(filename, content);
 }
 
 function fallbackSave(filename, content){
-  const b=new Blob([content],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=filename;a.click();
+  try{
+    // Method 1: data: URI (most compatible, works in WebViews)
+    const dataUri='data:application/json;charset=utf-8,'+encodeURIComponent(content);
+    const a=document.createElement('a');
+    a.href=dataUri;
+    a.download=filename;
+    a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>document.body.removeChild(a),200);
+  }catch(e){
+    try{
+      // Method 2: Blob URL fallback
+      const b=new Blob([content],{type:'application/json'});
+      const url=URL.createObjectURL(b);
+      const a=document.createElement('a');
+      a.href=url;a.download=filename;a.style.display='none';
+      document.body.appendChild(a);a.click();
+      setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
+    }catch(e2){
+      // Method 3: Last resort – show content in new tab to save manually
+      const w=window.open('','_blank');
+      if(w){w.document.write('<pre>'+content.replace(/</g,'&lt;')+'</pre>');}
+      else{toast(S.lang==='en'?'⚠ Download blocked. Please allow popups.':'⚠ Download blockiert. Bitte Popups erlauben.','err');}
+    }
+  }
 }
 
 // Three-option dialog helper (returns Promise: 'yes'|'no'|'cancel')
@@ -2405,9 +2478,9 @@ function showShopCatImportModal(conflicts,newItems,same,existing,incoming){
         <button id="cfKeep" style="padding:.65rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--text);font-family:var(--font);font-size:.88rem;cursor:pointer;text-align:left">⬅ Behalten: <strong>${oldName}</strong></button>
         <button id="cfOver" style="padding:.65rem;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:.88rem;cursor:pointer;text-align:left">➡ Überschreiben: <strong>${newName}</strong></button>
         <div style="display:flex;gap:.4rem;margin-top:.2rem">
-          <button id="cfKeepAll" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--muted);font-family:var(--font);font-size:.78rem;cursor:pointer">Alle behalten</button>
-          <button id="cfOverAll" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--accent);background:none;color:var(--accent);font-family:var(--font);font-size:.78rem;cursor:pointer">Alle überschreiben</button>
-          <button id="cfSkip" style="flex:1;padding:.5rem;border-radius:10px;border:none;background:none;color:var(--faint);font-family:var(--font);font-size:.78rem;cursor:pointer">Abbrechen</button>
+          <button id="cfKeepAll" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--muted);font-family:var(--font);font-size:.78rem;cursor:pointer">${S.lang==='en'?'Keep all':'Alle behalten'}</button>
+          <button id="cfOverAll" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--accent);background:none;color:var(--accent);font-family:var(--font);font-size:.78rem;cursor:pointer">${S.lang==='en'?'Override all':'Alle überschreiben'}</button>
+          <button id="cfSkip" style="flex:1;padding:.5rem;border-radius:10px;border:none;background:none;color:var(--faint);font-family:var(--font);font-size:.78rem;cursor:pointer">${t('btn_cancel')}</button>
         </div>
       </div>`;
     md.querySelector('#cfKeep').onclick=()=>{decisions[c.text]='keep';idx++;renderConflict();};
@@ -2501,7 +2574,7 @@ function showShopCatPickerForText(text,current,onSave){
       +';color:'+(current===i?'#fff':'var(--text)')
       +';border:none;border-radius:10px;padding:.55rem .9rem;text-align:left;cursor:pointer;font-family:var(--font);font-size:.9rem;font-weight:'+(current===i?'700':'400')+'">'+c+'</button>').join('')
     +'</div>'
-    +'<button id="scp2Cancel" style="width:100%;margin-top:.6rem;background:none;border:none;color:var(--faint);font-family:var(--font);font-size:.82rem;cursor:pointer;padding:.4rem">Abbrechen</button>';
+    +'<button id="scp2Cancel" style="width:100%;margin-top:.6rem;background:none;border:none;color:var(--faint);font-family:var(--font);font-size:.82rem;cursor:pointer;padding:.4rem">'+t('btn_cancel')+'</button>';
   ov2.appendChild(md2);document.body.appendChild(ov2);
   md2.querySelectorAll('[data-ci]').forEach(btn=>{
     btn.onclick=()=>{
@@ -2806,7 +2879,7 @@ function renderAISearch(app){
   app.innerHTML=`
     <div style="max-width:680px;margin:0 auto">
       <div style="background:var(--surface);border-radius:14px;border:1px solid var(--border);padding:1.4rem;box-shadow:0 4px 16px rgba(0,0,0,.07);margin-bottom:1rem">
-        <div style="font-size:.78rem;color:var(--muted);font-family:var(--ui);margin-bottom:.6rem;text-transform:uppercase;letter-spacing:1px;font-weight:700">Was möchtest du kochen?</div>
+        <div style="font-size:.78rem;color:var(--muted);font-family:var(--ui);margin-bottom:.6rem;text-transform:uppercase;letter-spacing:1px;font-weight:700">${t('ai_placeholder')}</div>
         <textarea id="aiSearchInput" class="ft" rows="2" placeholder="z.B. „Etwas mit Halloumi, vegetarisch, unter 30 Min." oder „Was kann ich mit Hackfleisch und Kartoffeln machen?"" style="margin-bottom:.7rem">${esc(S.aiSearchQuery||'')}</textarea>
         <!-- Photo option -->
         <div style="border:1px dashed var(--border2);border-radius:8px;padding:.7rem;margin-bottom:.7rem;background:var(--bg)">
@@ -2905,7 +2978,7 @@ function renderAIResults(explanation,recipes){
             </div>
             ${alreadySaved.has((r.title||'').toLowerCase())
               ?`<span style="font-family:var(--ui);font-size:.75rem;color:var(--ok)">✓ Bereits gespeichert</span>`
-              :`<button class="btn bp sm" data-ridx="${i}">+ Speichern</button>`}
+              :`<button class="btn bp sm" data-ridx="${i}">+ ${t('btn_save')}</button>`}
           </div>
           <div style="padding:.9rem 1.2rem">
             ${(r.ingredients||'').split('\\n').filter(l=>l.trim()).map(l=>`<div style="font-size:.85rem;color:var(--text2);padding:.18rem 0;display:flex;gap:.5rem"><span style="color:var(--accent);flex-shrink:0">·</span>${esc(l)}</div>`).join('')}
@@ -3236,11 +3309,11 @@ function showTagInputModal(cb){
     <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.7rem">Tag zu Auswahl hinzufügen</div>
     <div style="display:flex;gap:.5rem;margin-bottom:.8rem">
       <input id="tagMdInp" class="fi" style="flex:1;padding:.48rem .7rem" placeholder="Tag eingeben…">
-      <button id="tagMdAdd" class="btn bp">Hinzufügen</button>
+      <button id="tagMdAdd" class="btn bp">${t('sh_pick_confirm')}</button>
     </div>
     ${existingTags.length?`<div style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem">Vorhandene Tags:</div>
     <div style="display:flex;flex-wrap:wrap;gap:.35rem">${existingTags.map(t=>`<button class="tag-quick" data-tag="${esc(t)}" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:.2rem .6rem;font-size:.8rem;cursor:pointer;color:var(--text);font-family:var(--ui)">${esc(t)}</button>`).join('')}</div>`:''}
-    <button style="width:100%;margin-top:.8rem;background:none;border:none;color:var(--muted);font-family:var(--ui);font-size:.85rem;cursor:pointer;padding:.4rem" id="tagMdCancel">Abbrechen</button>`;
+    <button style="width:100%;margin-top:.8rem;background:none;border:none;color:var(--muted);font-family:var(--ui);font-size:.85rem;cursor:pointer;padding:.4rem" id="tagMdCancel">${t('btn_cancel')}</button>`;
   ov.appendChild(md);document.body.appendChild(ov);
   const close=()=>document.body.removeChild(ov);
   const submit=()=>{const v=(document.getElementById('tagMdInp')?.value||'').trim();if(v){close();cb(v);}};
@@ -3284,7 +3357,7 @@ function showMealPlanModal(recipes,onDone){
       <button id="planCopy" class="btn bp" style="flex:1">📋 Als Text kopieren</button>
       <button id="planShop" class="btn bg" style="flex:1">🛒 Alle Zutaten zur Liste</button>
     </div>
-    <button style="width:100%;margin-top:.6rem;background:none;border:none;color:var(--muted);font-size:.85rem;cursor:pointer;padding:.4rem" id="planClose">Schließen</button>`;
+    <button style="width:100%;margin-top:.6rem;background:none;border:none;color:var(--muted);font-size:.85rem;cursor:pointer;padding:.4rem" id="planClose">${t('btn_close')}</button>`;
 
   ov.appendChild(md);document.body.appendChild(ov);
   const close=()=>{document.body.removeChild(ov);onDone();};
@@ -3346,7 +3419,7 @@ function showCatPicker(currentCat, onSelect){
           <button id="cpAddBtn" class="btn bp" style="flex-shrink:0">Anlegen</button>
         </div>
       </div>
-      <button style="width:100%;margin-top:.7rem;background:none;border:none;color:var(--muted);font-family:var(--ui);font-size:.85rem;cursor:pointer;padding:.4rem" id="cpCancel">Abbrechen</button>`;
+      <button style="width:100%;margin-top:.7rem;background:none;border:none;color:var(--muted);font-family:var(--ui);font-size:.85rem;cursor:pointer;padding:.4rem" id="cpCancel">${t('btn_cancel')}</button>`;
 
     md.querySelector('#cpCatList')?.addEventListener('click',e=>{
       const btn=e.target.closest('.cp-cat');if(!btn)return;
