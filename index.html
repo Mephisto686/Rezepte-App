@@ -2355,36 +2355,31 @@ function showSaveDialog(defaultName, onSave){
 }
 
 function doSave(filename, content){
-  // Skip File System Access API – not reliable in embedded browsers (Hermit etc.)
-  // Use most compatible approach directly
   fallbackSave(filename, content);
 }
 
 function fallbackSave(filename, content){
   try{
-    // Method 1: data: URI (most compatible, works in WebViews)
-    const dataUri='data:application/json;charset=utf-8,'+encodeURIComponent(content);
+    // Method 1: Blob URL – most reliable for large files
+    const b=new Blob([content],{type:'application/json;charset=utf-8'});
+    const url=URL.createObjectURL(b);
     const a=document.createElement('a');
-    a.href=dataUri;
-    a.download=filename;
-    a.style.display='none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(()=>document.body.removeChild(a),200);
+    a.href=url;a.download=filename;a.style.display='none';
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},1000);
   }catch(e){
     try{
-      // Method 2: Blob URL fallback
-      const b=new Blob([content],{type:'application/json'});
-      const url=URL.createObjectURL(b);
+      // Method 2: data: URI fallback
+      const dataUri='data:application/json;charset=utf-8,'+encodeURIComponent(content);
       const a=document.createElement('a');
-      a.href=url;a.download=filename;a.style.display='none';
+      a.href=dataUri;a.download=filename;a.style.display='none';
       document.body.appendChild(a);a.click();
-      setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
+      setTimeout(()=>document.body.removeChild(a),500);
     }catch(e2){
-      // Method 3: Last resort – show content in new tab to save manually
+      // Method 3: New tab as last resort
       const w=window.open('','_blank');
-      if(w){w.document.write('<pre>'+content.replace(/</g,'&lt;')+'</pre>');}
-      else{toast(S.lang==='en'?'⚠ Download blocked. Please allow popups.':'⚠ Download blockiert. Bitte Popups erlauben.','err');}
+      if(w){w.document.write('<pre>'+content.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre>');}
+      else{toast(S.lang==='en'?'⚠ Download blocked.':'⚠ Download blockiert.','err');}
     }
   }
 }
