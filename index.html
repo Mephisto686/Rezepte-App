@@ -1225,14 +1225,14 @@ function renderList(app){
       bar.innerHTML=`
         <div style="display:flex;align-items:center;gap:.6rem">
           <span id="selCount" style="font-family:var(--font);font-size:.9rem;font-weight:700;flex:1">0 ${t('det_selected')}</span>
-          <button id="selAllBtn" class="btn sm" style="background:rgba(255,255,255,.18);color:#fff;border:none;font-size:.75rem;font-weight:600">Alle</button>
-          <button id="selDoneBtn" class="btn sm" style="background:rgba(255,255,255,.18);color:#fff;border:none;font-size:.75rem;font-weight:600">✕ Fertig</button>
+          <button id="selAllBtn" class="btn sm" style="background:rgba(255,255,255,.18);color:#fff;border:none;font-size:.75rem;font-weight:600">${t('flt_all')}</button>
+          <button id="selDoneBtn" class="btn sm" style="background:rgba(255,255,255,.18);color:#fff;border:none;font-size:.75rem;font-weight:600">✕ ${S.lang==='en'?'Done':'Fertig'}</button>
         </div>
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-          <button id="selCatBtn"  class="sel-act-btn">📂 Kategorie</button>
-          <button id="selFavBtn"  class="sel-act-btn">❤️ Favorit</button>
-          <button id="selExpBtn"  class="sel-act-btn">📤 Exportieren</button>
-          <button id="selDelBtn"  class="sel-act-btn" style="background:rgba(239,68,68,.4)">🗑 Löschen</button>
+          <button id="selCatBtn"  class="sel-act-btn">📂 ${S.lang==='en'?'Category':'Kategorie'}</button>
+          <button id="selFavBtn"  class="sel-act-btn">❤️ ${S.lang==='en'?'Favorite':'Favorit'}</button>
+          <button id="selExpBtn"  class="sel-act-btn">📤 ${S.lang==='en'?'Export':'Exportieren'}</button>
+          <button id="selDelBtn"  class="sel-act-btn" style="background:rgba(239,68,68,.4)">🗑 ${t('btn_delete')}</button>
         </div>`;
       grid.insertAdjacentElement('beforebegin',bar);
 
