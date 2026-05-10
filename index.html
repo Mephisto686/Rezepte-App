@@ -2534,13 +2534,11 @@ function exportRecipePDF(id){
   </div>`:''}
   </div>
   </body></html>`;
-  // Open as Blob URL for better mobile compatibility
-  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;a.target='_blank';a.style.display='none';
-  document.body.appendChild(a);a.click();
-  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  // Open in new window (most compatible approach)
+  const w=window.open('','_blank');
+  if(!w){toast(S.lang==='en'?'⚠ Popup blocked – please allow popups':'⚠ Popup blockiert – bitte Popups erlauben','err');return;}
+  w.document.write(html);
+  w.document.close();
 }
 // ── Save dialog helper ─────────────────────────────────────────────────────
 function showSaveDialog(defaultName, onSave){
