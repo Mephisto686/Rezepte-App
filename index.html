@@ -337,7 +337,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     <div style="font-size:2rem;margin-bottom:.5rem">🗑️</div>
     <div style="font-size:1rem;font-weight:bold;margin-bottom:.5rem;color:var(--text)">Rezept löschen?</div>
     <p style="color:var(--muted);font-size:.87rem;font-family:var(--ui);margin-bottom:1rem">Nicht rückgängig zu machen.</p>
-    <div class="md-acts"><button class="btn bn" id="delCancel">${t('btn_cancel')}</button><button class="btn bd" id="delConfirm">${t('btn_delete')}</button></div>
+    <div class="md-acts"><button class="btn bn" id="delCancel">Abbrechen</button><button class="btn bd" id="delConfirm">Löschen</button></div>
   </div>
 </div>
 
@@ -429,7 +429,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     </div>
     <div id="shopPickList" style="max-height:55dvh;overflow-y:auto"></div>
     <div class="md-acts" style="margin-top:1rem">
-      <button class="btn bn" id="shopPickCancel">${t('btn_cancel')}</button>
+      <button class="btn bn" id="shopPickCancel">Abbrechen</button>
       <button class="btn bp" id="shopPickConfirm">In Einkaufsliste</button>
     </div>
   </div>
@@ -482,7 +482,7 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -591,6 +591,7 @@ async function load(){
   try{S.edamamAppId=localStorage.getItem('mredid')||'';}catch{}
   try{S.lang=localStorage.getItem('mrlang')||'de';}catch{}
   try{S.edamamAppKey=localStorage.getItem('mredk')||'';}catch{}
+  try{S.edamamEnabled=localStorage.getItem('mredamen')==='1';}catch{}
   try{S.dark=localStorage.getItem('mrdm')==='1';}catch{}
   try{const cc=localStorage.getItem('mrcats');if(cc)S.customCats=JSON.parse(cc);}catch{}
   try{const ccol=localStorage.getItem('mrcatcol');if(ccol)S.customCatColors=JSON.parse(ccol);}catch{}
@@ -707,7 +708,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.2.5';
+const APP_VERSION = '2.2.8';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
@@ -940,6 +941,10 @@ function renderNav(){
   });  const cnt=S.shopping.filter(x=>!x.done).length;
   document.getElementById('shopLbl').innerHTML=t('nav_list')+(cnt?`<span class="badge">${cnt}</span>`:'');
   document.getElementById('bnav').style.display=S.view==='form'?'none':'flex';
+  // Update static modal button texts for current language
+  const _dc=document.getElementById('delCancel');if(_dc)_dc.textContent=t('btn_cancel');
+  const _dd=document.getElementById('delConfirm');if(_dd)_dd.textContent=t('btn_delete');
+  const _spc=document.getElementById('shopPickCancel');if(_spc)_spc.textContent=t('btn_cancel');
   // Update nav labels for language
   const navMap={navLblRecipes:'nav_recipes',navLblFavs:'nav_favorites',navLblAi:'nav_ai',navLblImport:'nav_import',navLblMore:'nav_more'};
   Object.entries(navMap).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.textContent=t(key);});
@@ -1455,7 +1460,7 @@ function renderDetail(app){
           <span class="scale-lbl">${t('det_portions')}</span>
           <div class="sctrl">
             <button class="sbtn" onclick="chgSc(-1)">−</button>
-            <span class="sval">${sc%1===0?sc:sc.toFixed(1)} ${sc!==1?t('det_portions_pl'):t('det_portion')}</span>
+            <span class="sval">${(()=>{const r=Math.round(sc*100)/100;return Number.isInteger(r)?r:r.toFixed(1);})()} ${sc!==1?t('det_portions_pl'):t('det_portion')}</span>
             <button class="sbtn" onclick="chgSc(1)">+</button>
           </div>
           ${sf!==1?`<button onclick="resetSc()" style="background:none;border:none;font-size:.72rem;color:var(--muted);cursor:pointer;padding:.2rem .4rem;font-family:var(--ui)" title="${S.lang==='en'?'Reset to default':'Zurücksetzen'}">↺ ${r.servings}</button>`:''}
@@ -1820,7 +1825,7 @@ function renderForm(app){
         <div class="fl" style="display:flex;align-items:center;justify-content:space-between">
           <span>${t('form_nutrition')}</span>
           <div style="display:flex;gap:.4rem">
-            <button id="nutritionEdamamBtn" class="btn bg sm" style="font-size:.72rem" title="Edamam Nährwert-Datenbank">${t('btn_edamam')}</button>
+            ${S.edamamEnabled?`<button id="nutritionEdamamBtn" class="btn bg sm" style="font-size:.72rem" title="Edamam Nährwert-Datenbank">${t('btn_edamam')}</button>`:''}
             <button id="nutritionAiBtn" class="btn bp sm" style="font-size:.72rem">${t('btn_ai_est')}</button>
           </div>
         </div>
@@ -2181,14 +2186,15 @@ function renderSettings(app){
       </div>
     </div>
     <div class="ss"><div class="st2">${t('set_edamam')}</div>
-      <div class="sr2" style="flex-direction:column;align-items:flex-start">
-        <div class="sl">App ID & App Key</div>
-        <div class="ss2">${S.lang==='en'?'Free account at ':'Kostenloser Account auf '}<a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a>${S.lang==='en'?' → "Nutrition Analysis API"':' → „Nutrition Analysis API"'}</div>
-        <input class="aki" type="text" id="edamamId" value="${esc(S.edamamAppId)}" placeholder="App ID" style="margin-top:.5rem;width:100%">
-        <input class="aki" type="password" id="edamamKey" value="${esc(S.edamamAppKey)}" placeholder="App Key" style="margin-top:.4rem;width:100%">
-        <div style="font-size:.72rem;color:var(--muted);margin-top:.35rem;font-family:var(--ui);font-style:italic">Kostenfrei bis 400 Anfragen/Monat. Keys werden nur lokal gespeichert.</div>
-        <button class="btn bg sm" style="margin-top:.6rem" onclick="saveEdamam()">${t('btn_save_keys')}</button>
+      <div class="sr2">
+        <div><div class="sl">${t('set_edamam')}</div><div class="ss2">${S.lang==='en'?'Paid subscription required (from $49/month) · <a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a>':'Kostenpflichtiges Abo (ab $49/Monat) · <a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a>'}</div></div>
+        <button class="tgl${S.edamamEnabled?' on':''}" id="edamamtgl"></button>
       </div>
+      ${S.edamamEnabled?`<div class="sr2" style="flex-direction:column;align-items:flex-start;margin-top:.3rem">
+        <input class="aki" type="text" id="edamamId" value="${esc(S.edamamAppId)}" placeholder="App ID" style="width:100%">
+        <input class="aki" type="password" id="edamamKey" value="${esc(S.edamamAppKey)}" placeholder="App Key" style="margin-top:.4rem;width:100%">
+        <button class="btn bg sm" style="margin-top:.5rem" onclick="saveEdamam()">${t('btn_save_keys')}</button>
+      </div>`:''}
     </div>
     <div class="ss"><div class="st2">${t('set_data')}</div>
       <div class="sr2"><div><div class="sl">${t('set_compress')}</div><div class="ss2">${t('set_compress_hint')}</div></div><button class="btn bg sm" onclick="recompressAllPhotos()">${t('btn_compress')}</button></div>
@@ -2355,6 +2361,11 @@ function renderSettings(app){
 
   document.getElementById('dtgl').addEventListener('click',()=>{S.dark=!S.dark;saveDark();applyTheme();renderApp();});
   document.getElementById('wltgl')?.addEventListener('click',()=>toggleWakeLock());
+  document.getElementById('edamamtgl')?.addEventListener('click',()=>{
+    S.edamamEnabled=!S.edamamEnabled;
+    try{localStorage.setItem('mredamen',S.edamamEnabled?'1':'0');}catch{}
+    renderApp();
+  });
   document.getElementById('backupImportBtn')?.addEventListener('click',()=>document.getElementById('backupFile')?.click());
   document.getElementById('shopCatsImportBtn')?.addEventListener('click',()=>document.getElementById('shopCatsFile')?.click());
   document.getElementById('shopCatsFile')?.addEventListener('change',async e=>{
