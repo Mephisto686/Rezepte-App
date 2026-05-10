@@ -321,12 +321,12 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 <div class="page" id="app"></div>
 
 <nav class="bnav" id="bnav">
-  <button class="nb" data-nav="list"><div class="ic">🍳</div>Rezepte</button>
-  <button class="nb" data-nav="favorites"><div class="ic">❤️</div>Favoriten</button>
-  <button class="nb" data-nav="aisearch"><div class="ic">✨</div>KI-Suche</button>
-  <button class="nb" data-nav="import"><div class="ic">📥</div>Import</button>
+  <button class="nb" data-nav="list"><div class="ic">🍳</div><span id="navLblRecipes">Rezepte</span></button>
   <button class="nb" data-nav="shopping"><div class="ic">🛒</div><span id="shopLbl">Liste</span></button>
-  <button class="nb" data-nav="settings"><div class="ic">⚙️</div>Mehr</button>
+  <button class="nb" data-nav="favorites"><div class="ic">❤️</div><span id="navLblFavs">Favoriten</span></button>
+  <button class="nb" data-nav="aisearch"><div class="ic">✨</div><span id="navLblAi">KI-Suche</span></button>
+  <button class="nb" data-nav="import"><div class="ic">📥</div><span id="navLblImport">Import</span></button>
+  <button class="nb" data-nav="settings"><div class="ic">⚙️</div><span id="navLblMore">Mehr</span></button>
 </nav>
 
 <button class="fab" id="fab">+</button>
@@ -1053,8 +1053,14 @@ function showFilterPanel(onApply){
 
 // LIST VIEW
 function renderList(app){
-  const isFav=S.view==='favorites', tags=allTags();
   if(!S.collapsedCats)S.collapsedCats=new Set(getCats()); // all collapsed by default
+
+  // Force shell rebuild when switching between list/favorites
+  const currentMode=S.view==='favorites'?'fav':'list';
+  if(app.querySelector('#rezepteGrid')&&app.dataset.listMode!==currentMode){
+    app.innerHTML=''; // force rebuild
+  }
+  app.dataset.listMode=currentMode;
 
   // First render: build shell
   if(!app.querySelector('#rezepteGrid')){
@@ -1109,6 +1115,7 @@ function renderList(app){
   renderGrid();
 
   function renderGrid(){
+    const isFav=S.view==='favorites';
     const grid=document.getElementById('rezepteGrid');if(!grid)return;
     const rs=S.recipes.filter(r=>{
       const f=S.filters;
@@ -3871,6 +3878,27 @@ function loadSession(){
   loadSession();
   render();
   initWakeLock();
+  // ══ Swipe navigation ══
+  (()=>{
+    const NAV_ORDER=['list','shopping','favorites','aisearch','import','settings'];
+    let tx=0,ty=0;
+    const appEl=document.getElementById('app');
+    appEl.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+    appEl.addEventListener('touchend',e=>{
+      const dx=e.changedTouches[0].clientX-tx;
+      const dy=e.changedTouches[0].clientY-ty;
+      if(Math.abs(dx)<65||Math.abs(dx)<Math.abs(dy)*1.5)return;
+      if(S.view==='form'||S.view==='detail')return;
+      const cur=NAV_ORDER.indexOf(S.view);if(cur===-1)return;
+      const next=dx<0
+        ?(cur+1)%NAV_ORDER.length
+        :(cur-1+NAV_ORDER.length)%NAV_ORDER.length;
+      if(next===cur)return;
+      S.view=NAV_ORDER[next];S.selId=null;
+      if(S.view==='list'||S.view==='favorites'){S.search='';S.filters={cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};}
+      render();scrollTo(0,0);
+    },{passive:true});
+  })();
 })();
 </script>
 </body>
