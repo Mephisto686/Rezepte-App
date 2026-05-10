@@ -2510,7 +2510,19 @@ function exportRecipePDF(id){
   </style></head><body>
   <div class="print-bar">
     <span>📄 ${r.title}</span>
-    <button class="print-btn" onclick="window.print()">🖨 Als PDF speichern</button>
+    <button class="print-btn" onclick="
+      if(typeof window.print==='function'){
+        try{window.print();document.getElementById('ph').style.display='none';}
+        catch(e){document.getElementById('ph').style.display='block';}
+      } else {
+        document.getElementById('ph').style.display='block';
+      }
+    ">🖨 Als PDF speichern</button>
+  </div>
+  <div id="ph" style="display:none;background:#313244;color:#cdd6f4;font-size:.82rem;font-family:system-ui;padding:.7rem 1rem;text-align:center;line-height:1.6">
+    ${S.lang==='en'
+      ? '📲 Tap your browser\'s <strong>Share / Menu button</strong> → <strong>Print</strong> → <strong>Save as PDF</strong>'
+      : '📲 Tippe auf das <strong>Teilen / Menü-Symbol</strong> deines Browsers → <strong>Drucken</strong> → <strong>Als PDF speichern</strong>'}
   </div>
   <div class="content">
   ${r.photo?`<img class="photo" src="${r.photo}">`:''}
