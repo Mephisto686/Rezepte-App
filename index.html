@@ -482,7 +482,7 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -707,9 +707,12 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.2.0';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
+  { version:'2.2.0', date:'2026-05-10', de:['Letztes Rezept merken – Rezepte-Tab springt zurück','Portionen-Skalierung wird pro Rezept gespeichert'], en:['Remember last recipe – Recipes tab returns to it','Portion scaling saved per recipe'] },
+  { version:'2.1.2', date:'2026-05-10', de:['PDF-Vorschau In-App (kein Popup)','Wake Lock Fallback für WebViews'], en:['PDF preview in-app (no popup)','Wake lock fallback for WebViews'] },
+  { version:'2.1.1', date:'2026-05-10', de:['Syntaxfehler behoben'], en:['Syntax error fixed'] },
   { version:'2.1.0', date:'2026-05-10', de:['Swipe-Navigation zwischen Tabs (auch zirkulär)','Tab-Reihenfolge anpassbar','Bug-Fix: Kategorien nach Favoriten-Wechsel','Kategorien auf/zuklappen Button'], en:['Swipe navigation between tabs (circular)','Tab order customizable','Bug fix: categories after favorites switch','Collapse/expand all categories button'] },
   { version:'2.0.0', date:'2026-05-10', de:['IndexedDB statt localStorage → kein Speicherlimit mehr für Fotos','Import-Option ohne Fotos bei großen Dateien','Kategorien: Fallback auf Sonstiges beim Löschen','Alle Kategorien auf-/zuklappen','Standard-Kategorien aktualisiert'], en:['IndexedDB replaces localStorage → no more storage limits for photos','Import option without photos for large files','Categories: fallback to Sonstiges on delete','Collapse/expand all categories','Default categories updated'] },
   { version:'1.3.0', date:'2026-05-08', de:['Einkaufskategorien Verwaltung, Export & Import','Sprache DE/EN umschaltbar','Nährwert-Berechnung verbessert (Temperature 0)','Edamam API für Nährwerte'], en:['Shopping category manager, export & import','Language switch DE/EN','Improved nutrition calculation','Edamam API for nutrition'] },
@@ -1448,9 +1451,10 @@ function renderDetail(app){
           <span class="scale-lbl">${t('det_portions')}</span>
           <div class="sctrl">
             <button class="sbtn" onclick="chgSc(-1)">−</button>
-            <span class="sval">${sc%1===0?sc:sc.toFixed(1)} Portion${sc!==1?'en':''}</span>
+            <span class="sval">${sc%1===0?sc:sc.toFixed(1)} ${sc!==1?t('det_portions_pl'):t('det_portion')}</span>
             <button class="sbtn" onclick="chgSc(1)">+</button>
           </div>
+          ${sf!==1?`<button onclick="resetSc()" style="background:none;border:none;font-size:.72rem;color:var(--muted);cursor:pointer;padding:.2rem .4rem;font-family:var(--ui)" title="${S.lang==='en'?'Reset to default':'Zurücksetzen'}">↺ ${r.servings}</button>`:''}
         </div>
         <div class="st">${t('det_ingredients')}</div>
         <div id="ingList">
@@ -2405,11 +2409,18 @@ function renderSettings(app){
 
 // ══════════════ ACTIONS ══════════════
 const goList=()=>{S.view='list';S.selId=null;S.scaleFactor=1;saveSession();render();scrollTo(0,0);};
-const openDetail=id=>{S.selId=id;S.view='detail';S.scaleFactor=1;saveSession();render();scrollTo(0,0);};
+const openDetail=id=>{
+  S.lastSelId=id;
+  S.selId=id;S.view='detail';
+  // Restore saved scale factor for this recipe if exists
+  S.scaleFactor=S.scaleFactors[id]||1;
+  saveSession();render();scrollTo(0,0);
+};
 const openNew=()=>{S.formData=defForm();S.formTags=[];S.formPhoto=null;S.editId=null;S.view='form';render();scrollTo(0,0);};
 function openEdit(id){const r=S.recipes.find(x=>x.id===id);if(!r)return;S.formData={...r};S.formTags=[...(r.tags||[])];S.formPhoto=null;S.editId=id;S.view='form';render();scrollTo(0,0);}
 function setTag(t){S.filterTag=t;renderApp();}
-function chgSc(d){const base=S.recipes.find(x=>x.id===S.selId)?.servings||4;S.scaleFactor=Math.max(1/base,S.scaleFactor+d/base);renderApp();}
+function chgSc(d){const base=S.recipes.find(x=>x.id===S.selId)?.servings||4;S.scaleFactor=Math.max(1/base,S.scaleFactor+d/base);if(S.selId)S.scaleFactors[S.selId]=S.scaleFactor;saveSession();renderApp();}
+function resetSc(){S.scaleFactor=1;if(S.selId)delete S.scaleFactors[S.selId];saveSession();renderApp();}
 function toggleFav(id){S.recipes=S.recipes.map(r=>r.id===id?{...r,favorite:!r.favorite}:r);saveR();renderApp();}
 function rmTag(t){S.formTags=S.formTags.filter(x=>x!==t);renderApp();}
 function askDel(id){S.delId=id;document.getElementById('delModal').style.display='flex';}
@@ -2548,23 +2559,36 @@ function exportRecipePDF(id){
   </div>`:''}
   </div>
   </body></html>`;
-  // Open in new window (most compatible approach)
-  const w=window.open('','_blank');
-  if(!w){toast(S.lang==='en'?'⚠ Popup blocked – please allow popups':'⚠ Popup blockiert – bitte Popups erlauben','err');return;}
-  w.document.write(html);
-  w.document.close();
-  // Wire up buttons after write (can't use <script> inside template literal)
-  w.document.getElementById('pdfPrintBtn').onclick=()=>{
-    try{w.print();w.document.getElementById('ph').style.display='none';}
-    catch(e){w.document.getElementById('ph').style.display='block';}
+  // Show PDF preview as in-app fullscreen overlay (no popup needed)
+  const ov=document.createElement('div');
+  ov.id='pdfOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:500;background:#fff;display:flex;flex-direction:column';
+  const bar=document.createElement('div');
+  bar.style.cssText='background:#1e1e2e;padding:.6rem 1rem;display:flex;align-items:center;gap:.6rem;flex-shrink:0';
+  bar.innerHTML=`
+    <button id="pdfClose" style="background:none;border:none;color:#cdd6f4;font-size:1.1rem;cursor:pointer;padding:.2rem .4rem">✕</button>
+    <span style="color:#cdd6f4;font-family:system-ui;font-size:.85rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📄 ${esc(r.title)}</span>
+    <button id="pdfPrintBtn" style="background:#89b4fa;color:#1e1e2e;border:none;border-radius:8px;padding:.45rem .9rem;font-family:system-ui;font-size:.82rem;font-weight:700;cursor:pointer;flex-shrink:0">🖨 Drucken</button>
+    <button id="pdfDlBtn" style="background:#a6e3a1;color:#1e1e2e;border:none;border-radius:8px;padding:.45rem .9rem;font-family:system-ui;font-size:.82rem;font-weight:700;cursor:pointer;flex-shrink:0">⬇ HTML</button>`;
+  const iframe=document.createElement('iframe');
+  iframe.style.cssText='flex:1;border:none;width:100%';
+  ov.appendChild(bar);ov.appendChild(iframe);
+  document.body.appendChild(ov);
+  // Write HTML into iframe (same-origin, no popup)
+  iframe.contentDocument.open();
+  iframe.contentDocument.write(html);
+  iframe.contentDocument.close();
+  bar.querySelector('#pdfClose').onclick=()=>document.body.removeChild(ov);
+  bar.querySelector('#pdfPrintBtn').onclick=()=>{
+    try{iframe.contentWindow.print();}
+    catch(e){toast(S.lang==='en'?'Use ⬇ HTML → open in Chrome → Print':'⬇ HTML herunterladen → in Chrome öffnen → Drucken');}
   };
-  w.document.getElementById('pdfDlBtn').onclick=()=>{
+  bar.querySelector('#pdfDlBtn').onclick=()=>{
     const b=new Blob([html],{type:'text/html'});
-    const a=w.document.createElement('a');
+    const a=document.createElement('a');
     a.href=URL.createObjectURL(b);
     a.download=(r.title.replace(/[^a-z0-9äöüß]/gi,'_')||'rezept')+'.html';
     a.click();
-    w.document.getElementById('ph').style.display='block';
   };
 }
 // ── Save dialog helper ─────────────────────────────────────────────────────
@@ -3760,8 +3784,25 @@ async function toggleWakeLock(){
 }
 // Auto-acquire wake lock on startup if enabled
 async function initWakeLock(){
-  if(!S.wakeLock||!('wakeLock' in navigator))return;
-  try{S.wakeLockSentinel=await navigator.wakeLock.request('screen');}catch{S.wakeLock=false;}
+  if(!S.wakeLock)return;
+  // Try native Wake Lock API first
+  if('wakeLock' in navigator){
+    try{S.wakeLockSentinel=await navigator.wakeLock.request('screen');return;}catch{}
+  }
+  // Fallback: silent looping video keeps screen awake in WebViews
+  if(!document.getElementById('_wlvid')){
+    const v=document.createElement('video');
+    v.id='_wlvid';
+    v.setAttribute('playsinline','');
+    v.setAttribute('muted','');
+    v.loop=true;
+    v.style.cssText='position:fixed;top:-1px;left:-1px;width:1px;height:1px;opacity:0;pointer-events:none';
+    // Tiny 1x1 transparent MP4 as data URI
+    v.src='data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAs1tZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE1NSByMjkxNyAwYTg0ZDk4IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxOCAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiBicmFtZXM9MyBvcGVuX2dvcD0wIHdlaWdodHA9MiByZWZzPTEga2V5aW50PTI1MCBrZXlpbnRfbWluPTI1IHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9NDAgcmM9Y3JmIG1idHJlZT0xIGNyZj0yMy4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4wMACAAAAFZ2xpYmcAEAAA//73iB8GNgPGAnHpBwABAAASAAGQAA==';
+    document.body.appendChild(v);
+    v.play().catch(()=>{});
+    S.wakeLockSentinel={release:()=>{v.pause();v.remove();}};
+  }
 }
 
 // ══════════════ TOAST ══════════════
@@ -3805,6 +3846,11 @@ document.getElementById('backBtn').onclick=()=>{
 document.getElementById('fab').addEventListener('click',openNew);
 document.querySelectorAll('.nb').forEach(b=>b.addEventListener('click',()=>{
   const n=b.dataset.nav;
+  // Tapping Rezepte while already in recipes section → go back to last viewed recipe
+  if(n==='list' && S.lastSelId && (S.view==='list'||S.view==='favorites'||S.view==='shopping'||S.view==='aisearch'||S.view==='import'||S.view==='settings')){
+    const last=S.recipes.find(r=>r.id===S.lastSelId);
+    if(last){openDetail(S.lastSelId);return;}
+  }
   S.view=n;S.selId=null;
   if(n==='list'||n==='favorites'){S.search='';S.filters={cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};}
   if(n==='aisearch')S.aiSearchChat=[];
@@ -3866,17 +3912,18 @@ document.getElementById('copyBtn').addEventListener('click',()=>{
 })();
 
 function saveSession(){
-  try{localStorage.setItem('mrsession',JSON.stringify({view:S.view,selId:S.selId,stepsDone:S.stepsDone}));}catch{}
+  try{localStorage.setItem('mrsession',JSON.stringify({view:S.view,selId:S.selId,stepsDone:S.stepsDone,lastSelId:S.lastSelId,scaleFactors:S.scaleFactors}));}catch{}
 }
 function loadSession(){
   try{
     const raw=localStorage.getItem('mrsession');
     if(!raw)return;
     const sess=JSON.parse(raw);
-    // Only restore detail view (makes sense to continue cooking)
     if(sess.view==='detail'&&sess.selId&&S.recipes.find(r=>r.id===sess.selId)){
       S.view='detail';S.selId=sess.selId;S.stepsDone=sess.stepsDone||{};
     }
+    if(sess.lastSelId)S.lastSelId=sess.lastSelId;
+    if(sess.scaleFactors)S.scaleFactors=sess.scaleFactors;
   }catch{}
 }
 (async()=>{
