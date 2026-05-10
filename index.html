@@ -707,9 +707,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.2.1';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
+  { version:'2.2.1', date:'2026-05-10', de:['PDF-Vorschau: doppelte Leiste entfernt','HTML-Download für PDF über Chrome'], en:['PDF preview: duplicate bar removed','HTML download for PDF via Chrome'] },
   { version:'2.2.0', date:'2026-05-10', de:['Letztes Rezept merken – Rezepte-Tab springt zurück','Portionen-Skalierung wird pro Rezept gespeichert'], en:['Remember last recipe – Recipes tab returns to it','Portion scaling saved per recipe'] },
   { version:'2.1.2', date:'2026-05-10', de:['PDF-Vorschau In-App (kein Popup)','Wake Lock Fallback für WebViews'], en:['PDF preview in-app (no popup)','Wake lock fallback for WebViews'] },
   { version:'2.1.1', date:'2026-05-10', de:['Syntaxfehler behoben'], en:['Syntax error fixed'] },
@@ -2508,10 +2509,9 @@ function exportRecipePDF(id){
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Georgia,serif;color:#2d2416;padding:2cm;max-width:800px;margin:0 auto;font-size:11pt}
-    .print-bar{position:fixed;top:0;left:0;right:0;background:#1e1e2e;padding:.7rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.7rem;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,.3)}
-    .print-bar span{color:#cdd6f4;font-family:system-ui;font-size:.85rem;flex:1}
-    .print-btn{background:#89b4fa;color:#1e1e2e;border:none;border-radius:8px;padding:.5rem 1.1rem;font-family:system-ui;font-size:.85rem;font-weight:700;cursor:pointer;flex-shrink:0}
-    .content{margin-top:3.5rem}
+    .pbar{position:fixed;top:0;left:0;right:0;background:#1e1e2e;padding:.6rem 1rem;display:flex;align-items:center;gap:.5rem;z-index:999}
+    .pbtn{background:#89b4fa;color:#1e1e2e;border:none;border-radius:8px;padding:.4rem .9rem;font-family:system-ui;font-size:.82rem;font-weight:700;cursor:pointer}
+    .content{margin-top:3rem}
     .header{background:${catColor};color:white;padding:1.2rem 1.5rem;border-radius:8px;margin-bottom:1.5rem}
     .header h1{font-size:1.6rem;margin-bottom:.3rem}
     .header .meta{font-size:.85rem;opacity:.9;font-family:system-ui}
@@ -2525,17 +2525,11 @@ function exportRecipePDF(id){
     .num{width:24px;height:24px;border-radius:50%;border:2px solid ${catColor};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.75rem;color:${catColor};font-family:system-ui;font-weight:bold;margin-top:.1rem}
     .notes{background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:.8rem 1rem;font-style:italic;font-size:.9rem;color:#78350f;margin-top:.5rem}
     ${r.photo?`.photo{width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin-bottom:1rem}`:''}
-    @media print{.print-bar{display:none!important}.content{margin-top:0}.header{-webkit-print-color-adjust:exact;print-color-adjust:exact}.notes{-webkit-print-color-adjust:exact;print-color-adjust:exact}.num{-webkit-print-color-adjust:exact;print-color-adjust:exact}.sec-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    @media print{.pbar{display:none!important}.content{margin-top:0}.header{-webkit-print-color-adjust:exact;print-color-adjust:exact}.notes{-webkit-print-color-adjust:exact;print-color-adjust:exact}.num{-webkit-print-color-adjust:exact;print-color-adjust:exact}.sec-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
-  <div class="print-bar">
-    <span>📄 ${r.title}</span>
-    <button class="print-btn" id="pdfPrintBtn">🖨 Als PDF speichern</button>
-    <button class="print-btn" id="pdfDlBtn" style="background:#a6e3a1;margin-left:.4rem">⬇ HTML laden</button>
-  </div>
-  <div id="ph" style="display:none;background:#313244;color:#cdd6f4;font-size:.82rem;font-family:system-ui;padding:.7rem 1rem;text-align:center;line-height:1.6">
-    ${S.lang==='en'
-      ? '↑ Download the HTML file, open it in Chrome, then use <strong>Menu → Print → Save as PDF</strong>'
-      : '↑ HTML herunterladen, in Chrome öffnen, dann <strong>Menü → Drucken → Als PDF speichern</strong>'}
+  <div class="pbar">
+    <span style="color:#cdd6f4;font-family:system-ui;font-size:.82rem;flex:1">📄 ${r.title}</span>
+    <button class="pbtn" onclick="window.print()">🖨 Als PDF speichern</button>
   </div>
   <div class="content">
   ${r.photo?`<img class="photo" src="${r.photo}">`:''}
@@ -2581,7 +2575,7 @@ function exportRecipePDF(id){
   bar.querySelector('#pdfClose').onclick=()=>document.body.removeChild(ov);
   bar.querySelector('#pdfPrintBtn').onclick=()=>{
     try{iframe.contentWindow.print();}
-    catch(e){toast(S.lang==='en'?'Use ⬇ HTML → open in Chrome → Print':'⬇ HTML herunterladen → in Chrome öffnen → Drucken');}
+    catch(e){toast(S.lang==='en'?'Use ⬇ HTML → open in Chrome → Print':'⬇ HTML → in Chrome öffnen → Drucken');}
   };
   bar.querySelector('#pdfDlBtn').onclick=()=>{
     const b=new Blob([html],{type:'text/html'});
