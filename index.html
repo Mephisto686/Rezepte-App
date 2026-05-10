@@ -482,7 +482,7 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -707,9 +707,12 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.2.1';
+const APP_VERSION = '2.2.5';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
+  { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
+  { version:'2.2.3', date:'2026-05-10', de:['Letztes Rezept: korrekte Logik bei Tab-Klick vs Zurück'], en:['Last recipe: correct logic for tab click vs back'] },
+  { version:'2.2.2', date:'2026-05-10', de:['Letztes Rezept: nur bei Tab-Wechsel merken, nicht bei Zurück-Button'], en:['Last recipe: only remembered on tab switch, not back button'] },
   { version:'2.2.1', date:'2026-05-10', de:['PDF-Vorschau: doppelte Leiste entfernt','HTML-Download für PDF über Chrome'], en:['PDF preview: duplicate bar removed','HTML download for PDF via Chrome'] },
   { version:'2.2.0', date:'2026-05-10', de:['Letztes Rezept merken – Rezepte-Tab springt zurück','Portionen-Skalierung wird pro Rezept gespeichert'], en:['Remember last recipe – Recipes tab returns to it','Portion scaling saved per recipe'] },
   { version:'2.1.2', date:'2026-05-10', de:['PDF-Vorschau In-App (kein Popup)','Wake Lock Fallback für WebViews'], en:['PDF preview in-app (no popup)','Wake lock fallback for WebViews'] },
@@ -2409,13 +2412,23 @@ function renderSettings(app){
 }
 
 // ══════════════ ACTIONS ══════════════
-const goList=()=>{S.view='list';S.selId=null;S.scaleFactor=1;saveSession();render();scrollTo(0,0);};
+function saveScroll(){
+  const key=S.view==='detail'?'detail_'+S.selId:S.view;
+  const page=document.querySelector('.page');
+  if(key&&page)S.scrollPositions[key]=page.scrollTop;
+}
+function restoreScroll(key){
+  const y=S.scrollPositions[key]||0;
+  // Use setTimeout to ensure DOM is painted before scrolling
+  setTimeout(()=>{const page=document.querySelector('.page');if(page)page.scrollTop=y;},50);
+}
+const goList=()=>{saveScroll();S.view='list';S.selId=null;S.scaleFactor=1;S.lastSelId=null;saveSession();render();restoreScroll('list');};
 const openDetail=id=>{
+  saveScroll();
   S.lastSelId=id;
   S.selId=id;S.view='detail';
-  // Restore saved scale factor for this recipe if exists
   S.scaleFactor=S.scaleFactors[id]||1;
-  saveSession();render();scrollTo(0,0);
+  saveSession();render();restoreScroll('detail_'+id);
 };
 const openNew=()=>{S.formData=defForm();S.formTags=[];S.formPhoto=null;S.editId=null;S.view='form';render();scrollTo(0,0);};
 function openEdit(id){const r=S.recipes.find(x=>x.id===id);if(!r)return;S.formData={...r};S.formTags=[...(r.tags||[])];S.formPhoto=null;S.editId=id;S.view='form';render();scrollTo(0,0);}
@@ -3840,15 +3853,18 @@ document.getElementById('backBtn').onclick=()=>{
 document.getElementById('fab').addEventListener('click',openNew);
 document.querySelectorAll('.nb').forEach(b=>b.addEventListener('click',()=>{
   const n=b.dataset.nav;
-  // Tapping Rezepte while already in recipes section → go back to last viewed recipe
-  if(n==='list' && S.lastSelId && (S.view==='list'||S.view==='favorites'||S.view==='shopping'||S.view==='aisearch'||S.view==='import'||S.view==='settings')){
+  // Tapping Rezepte while in detail → remember and return to recipe
+  if(n==='list' && S.lastSelId && S.view!=='list' && S.view!=='detail'){
     const last=S.recipes.find(r=>r.id===S.lastSelId);
     if(last){openDetail(S.lastSelId);return;}
   }
+  // Tapping Rezepte while in list or detail → go to list, forget last recipe
+  saveScroll();
+  if(n==='list'){S.lastSelId=null;saveSession();}
   S.view=n;S.selId=null;
   if(n==='list'||n==='favorites'){S.search='';S.filters={cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};}
   if(n==='aisearch')S.aiSearchChat=[];
-  render();scrollTo(0,0);
+  render();restoreScroll(n);
 }));
 // Ingredient picker modal
 document.getElementById('shopPickClose').addEventListener('click',()=>document.getElementById('shopPickModal').style.display='none');
@@ -3943,9 +3959,10 @@ function loadSession(){
         ?(cur+1)%NAV_ORDER.length
         :(cur-1+NAV_ORDER.length)%NAV_ORDER.length;
       if(next===cur)return;
+      saveScroll();
       S.view=NAV_ORDER[next];S.selId=null;
       if(S.view==='list'||S.view==='favorites'){S.search='';S.filters={cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};}
-      render();scrollTo(0,0);
+      render();restoreScroll(S.view);
     },{passive:true});
   })();
 })();
