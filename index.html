@@ -467,9 +467,107 @@ const S={
 };
 
 // ══════════════ PERSISTENCE ══════════════
-function load(){
-  try{const r=localStorage.getItem('mrv3');S.recipes=r?JSON.parse(r):SAMPLE;if(!S.recipes.length)S.recipes=SAMPLE;}catch{S.recipes=SAMPLE;}
-  try{const sh=localStorage.getItem('mrsh');S.shopping=sh?JSON.parse(sh):[];}catch{S.shopping=[];}
+// ══════════════ INDEXEDDB LAYER ══════════════
+let _db = null;
+const DB_NAME = 'MeineRezepteDB';
+const DB_VERSION = 1;
+
+function openDB(){
+  return new Promise((resolve, reject) => {
+    if(_db){resolve(_db);return;}
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains('recipes'))
+        db.createObjectStore('recipes', {keyPath:'id'});
+      if(!db.objectStoreNames.contains('photos'))
+        db.createObjectStore('photos', {keyPath:'id'});
+      if(!db.objectStoreNames.contains('shopping'))
+        db.createObjectStore('shopping', {keyPath:'id'});
+    };
+    req.onsuccess = e => { _db = e.target.result; resolve(_db); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbGetAll(store){
+  return openDB().then(db => new Promise((resolve,reject)=>{
+    const req = db.transaction(store,'readonly').objectStore(store).getAll();
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  }));
+}
+
+function dbPut(store, obj){
+  return openDB().then(db => new Promise((resolve,reject)=>{
+    const req = db.transaction(store,'readwrite').objectStore(store).put(obj);
+    req.onsuccess = resolve;
+    req.onerror = ()=>reject(req.error);
+  }));
+}
+
+function dbDelete(store, id){
+  return openDB().then(db => new Promise((resolve,reject)=>{
+    const req = db.transaction(store,'readwrite').objectStore(store).delete(id);
+    req.onsuccess = resolve;
+    req.onerror = ()=>reject(req.error);
+  }));
+}
+
+function dbClear(store){
+  return openDB().then(db => new Promise((resolve,reject)=>{
+    const req = db.transaction(store,'readwrite').objectStore(store).clear();
+    req.onsuccess = resolve;
+    req.onerror = ()=>reject(req.error);
+  }));
+}
+
+function dbPutBatch(store, items){
+  return openDB().then(db => new Promise((resolve,reject)=>{
+    const tx = db.transaction(store,'readwrite');
+    const os = tx.objectStore(store);
+    items.forEach(item => os.put(item));
+    tx.oncomplete = resolve;
+    tx.onerror = ()=>reject(tx.error);
+  }));
+}
+
+// Migrate old localStorage data to IndexedDB (one-time)
+async function migrateIfNeeded(){
+  try{
+    const migrated = localStorage.getItem('mrdb_v1');
+    if(migrated) return;
+    const lsData = localStorage.getItem('mrv3');
+    if(!lsData) return;
+    const recipes = JSON.parse(lsData);
+    if(!recipes || !recipes.length) return;
+    // Separate photos from recipe data
+    const recipeRows = [], photoRows = [];
+    recipes.forEach(r => {
+      const {photo, ...rest} = r;
+      recipeRows.push(rest);
+      if(photo) photoRows.push({id:r.id, data:photo});
+    });
+    await dbPutBatch('recipes', recipeRows);
+    if(photoRows.length) await dbPutBatch('photos', photoRows);
+    // Migrate shopping list
+    const shData = localStorage.getItem('mrsh');
+    if(shData){
+      const sh = JSON.parse(shData);
+      if(sh && sh.length) await dbPutBatch('shopping', sh);
+    }
+    // Mark migrated & clean up localStorage
+    localStorage.setItem('mrdb_v1','1');
+    localStorage.removeItem('mrv3');
+    localStorage.removeItem('mrsh');
+    console.log('Migrated to IndexedDB: '+recipeRows.length+' recipes, '+photoRows.length+' photos');
+  }catch(e){
+    console.warn('Migration failed:', e);
+  }
+}
+
+async function load(){
+  // Load small settings from localStorage (they're tiny, stay there)
   try{S.apiKey=localStorage.getItem('mrak')||'';}catch{}
   try{S.edamamAppId=localStorage.getItem('mredid')||'';}catch{}
   try{S.lang=localStorage.getItem('mrlang')||'de';}catch{}
@@ -481,23 +579,60 @@ function load(){
   try{const wl=localStorage.getItem('mrwl');S.wakeLock=wl===null?true:wl==='1';}catch{}
   try{const csc=localStorage.getItem('mrshcats');if(csc)S.customShopCats=JSON.parse(csc);}catch{}
   applyTheme();
+  // Migrate from localStorage if needed
+  await migrateIfNeeded();
+  // Load recipes + photos from IndexedDB
+  try{
+    const [recipes, photos, shopping] = await Promise.all([
+      dbGetAll('recipes'),
+      dbGetAll('photos'),
+      dbGetAll('shopping')
+    ]);
+    // Merge photos into recipes
+    const photoMap = {};
+    photos.forEach(p => photoMap[p.id] = p.data);
+    S.recipes = recipes.map(r => ({...r, photo: photoMap[r.id]||null}));
+    if(!S.recipes.length) S.recipes = SAMPLE;
+    S.shopping = shopping || [];
+  }catch(e){
+    console.warn('IndexedDB load failed, falling back:', e);
+    // Fallback to localStorage or SAMPLE
+    try{const r=localStorage.getItem('mrv3');S.recipes=r?JSON.parse(r):SAMPLE;}catch{S.recipes=SAMPLE;}
+    try{const sh=localStorage.getItem('mrsh');S.shopping=JSON.parse(sh)||[];}catch{S.shopping=[];}
+  }
 }
+
 function saveR(){
   S.saving=true;renderHdr();
-  try{
-    localStorage.setItem('mrv3',JSON.stringify(S.recipes));
-  }catch(e){
-    if(e.name==='QuotaExceededError'||e.code===22||e.name==='NS_ERROR_DOM_QUOTA_REACHED'){
-      if(confirm('Speicher voll!\n\nAlle Fotos automatisch komprimieren um Platz zu sparen?')){
-        recompressAllPhotos();
-      }
-    } else {
-      toast('Speicherfehler aufgetreten.','err');
-    }
-  }
-  setTimeout(()=>{S.saving=false;renderHdr();},600);
+  // Save recipes without photos + photos separately in IndexedDB
+  openDB().then(db => {
+    const tx = db.transaction(['recipes','photos'],'readwrite');
+    const recipeStore = tx.objectStore('recipes');
+    const photoStore = tx.objectStore('photos');
+    // Clear and rewrite all (recipes are small without photos)
+    recipeStore.clear();
+    photoStore.clear();
+    S.recipes.forEach(r => {
+      const {photo, ...rest} = r;
+      recipeStore.put(rest);
+      if(photo) photoStore.put({id:r.id, data:photo});
+    });
+    tx.oncomplete = () => { setTimeout(()=>{S.saving=false;renderHdr();},400); };
+    tx.onerror = () => { toast('Speicherfehler','err'); S.saving=false; renderHdr(); };
+  }).catch(e => {
+    toast('Datenbank-Fehler: '+e.message,'err');
+    S.saving=false; renderHdr();
+  });
 }
-function saveSh(){try{localStorage.setItem('mrsh',JSON.stringify(S.shopping));}catch{}}
+
+function saveSh(){
+  openDB().then(db => {
+    const tx = db.transaction('shopping','readwrite');
+    const store = tx.objectStore('shopping');
+    store.clear();
+    S.shopping.forEach(item => store.put(item));
+  }).catch(()=>{});
+}
 function saveKey(){try{localStorage.setItem('mrak',S.apiKey);}catch{}}
 function saveEdamam(){
   S.edamamAppId=(document.getElementById('edamamId')?.value||'').trim();
@@ -560,18 +695,23 @@ function applyTheme(){document.documentElement.setAttribute('data-theme',S.dark?
 
 function scaleI(line,f){
   if(f===1)return line;
-  return line.replace(/\d+(?:[.,]\d+)?/g,m=>{
-    const n=parseFloat(m.replace(',','.'))*f;
-    // Round to at most 2 decimal places with proper float precision
-    const rounded=Math.round((n+Number.EPSILON)*100)/100;
-    let s;
-    if(Number.isInteger(rounded)){
-      s=String(rounded);
-    } else {
-      // Format: remove trailing zeros, max 2dp
-      s=rounded.toFixed(2).replace(/\.?0+$/,'');
+  // Only scale the FIRST number (the quantity), not all numbers in the line
+  // This prevents scaling descriptor numbers like "3 cm große Würfel"
+  return line.replace(/^(\s*)(\d+(?:[.,]\d+)?|\d*[½¼¾⅓⅔⅛⅜⅝⅞]|\d+\/\d+)/,(match,pre,num)=>{
+    // Convert to decimal
+    const FRACS={'½':0.5,'¼':0.25,'¾':0.75,'⅓':1/3,'⅔':2/3,'⅛':0.125,'⅜':0.375,'⅝':0.625,'⅞':0.875};
+    let n=num;
+    for(const [fr,val] of Object.entries(FRACS)){
+      n=n.replace(new RegExp('(\\d+)'+fr),(_, i)=>String(Number(i)+val));
+      n=n.replace(fr,String(val));
     }
-    return s.replace('.',',');
+    n=n.replace(/(\d+)\/(\d+)/,(_,a,b)=>String(Number(a)/Number(b)));
+    const val=parseFloat(n.replace(',','.'))*f;
+    const rounded=Math.round((val+Number.EPSILON)*100)/100;
+    let s;
+    if(Number.isInteger(rounded)){s=String(rounded);}
+    else{s=rounded.toFixed(2).replace(/\.?0+$/,'');}
+    return pre+s.replace('.',',');
   });
 }
 
@@ -1040,7 +1180,7 @@ function renderList(app){
       bar.style.cssText='position:sticky;top:0;z-index:15;background:var(--accent);color:#fff;padding:.7rem 1rem .65rem;display:flex;flex-direction:column;gap:.55rem;margin:0 -1rem .9rem;border-radius:0 0 14px 14px;box-shadow:0 6px 20px rgba(79,70,229,.25)';
       bar.innerHTML=`
         <div style="display:flex;align-items:center;gap:.6rem">
-          <span id="selCount" style="font-family:var(--font);font-size:.9rem;font-weight:700;flex:1">0 ausgewählt</span>
+          <span id="selCount" style="font-family:var(--font);font-size:.9rem;font-weight:700;flex:1">0 ${t('det_selected')}</span>
           <button id="selAllBtn" class="btn sm" style="background:rgba(255,255,255,.18);color:#fff;border:none;font-size:.75rem;font-weight:600">Alle</button>
           <button id="selDoneBtn" class="btn sm" style="background:rgba(255,255,255,.18);color:#fff;border:none;font-size:.75rem;font-weight:600">✕ Fertig</button>
         </div>
@@ -1052,7 +1192,7 @@ function renderList(app){
         </div>`;
       grid.insertAdjacentElement('beforebegin',bar);
 
-      const updateCount=()=>{const sc=document.getElementById('selCount');if(sc)sc.textContent=S.selected.size+' ausgewählt';};
+      const updateCount=()=>{const sc=document.getElementById('selCount');if(sc)sc.textContent=S.selected.size+' '+t('det_selected');};
       const getSelected=()=>S.recipes.filter(r=>S.selected.has(r.id));
       const exitSel=()=>{S.selectMode=false;S.selected=new Set();renderApp();};
 
@@ -1061,6 +1201,7 @@ function renderList(app){
         const allSel=S.selected.size===all.length;
         S.selected=allSel?new Set():new Set([...all].map(c=>c.dataset.id));
         renderGrid();
+        updateCount();
       });
       document.getElementById('selDoneBtn').addEventListener('click',exitSel);
 
@@ -1112,7 +1253,7 @@ function renderList(app){
           if(S.selected.has(id))S.selected.delete(id);else S.selected.add(id);
           card.classList.toggle('sel',S.selected.has(id));
           const cb=card.querySelector('.sel-cb');if(cb)cb.textContent=S.selected.has(id)?'✓':'';
-          const sc=document.getElementById('selCount');if(sc)sc.textContent=S.selected.size+' ausgewählt';
+          const sc=document.getElementById('selCount');if(sc)sc.textContent=S.selected.size+' '+t('det_selected');
           return;
         }
         openDetail(card.dataset.id);
@@ -2181,7 +2322,11 @@ function renderSettings(app){
       const data=JSON.parse(await f.text());
       if(!data.__backup)throw new Error('Keine gültige Backup-Datei.');
       if(!confirm(`Backup vom ${new Date(data.exportedAt).toLocaleString('de-DE')} wiederherstellen?\n\nDas überschreibt alle aktuellen Rezepte und Einstellungen.`))return;
-      if(data.recipes){S.recipes=data.recipes;saveR();}
+      if(data.recipes){
+        S.recipes=data.recipes;
+        // saveR() will properly split photos to IndexedDB
+        saveR();
+      }
       if(data.settings){
         if(data.settings.dark!==undefined){S.dark=data.settings.dark;saveDark();applyTheme();}
         if(data.settings.apiKey){S.apiKey=data.settings.apiKey;saveKey();}
@@ -2801,18 +2946,42 @@ document.getElementById('pdfAnalyze').addEventListener('click',async function(){
 document.getElementById('pdfAdd').addEventListener('click',()=>{if(pending){addImport(pending);closeImport();}});
 
 // JSON import (multi-file + folder)
-async function importJsonFiles(files){
+async function importJsonFiles(files, skipPhotos=false){
   const ex=new Set(S.recipes.map(r=>r.title.toLowerCase()));let n=0,errs=0;
+  let totalPhotoKB=0;
   for(const f of files){
     if(!f.name.endsWith('.json')){errs++;continue;}
     try{
-      const data=JSON.parse(await f.text());
+      const raw=await f.text();
+      let data=JSON.parse(raw);
+      // Support backup format
+      if(data.__backup && data.recipes) data=data.recipes;
       const recipes=Array.isArray(data)?data:[data];
-      recipes.forEach(r=>{if(r.title&&!ex.has(r.title.toLowerCase())){S.recipes.push({...r,id:uid(),createdAt:Date.now()});ex.add(r.title.toLowerCase());n++;}});
+      // Estimate photo size
+      recipes.forEach(r=>{if(r.photo)totalPhotoKB+=Math.round(r.photo.length*0.75/1024);});
+      recipes.forEach(r=>{
+        if(r.title&&!ex.has(r.title.toLowerCase())){
+          const recipe={...r,id:uid(),createdAt:Date.now()};
+          if(skipPhotos) recipe.photo=null;
+          S.recipes.push(recipe);
+          ex.add(r.title.toLowerCase());n++;
+        }
+      });
     }catch{errs++;}
   }
+  if(!n&&!errs){document.getElementById('jsonRes').textContent='Keine neuen Rezepte';return;}
+  // If photos are large, offer to skip them
+  if(!skipPhotos && totalPhotoKB>1500){
+    const msg=S.lang==='en'
+      ?`The recipes contain ${totalPhotoKB} KB of photos. Import without photos to save storage?`
+      :`Die Rezepte enthalten ${totalPhotoKB} KB Fotos. Ohne Fotos importieren um Speicher zu sparen?`;
+    if(confirm(msg)){
+      S.recipes=S.recipes.slice(0,S.recipes.length-n);
+      return importJsonFiles(files, true);
+    }
+  }
   saveR();
-  const msg=(n>0?`✓ ${n} Rezept${n!==1?'e':''} importiert`:'Keine neuen Rezepte')+(errs>0?` (${errs} Fehler)`:'');
+  const msg=(n>0?`✓ ${n} Rezept${n!==1?'e':''} importiert${skipPhotos?' (ohne Fotos)':''}`:S.lang==='en'?'No new recipes':'Keine neuen Rezepte')+(errs>0?` (${errs} Fehler)`:'');
   document.getElementById('jsonRes').textContent=msg;
   if(n>0)setTimeout(()=>{closeImport();render();},1200);
 }
@@ -3584,7 +3753,14 @@ function loadSession(){
     }
   }catch{}
 }
-load();loadSession();render();initWakeLock();
+(async()=>{
+  // Show loading indicator
+  document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60dvh;flex-direction:column;gap:1rem"><div style="font-size:2rem">🍳</div><div style="font-size:.9rem;color:var(--muted);font-family:var(--ui)">Laden…</div></div>';
+  await load();
+  loadSession();
+  render();
+  initWakeLock();
+})();
 </script>
 </body>
 </html>
