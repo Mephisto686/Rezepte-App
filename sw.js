@@ -1,6 +1,6 @@
 // Service Worker – Meine Rezepte App
 // Cache name includes version – change APP_VERSION in index.html to bust cache
-const CACHE = 'rezepte-v2.0.0';
+const CACHE = 'rezepte-v2.1.0';
 const FILES = ['./', './index.html'];
 
 // Install: cache app files

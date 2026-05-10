@@ -707,9 +707,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
+  { version:'2.1.0', date:'2026-05-10', de:['Swipe-Navigation zwischen Tabs (auch zirkulär)','Tab-Reihenfolge anpassbar','Bug-Fix: Kategorien nach Favoriten-Wechsel','Kategorien auf/zuklappen Button'], en:['Swipe navigation between tabs (circular)','Tab order customizable','Bug fix: categories after favorites switch','Collapse/expand all categories button'] },
   { version:'2.0.0', date:'2026-05-10', de:['IndexedDB statt localStorage → kein Speicherlimit mehr für Fotos','Import-Option ohne Fotos bei großen Dateien','Kategorien: Fallback auf Sonstiges beim Löschen','Alle Kategorien auf-/zuklappen','Standard-Kategorien aktualisiert'], en:['IndexedDB replaces localStorage → no more storage limits for photos','Import option without photos for large files','Categories: fallback to Sonstiges on delete','Collapse/expand all categories','Default categories updated'] },
   { version:'1.3.0', date:'2026-05-08', de:['Einkaufskategorien Verwaltung, Export & Import','Sprache DE/EN umschaltbar','Nährwert-Berechnung verbessert (Temperature 0)','Edamam API für Nährwerte'], en:['Shopping category manager, export & import','Language switch DE/EN','Improved nutrition calculation','Edamam API for nutrition'] },
   { version:'1.2.0', date:'2026-05-06', de:['Einkaufsliste: Mengen summieren bei gleichen Zutaten','Bruchzahlen (½ ¾ …) werden korrekt addiert','Zutaten inline bearbeiten','Sterne und Zubereitet-Status verknüpft'], en:['Shopping list: merge quantities for duplicate items','Fractions (½ ¾ …) correctly summed','Inline item editing','Stars linked to cooked status'] },
@@ -2517,19 +2518,13 @@ function exportRecipePDF(id){
   </style></head><body>
   <div class="print-bar">
     <span>📄 ${r.title}</span>
-    <button class="print-btn" onclick="
-      if(typeof window.print==='function'){
-        try{window.print();document.getElementById('ph').style.display='none';}
-        catch(e){document.getElementById('ph').style.display='block';}
-      } else {
-        document.getElementById('ph').style.display='block';
-      }
-    ">🖨 Als PDF speichern</button>
+    <button class="print-btn" id="pdfPrintBtn">🖨 Als PDF speichern</button>
+    <button class="print-btn" id="pdfDlBtn" style="background:#a6e3a1;margin-left:.4rem">⬇ HTML laden</button>
   </div>
   <div id="ph" style="display:none;background:#313244;color:#cdd6f4;font-size:.82rem;font-family:system-ui;padding:.7rem 1rem;text-align:center;line-height:1.6">
     ${S.lang==='en'
-      ? '📲 Tap your browser\'s <strong>Share / Menu button</strong> → <strong>Print</strong> → <strong>Save as PDF</strong>'
-      : '📲 Tippe auf das <strong>Teilen / Menü-Symbol</strong> deines Browsers → <strong>Drucken</strong> → <strong>Als PDF speichern</strong>'}
+      ? '↑ Download the HTML file, open it in Chrome, then use <strong>Menu → Print → Save as PDF</strong>'
+      : '↑ HTML herunterladen, in Chrome öffnen, dann <strong>Menü → Drucken → Als PDF speichern</strong>'}
   </div>
   <div class="content">
   ${r.photo?`<img class="photo" src="${r.photo}">`:''}
@@ -2558,6 +2553,19 @@ function exportRecipePDF(id){
   if(!w){toast(S.lang==='en'?'⚠ Popup blocked – please allow popups':'⚠ Popup blockiert – bitte Popups erlauben','err');return;}
   w.document.write(html);
   w.document.close();
+  // Wire up buttons after write (can't use <script> inside template literal)
+  w.document.getElementById('pdfPrintBtn').onclick=()=>{
+    try{w.print();w.document.getElementById('ph').style.display='none';}
+    catch(e){w.document.getElementById('ph').style.display='block';}
+  };
+  w.document.getElementById('pdfDlBtn').onclick=()=>{
+    const b=new Blob([html],{type:'text/html'});
+    const a=w.document.createElement('a');
+    a.href=URL.createObjectURL(b);
+    a.download=(r.title.replace(/[^a-z0-9äöüß]/gi,'_')||'rezept')+'.html';
+    a.click();
+    w.document.getElementById('ph').style.display='block';
+  };
 }
 // ── Save dialog helper ─────────────────────────────────────────────────────
 function showSaveDialog(defaultName, onSave){
