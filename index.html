@@ -418,10 +418,10 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 
 <script>
 // ══════════════ CONSTANTS ══════════════
-const DEFAULT_CATS=["Frühstück","Suppen","Pasta & Nudeln","Fleisch & Fisch","Vegetarisch","Salate","Desserts","Backen","Sonstiges"];
+const DEFAULT_CATS=["Suppen","Pizza & Pasta","Fleisch","Fisch","Aufläufe","Vegetarisch","Salate","Beilagen","Saucen & Dips","Frühstück & Gebäck","Desserts","Sonstiges"];
 const CLR={"Frühstück":"#f59e0b","Suppen":"#ef4444","Pasta & Nudeln":"#f97316","Fleisch & Fisch":"#8b5cf6","Vegetarisch":"#22c55e","Salate":"#84cc16","Desserts":"#ec4899","Backen":"#a16207","Sonstiges":"#6b7280"};
 const COLOR_POOL=["#3b82f6","#06b6d4","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#f97316","#84cc16","#6b7280","#a16207","#0ea5e9"];
-const DEFAULT_CAT_ICONS={"Frühstück":"☕","Suppen":"🫕","Pasta & Nudeln":"🍝","Fleisch & Fisch":"🥩","Fleisch":"🥩","Fisch":"🐟","Vegetarisch":"🥦","Salate":"🫙","Desserts":"🍮","Backen":"🌾","Sonstiges":"🍽","Saucen und Dips":"🫒","Aufläufe":"🧀"};
+const DEFAULT_CAT_ICONS={"Suppen":"🫕","Pizza & Pasta":"🍝","Fleisch":"🥩","Fisch":"🐟","Aufläufe":"🧀","Vegetarisch":"🥦","Salate":"🥗","Beilagen":"🥔","Saucen & Dips":"🫒","Frühstück & Gebäck":"🥐","Desserts":"🍮","Sonstiges":"🍽"};
 const ICON_COLLECTION=[
   // Warm & Getränke
   "☕","🍵","🫖","🍷","🥂","🥃","🍾","🧋","🫗","🧃","🍺","🫙",
@@ -688,6 +688,15 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
+const APP_VERSION = '2.0.0';
+const APP_DATE = '2026-05-10';
+const VERSION_HISTORY = [
+  { version:'2.0.0', date:'2026-05-10', de:['IndexedDB statt localStorage → kein Speicherlimit mehr für Fotos','Import-Option ohne Fotos bei großen Dateien','Kategorien: Fallback auf Sonstiges beim Löschen','Alle Kategorien auf-/zuklappen','Standard-Kategorien aktualisiert'], en:['IndexedDB replaces localStorage → no more storage limits for photos','Import option without photos for large files','Categories: fallback to Sonstiges on delete','Collapse/expand all categories','Default categories updated'] },
+  { version:'1.3.0', date:'2026-05-08', de:['Einkaufskategorien Verwaltung, Export & Import','Sprache DE/EN umschaltbar','Nährwert-Berechnung verbessert (Temperature 0)','Edamam API für Nährwerte'], en:['Shopping category manager, export & import','Language switch DE/EN','Improved nutrition calculation','Edamam API for nutrition'] },
+  { version:'1.2.0', date:'2026-05-06', de:['Einkaufsliste: Mengen summieren bei gleichen Zutaten','Bruchzahlen (½ ¾ …) werden korrekt addiert','Zutaten inline bearbeiten','Sterne und Zubereitet-Status verknüpft'], en:['Shopping list: merge quantities for duplicate items','Fractions (½ ¾ …) correctly summed','Inline item editing','Stars linked to cooked status'] },
+  { version:'1.1.0', date:'2026-05-04', de:['Einkaufsliste mit Kategorien','Manuelle Kategorie-Zuweisung','Backup Export & Import','Notizen mit Zeilenumbrüchen'], en:['Shopping list with categories','Manual category assignment','Backup export & import','Notes with line breaks'] },
+  { version:'1.0.0', date:'2026-05-01', de:['Erste Version'], en:['First release'] },
+];
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const mins=r=>{const t=(+r.prepTime||0)+(+r.cookTime||0);return t>0?t+'m':'–';};
 const allTags=()=>[...new Set(S.recipes.flatMap(r=>r.tags||[]))].sort();
@@ -1042,12 +1051,21 @@ function renderList(app){
           </button>
           <button id="sortModeBtn" class="btn sm" style="flex:1;justify-content:center;background:${S.sortMode?'var(--accent)':'var(--surface)'};color:${S.sortMode?'#fff':'var(--muted)'};border:none;box-shadow:var(--shadow);font-weight:${S.sortMode?'700':'500'}">${S.sortMode?t('list_sort_done'):t('list_sort')}</button>
           <button id="selModeBtn" class="btn sm" style="flex:1;justify-content:center;background:${S.selectMode?'var(--accent)':'var(--surface)'};color:${S.selectMode?'#fff':'var(--muted)'};border:none;box-shadow:var(--shadow);font-weight:${S.selectMode?'700':'500'}">${S.selectMode?t('list_select_done'):t('list_select')}</button>
+          <button id="collapseAllBtn" class="btn sm" style="flex:0 0 auto;padding:.4rem .55rem;background:var(--surface);border:none;box-shadow:var(--shadow);font-size:.95rem" title="${S.lang==='en'?'Expand/Collapse all':'Alle auf-/zuklappen'}">${S.collapsedCats&&S.collapsedCats.size===0?'⊟':'⊞'}</button>
         </div>
       </div>
       <div id="rezepteGrid"></div>`;
     document.getElementById('srch').setAttribute('placeholder',t('list_search'));
     document.getElementById('srch').addEventListener('input',e=>{S.search=e.target.value;renderGrid();});
     document.getElementById('filterBtn').addEventListener('click',()=>showFilterPanel(()=>renderGrid()));
+    document.getElementById('collapseAllBtn')?.addEventListener('click',()=>{
+      const allCats=getCats();
+      const allCollapsed=!S.collapsedCats||S.collapsedCats.size>=allCats.length;
+      S.collapsedCats=allCollapsed?new Set():new Set(allCats);
+      const btn=document.getElementById('collapseAllBtn');
+      if(btn)btn.textContent=allCollapsed?'⊟':'⊞';
+      renderGrid();
+    });
     document.getElementById('sortModeBtn')?.addEventListener('click',()=>{
       S.sortMode=!S.sortMode;
       if(S.sortMode)S.selectMode=false;
@@ -1101,6 +1119,13 @@ function renderList(app){
     // Group by category
     const byCat={};
     getCats().forEach(c=>{ const items=rs.filter(r=>r.category===c); if(items.length)byCat[c]=items; });
+    // Catch recipes whose category isn't in getCats() – put them under their own heading or Sonstiges
+    const knownCats=new Set(getCats());
+    rs.filter(r=>!knownCats.has(r.category)).forEach(r=>{
+      const c=r.category||'Sonstiges';
+      if(!byCat[c])byCat[c]=[];
+      byCat[c].push(r);
+    });
     grid.innerHTML=Object.entries(byCat).map(([cat,items])=>{
       const isOpen=S.sortMode||!S.collapsedCats.has(cat);
       return `<div class="cat-section" data-cat="${esc(cat)}">
@@ -2151,9 +2176,12 @@ function renderSettings(app){
       </div>
       <div class="sr2"><div><div class="sl" style="color:var(--danger)">${t('set_delete_all')}</div><div class="ss2">${t('set_delete_hint')}</div></div><button class="btn bdo sm" onclick="delAll()">${t('btn_delete')}</button></div>
     </div>
-    <div style="text-align:center;color:var(--muted);font-size:.75rem;font-family:var(--ui);margin-top:2rem;padding-bottom:1rem">Meine Rezepte · Alle Daten lokal gespeichert</div>`;
+    <div style="text-align:center;color:var(--muted);font-size:.75rem;font-family:var(--ui);margin-top:2rem;padding-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:.5rem">
+      <span>${t('set_footer')} · v${APP_VERSION} · ${APP_DATE}</span>
+      <button onclick="showVersionHistory()" style="background:var(--surface2);border:1px solid var(--border);border-radius:50%;width:1.35rem;height:1.35rem;font-size:.7rem;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--ui);font-weight:700" title="Versionshistorie">i</button>
+    </div>`;
   // Category management
-  const fallbackCat=()=>getCats()[getCats().length-1]||'Sonstiges';
+  const fallbackCat=()=>getCats().find(c=>c==='Sonstiges')||getCats()[getCats().length-1]||'Sonstiges';
 
   // Accordion toggle
   // Tag accordion
@@ -2259,9 +2287,15 @@ function renderSettings(app){
     if(del){
       const i=Number(del.dataset.catdel);
       const cats=S.customCats?[...S.customCats]:[...DEFAULT_CATS];
-      const removed=cats[i];cats.splice(i,1);S.customCats=cats;
-      // Move recipes from deleted category to fallback
-      S.recipes=S.recipes.map(r=>r.category===removed?{...r,category:cats[cats.length-1]||'Sonstiges'}:r);
+      const removed=cats[i];
+      const affected=S.recipes.filter(r=>r.category===removed).length;
+      const fallback=cats.filter((_,j)=>j!==i).find(c=>c==='Sonstiges')||cats.filter((_,j)=>j!==i)[0]||'Sonstiges';
+      const msg=S.lang==='en'
+        ?`Delete category "${removed}"?${affected>0?`\n${affected} recipe${affected!==1?'s':''} will be moved to "${fallback}".`:''}`
+        :`Kategorie „${removed}" löschen?${affected>0?`\n${affected} Rezept${affected!==1?'e':''} wird zu „${fallback}" verschoben.`:''}`;
+      if(!confirm(msg))return;
+      cats.splice(i,1);S.customCats=cats;
+      S.recipes=S.recipes.map(r=>r.category===removed?{...r,category:fallback}:r);
       saveCats();saveR();renderApp();return;
     }
     // Color picker
@@ -2728,6 +2762,36 @@ function showShopCatPickerForText(text,current,onSave){
   ov2.addEventListener('click',e=>{if(e.target===ov2)document.body.removeChild(ov2);});
 }
 
+
+function showVersionHistory(){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;z-index:300';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem 1rem 2rem;width:100%;max-width:540px;max-height:85dvh;display:flex;flex-direction:column;font-family:var(--font)';
+  const isEn=S.lang==='en';
+  md.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-size:1rem;font-weight:700;color:var(--text)">${isEn?'Version History':'Versionshistorie'}</div>
+      <button id="vhClose" style="background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1">
+      ${VERSION_HISTORY.map((v,i)=>`
+        <div style="margin-bottom:1.1rem">
+          <div style="display:flex;align-items:baseline;gap:.5rem;margin-bottom:.35rem">
+            <span style="font-size:.92rem;font-weight:700;color:var(--accent)">v${v.version}</span>
+            <span style="font-size:.72rem;color:var(--muted)">${v.date}</span>
+            ${i===0?`<span style="font-size:.65rem;background:var(--accent);color:#fff;border-radius:4px;padding:1px 5px;font-weight:700">${isEn?'LATEST':'AKTUELL'}</span>`:''}
+          </div>
+          <ul style="margin:0;padding-left:1.1rem;display:flex;flex-direction:column;gap:.2rem">
+            ${(isEn?v.en:v.de).map(item=>`<li style="font-size:.83rem;color:var(--text2)">${item}</li>`).join('')}
+          </ul>
+        </div>
+      `).join('<div style="border-top:1px solid var(--border);margin-bottom:1.1rem"></div>')}
+    </div>`;
+  ov.appendChild(md);document.body.appendChild(ov);
+  md.querySelector('#vhClose').onclick=()=>document.body.removeChild(ov);
+  ov.addEventListener('click',e=>{if(e.target===ov)document.body.removeChild(ov);});
+}
 
 function exportRecipeJSON(id){
   const r=S.recipes.find(x=>x.id===id);if(!r)return;
@@ -3374,8 +3438,8 @@ function renderImportPage(app){
     allRecipes.forEach(r=>{
       let cat=r.category;
       if(!getCats().includes(cat)){
-        cat=catMap[cat]||cat; // mapped or newly added
-        if(!getCats().includes(cat))cat=getCats()[getCats().length-1]||'Sonstiges';
+        if(!getCats().includes(cat))cat=catMap[cat]||cat;
+        if(!getCats().includes(cat))cat=getCats().find(c=>c==='Sonstiges')||getCats()[getCats().length-1]||'Sonstiges';
       }
       S.recipes.push({cooked:false,rating:0,experiences:[],...r,id:uid(),createdAt:Date.now(),category:cat});
       ex.add(r.title.toLowerCase());n++;
@@ -3423,13 +3487,13 @@ function renderImportPage(app){
     const md=document.createElement('div');
     md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.5rem;width:100%;max-width:480px;font-family:var(--ui)';
     md.innerHTML=`
-      <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.5rem">Unbekannte Kategorie</div>
+      <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.5rem">${S.lang==='en'?'Unknown Category':'Unbekannte Kategorie'}</div>
       <div style="font-size:1rem;font-weight:bold;color:var(--text);margin-bottom:.3rem">„${esc(catName)}"</div>
-      <div style="font-size:.85rem;color:var(--muted);margin-bottom:1.1rem">Diese Kategorie existiert nicht. Was soll passieren?</div>
+      <div style="font-size:.85rem;color:var(--muted);margin-bottom:1.1rem">${S.lang==='en'?'This category doesn\'t exist. What should happen?':'Diese Kategorie existiert nicht. Was soll passieren?'}</div>
       <div style="display:flex;flex-direction:column;gap:.6rem">
-        <button id="cr-add" class="btn bp" style="width:100%;justify-content:center">+ Kategorie hinzufügen</button>
-        <button id="cr-map" class="btn bg" style="width:100%;justify-content:center">→ Vorhandener Kategorie zuordnen</button>
-        <button id="cr-last" class="btn bg" style="width:100%;justify-content:center;color:var(--muted)">Letzte Kategorie verwenden</button>
+        <button id="cr-add" class="btn bp" style="width:100%;justify-content:center">+ ${S.lang==='en'?'Add as new category':'Als neue Kategorie hinzufügen'}</button>
+        <button id="cr-map" class="btn bg" style="width:100%;justify-content:center">→ ${S.lang==='en'?'Assign to existing category':'Vorhandener Kategorie zuordnen'}</button>
+        <button id="cr-last" class="btn bg" style="width:100%;justify-content:center;color:var(--muted)">${S.lang==='en'?'Move to "Sonstiges"':'In „Sonstiges" verschieben'}</button>
       </div>
       <div id="cr-mapsel" style="display:none;margin-top:.9rem">
         <div style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem">Kategorie auswählen:</div>
@@ -3440,8 +3504,11 @@ function renderImportPage(app){
     // Add button
     md.querySelector('#cr-add').addEventListener('click',()=>{document.body.removeChild(ov);cb('add');});
 
-    // Last cat button
-    md.querySelector('#cr-last').addEventListener('click',()=>{document.body.removeChild(ov);cb('last');});
+    // Sonstiges button
+    md.querySelector('#cr-last').addEventListener('click',()=>{
+      document.body.removeChild(ov);
+      cb('map', getCats().find(c=>c==='Sonstiges')||getCats()[getCats().length-1]||'Sonstiges');
+    });
 
     // Map button – show category list
     md.querySelector('#cr-map').addEventListener('click',()=>{
