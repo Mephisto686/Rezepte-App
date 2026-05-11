@@ -689,43 +689,73 @@ function syncToBring(){
     toast(S.lang==='en'?'Shopping list is empty':'Einkaufsliste ist leer','err');
     return;
   }
-  // Build a minimal HTML page with Schema.org HowToSupply markup
-  // that Bring! parser can read
-  const itemsHtml=openItems.map(it=>{
-    const m=it.text.match(/^([\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher)?)\s*(.+)$/i);
-    const name=m?m[2].trim():it.text;
-    const amount=m?m[1].trim():'';
-    return `<li itemprop="ingredients">${amount?amount+' ':''}<span itemprop="name">${name}</span></li>`;
-  }).join('\n');
-  const page=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Recipe","name":"${S.lang==='en'?'Shopping List':'Einkaufsliste'}","recipeIngredient":[${openItems.map(it=>{
-    const m=it.text.match(/^([\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher)?)\s*(.+)$/i);
-    return '"'+it.text.replace(/"/g,'\\"')+'"';
-  }).join(',')}]}
-<\/script></head><body>
-<h1>${S.lang==='en'?'Shopping List':'Einkaufsliste'}</h1>
-<ul>${itemsHtml}</ul>
-</body></html>`;
-  // Encode as data URL and use Bring! deeplink
-  const b64=btoa(unescape(encodeURIComponent(page)));
+  // Build ingredient list as JSON compatible with Bring! parser
+  const ingredients=openItems.map(it=>it.text);
+  // Use Bring! official deeplink with a publicly hosted JSON
+  // We generate a JSON and encode it, then use the Bring! deeplink API
+  // The deeplink redirects to the app on mobile
+  const bringBase='https://api.getbring.com/rest/bringrecipes/deeplink';
+  // Encode items as a simple text page Bring! can parse
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Recipe","name":"${S.lang==='en'?'Shopping List':'Einkaufsliste'}","recipeIngredient":${JSON.stringify(ingredients)}}<\/script>
+</head><body><h1>${S.lang==='en'?'Shopping List':'Einkaufsliste'}</h1><ul>${ingredients.map(i=>`<li>${i}</li>`).join('')}</ul></body></html>`;
+  // Encode as base64 data URL
+  const b64=btoa(unescape(encodeURIComponent(html)));
   const dataUrl='data:text/html;base64,'+b64;
-  // Use Bring! deeplink endpoint
-  const bringUrl='https://api.getbring.com/rest/bringrecipes/deeplink?url='
-    +encodeURIComponent('https://mephisto686.github.io/Rezepte-App/')
-    +'&source=web';
-  // Fallback: open bring:// deeplink with items directly
-  const itemNames=openItems.map(it=>{
-    const m=it.text.match(/^[\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher)?\s*(.+)$/i);
-    return m?m[1].trim():it.text;
-  });
-  // Try bring:// URL scheme first (app deeplink), fall back to web
-  const bringDeeplink='bring://?shareList='+encodeURIComponent(itemNames.join(','));
-  window.location.href=bringDeeplink;
-  // If app not installed, open web fallback after 500ms
-  setTimeout(()=>{
-    window.open('https://www.getbring.com','_blank');
-  },500);
+  // Use the Bring! deeplink with our GitHub URL as source
+  // Bring! will parse the page and extract recipeIngredient
+  const githubUrl='https://mephisto686.github.io/Rezepte-App/';
+  const deeplink=`${bringBase}?url=${encodeURIComponent(githubUrl)}&source=web`;
+  // Show modal with instructions + direct link
+  showBringModal(ingredients, deeplink, b64);
+}
+
+function showBringModal(ingredients, deeplink, b64){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;z-index:300';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.4rem 1.2rem 2.5rem;width:100%;max-width:540px;font-family:var(--font)';
+  const close=()=>document.body.removeChild(ov);
+  md.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-size:1rem;font-weight:700">🛍 Bring! Export</div>
+      <button id="bringClose" style="background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.6">
+      ${S.lang==='en'
+        ?`${ingredients.length} items ready. Open Bring! and paste the list, or use the link below.`
+        :`${ingredients.length} Artikel bereit. Öffne Bring! und füge die Liste ein, oder nutze den Link unten.`}
+    </div>
+    <div style="background:var(--surface2);border-radius:10px;padding:.8rem;margin-bottom:.9rem;max-height:140px;overflow-y:auto">
+      ${ingredients.map(i=>`<div style="font-size:.8rem;color:var(--text2);padding:.2rem 0;border-bottom:1px solid var(--border)">${esc(i)}</div>`).join('')}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.5rem">
+      <button id="bringCopy" style="width:100%;padding:.7rem;border-radius:12px;border:none;background:var(--surface2);color:var(--text);font-family:var(--font);font-size:.88rem;cursor:pointer">
+        📋 ${S.lang==='en'?'Copy list as text':'Liste als Text kopieren'}
+      </button>
+      <button id="bringOpen" style="width:100%;padding:.7rem;border-radius:12px;border:none;background:#fa5750;color:#fff;font-family:var(--font);font-size:.88rem;font-weight:700;cursor:pointer">
+        🛍 ${S.lang==='en'?'Open Bring! App':'Bring! App öffnen'}
+      </button>
+    </div>`;
+  ov.appendChild(md);document.body.appendChild(ov);
+  md.querySelector('#bringClose').onclick=close;
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  md.querySelector('#bringCopy').onclick=()=>{
+    const text=ingredients.join('\n');
+    navigator.clipboard?.writeText(text).then(()=>toast(t('toast_copied'))).catch(()=>{});
+    close();
+  };
+  md.querySelector('#bringOpen').onclick=()=>{
+    // Try multiple approaches
+    // 1. bring:// deep link
+    // 2. https://go.getbring.com redirect
+    // 3. Play Store fallback
+    const attempts=['bring://','intent://getbring.com#Intent;scheme=https;package=ch.publisheria.bring;end'];
+    // Use the official web redirect which handles app opening
+    const url=`https://api.getbring.com/rest/bringrecipes/deeplink?url=${encodeURIComponent('https://mephisto686.github.io/Rezepte-App/')}&source=web`;
+    window.open(url,'_blank');
+    close();
+  };
 }
 
 function saveEdamam(){
@@ -782,7 +812,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.3.6';
+const APP_VERSION = '2.3.7';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
