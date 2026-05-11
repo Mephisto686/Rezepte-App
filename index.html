@@ -726,7 +726,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.3.2';
+const APP_VERSION = '2.3.3';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
@@ -2931,6 +2931,13 @@ function showVersionHistory(){
 }
 
 // ══════════════ MEAL PLANNER ══════════════
+function getWeekDates(offsetWeeks=0){
+  const today=new Date();today.setHours(0,0,0,0);
+  const dow=today.getDay();
+  const mon=new Date(today);mon.setDate(today.getDate()-((dow+6)%7)+offsetWeeks*7);
+  return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});
+}
+
 function plannerDateStr(d){
   // Use local date to avoid UTC offset issues
   const y=d.getFullYear();
@@ -3006,9 +3013,13 @@ function plannerShopAll(){
 }
 
 function renderPlanner(app){
-  if(S.plannerView==='today')renderPlannerToday(app);
-  else if(S.plannerView==='strip')renderPlannerStrip(app);
-  else renderPlannerKanban(app);
+  try{
+    if(S.plannerView==='today')renderPlannerToday(app);
+    else if(S.plannerView==='strip')renderPlannerStrip(app);
+    else renderPlannerKanban(app);
+  }catch(e){
+    app.innerHTML=`<div style="padding:2rem;color:var(--danger);font-family:var(--ui);font-size:.8rem">Planner error: ${e.message}<br><pre style="font-size:.7rem;overflow:auto">${e.stack}</pre></div>`;
+  }
 }
 
 function plannerMealCards(dateStr,compact=false){
