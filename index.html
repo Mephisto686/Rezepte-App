@@ -726,7 +726,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.3.2';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
@@ -949,10 +949,10 @@ function renderHdr(){
   } else if(S.view==='shopping'){tit.textContent=t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
   else if(S.view==='planner'){
     tit.textContent=S.lang==='en'?'🗓 Meal Plan':'🗓 Wochenplan';sub.textContent='';
-    acts.innerHTML=`<div style="display:flex;gap:.3rem">
-      <button onclick="S.plannerView='today';saveMealPlan();renderApp()" style="background:${S.plannerView==='today'?'var(--accent)':'var(--surface2)'};border:none;border-radius:8px;padding:.3rem .5rem;font-size:.85rem;cursor:pointer" title="${S.lang==='en'?'Today':'Heute'}">☀️</button>
-      <button onclick="S.plannerView='strip';saveMealPlan();renderApp()" style="background:${S.plannerView==='strip'?'var(--accent)':'var(--surface2)'};border:none;border-radius:8px;padding:.3rem .5rem;font-size:.85rem;cursor:pointer" title="${S.lang==='en'?'Week strip':'Wochenstreifen'}">≡</button>
-      <button onclick="S.plannerView='kanban';saveMealPlan();renderApp()" style="background:${S.plannerView==='kanban'?'var(--accent)':'var(--surface2)'};border:none;border-radius:8px;padding:.3rem .5rem;font-size:.85rem;cursor:pointer" title="Kanban">⊞</button>
+    acts.innerHTML=`<div style="display:flex;background:var(--surface2);border-radius:10px;padding:2px;gap:2px">
+      <button onclick="S.plannerView='today';saveMealPlan();render()" style="background:${S.plannerView==='today'?'var(--accent)':'transparent'};border:none;border-radius:8px;padding:.35rem .6rem;font-size:.82rem;cursor:pointer;transition:.15s" title="${S.lang==='en'?'Today':'Heute'}">☀️</button>
+      <button onclick="S.plannerView='strip';saveMealPlan();render()" style="background:${S.plannerView==='strip'?'var(--accent)':'transparent'};border:none;border-radius:8px;padding:.35rem .6rem;font-size:.82rem;cursor:pointer;transition:.15s" title="${S.lang==='en'?'Week':'Woche'}">≡</button>
+      <button onclick="S.plannerView='kanban';saveMealPlan();render()" style="background:${S.plannerView==='kanban'?'var(--accent)':'transparent'};border:none;border-radius:8px;padding:.35rem .6rem;font-size:.82rem;cursor:pointer;transition:.15s" title="Kanban">⊞</button>
     </div>`;
   }
   else if(S.view==='aisearch'){tit.textContent=t('hdr_ai');sub.textContent='';acts.innerHTML='';}
@@ -1463,6 +1463,9 @@ function renderDetail(app){
         <button id="cookedBtn" style="background:${r.cooked!==true?'rgba(59,130,246,.3)':'rgba(34,197,94,.3)'};color:${r.cooked!==true?'#93c5fd':'#86efac'};border:1px solid ${r.cooked!==true?'rgba(59,130,246,.5)':'rgba(34,197,94,.5)'};border-radius:20px;padding:.25rem .75rem;font-family:var(--ui);font-size:.75rem;cursor:pointer;font-weight:600;transition:all .2s">
           ${r.cooked!==true?t('det_not_cooked'):t('det_cooked')}
         </button>
+        <button id="planBtn" style="background:rgba(167,139,250,.2);color:#a78bfa;border:1px solid rgba(167,139,250,.4);border-radius:20px;padding:.25rem .75rem;font-family:var(--ui);font-size:.75rem;cursor:pointer;font-weight:600">
+          📅 ${S.lang==='en'?'Plan':'Planen'}
+        </button>
       </div>
       <div class="d-meta">
         ${r.prepTime?`<span>${t('det_prep')}: ${r.prepTime} ${t('det_min')}</span>`:''}
@@ -1665,6 +1668,11 @@ function renderDetail(app){
   document.getElementById('shareBtn')?.addEventListener('click',shareR);
 
   // Star rating
+  // Plan button – add this recipe to a day
+  document.getElementById('planBtn')?.addEventListener('click',()=>{
+    showPlanDayPicker(r.id);
+  });
+
   document.getElementById('starRow')?.addEventListener('click',e=>{
     const btn=e.target.closest('[data-star]');if(!btn)return;
     const star=Number(btn.dataset.star);
@@ -2924,19 +2932,11 @@ function showVersionHistory(){
 
 // ══════════════ MEAL PLANNER ══════════════
 function plannerDateStr(d){
-  return d.toISOString().slice(0,10);
-}
-function plannerDayLabel(d,short=false){
-  const days=S.lang==='en'?['Sun','Mon','Tue','Wed','Thu','Fri','Sat']:['So','Mo','Di','Mi','Do','Fr','Sa'];
-  const months=S.lang==='en'?['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']:['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
-  if(short)return days[d.getDay()];
-  return days[d.getDay()]+' '+d.getDate()+'. '+months[d.getMonth()];
-}
-function getWeekDates(offsetWeeks=0){
-  const today=new Date();today.setHours(0,0,0,0);
-  const dow=today.getDay();
-  const mon=new Date(today);mon.setDate(today.getDate()-((dow+6)%7)+offsetWeeks*7);
-  return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});
+  // Use local date to avoid UTC offset issues
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
 }
 
 function showAddMealModal(dateStr){
@@ -2957,7 +2957,7 @@ function showAddMealModal(dateStr){
   md.querySelector('#amlClose').onclick=close;
   ov.addEventListener('click',e=>{if(e.target===ov)close();});
   const existing=S.mealPlan[dateStr]||[];
-  function renderList(query=''){
+  function renderAmlList(query=''){
     const list=md.querySelector('#amlList');
     const filtered=S.recipes.filter(r=>!query||r.title.toLowerCase().includes(query.toLowerCase())).slice(0,30);
     list.innerHTML=filtered.map(r=>`
@@ -2979,8 +2979,8 @@ function showAddMealModal(dateStr){
       };
     });
   }
-  md.querySelector('#amlSearch').addEventListener('input',e=>renderList(e.target.value));
-  renderList();
+  md.querySelector('#amlSearch').addEventListener('input',e=>renderAmlList(e.target.value));
+  renderAmlList();
 }
 
 function removeMeal(dateStr,mealId){
@@ -3025,6 +3025,7 @@ function plannerMealCards(dateStr,compact=false){
         <div style="font-size:${compact?.72:.82}rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)">${esc(r.title)}</div>
         ${compact?'':`<div style="font-size:.65rem;color:var(--muted)">⏱ ${mins(r)} Min.</div>`}
       </div>
+      <button onclick="event.stopPropagation();showPlanDayPicker('${m.recipeId}','${dateStr}','${m.id}')" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.75rem;padding:.1rem .25rem;flex-shrink:0" title="${S.lang==='en'?'Move':'Verschieben'}">↕</button>
       <button onclick="event.stopPropagation();removeMeal('${dateStr}','${m.id}')" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.75rem;padding:.1rem .25rem;flex-shrink:0">✕</button>
     </div>`;
   }).join('');
@@ -3138,7 +3139,8 @@ function renderPlannerKanban(app){
               const cc=getCatColor(r.category);
               return `<div onclick="openDetail('${r.id}')" style="background:var(--surface2);border-radius:8px;padding:.4rem;margin-bottom:.3rem;border-left:2px solid ${cc};cursor:pointer">
                 <div style="font-size:.65rem;font-weight:600;line-height:1.3;color:var(--text)">${esc(r.title)}</div>
-                <div style="display:flex;justify-content:flex-end;margin-top:.2rem">
+                <div style="display:flex;justify-content:flex-end;margin-top:.2rem;gap:.2rem">
+                  <button onclick="event.stopPropagation();showPlanDayPicker('${r.id}','${ds}','${m.id}')" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.65rem" title="${S.lang==='en'?'Move':'Verschieben'}">↕</button>
                   <button onclick="event.stopPropagation();removeMeal('${ds}','${m.id}')" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.65rem">✕</button>
                 </div>
               </div>`;
