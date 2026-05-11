@@ -726,7 +726,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.3.3';
+const APP_VERSION = '2.3.4';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
@@ -2936,6 +2936,51 @@ function getWeekDates(offsetWeeks=0){
   const dow=today.getDay();
   const mon=new Date(today);mon.setDate(today.getDate()-((dow+6)%7)+offsetWeeks*7);
   return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});
+}
+
+function plannerDayLabel(d,short=false){
+  const days=S.lang==='en'?['Sun','Mon','Tue','Wed','Thu','Fri','Sat']:['So','Mo','Di','Mi','Do','Fr','Sa'];
+  const months=S.lang==='en'?['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']:['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  if(short)return days[d.getDay()];
+  return days[d.getDay()]+' '+d.getDate()+'. '+months[d.getMonth()];
+}
+
+function showPlanDayPicker(recipeId, existingDateStr=null, existingMealId=null){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;justify-content:center;z-index:300';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem 1rem 2rem;width:100%;max-width:540px;font-family:var(--font)';
+  const r=S.recipes.find(x=>x.id===recipeId);
+  const title=existingMealId?(S.lang==='en'?'Move to…':'Verschieben nach…'):(S.lang==='en'?'Add to plan':'Zum Plan hinzufügen');
+  const days=Array.from({length:14},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);d.setHours(0,0,0,0);return d;});
+  const todayStr=plannerDateStr(new Date());
+  md.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem"><div><div style="font-size:.95rem;font-weight:700">'+title+'</div>'+(r?'<div style="font-size:.75rem;color:var(--muted)">'+esc(r.title)+'</div>':'')+'</div><button id="pdpClose" style="background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:pointer">✕</button></div>'
+    +'<div style="display:flex;flex-direction:column;gap:.35rem;max-height:60dvh;overflow-y:auto">'
+    +days.map(d=>{
+      const ds=plannerDateStr(d);
+      const isToday=ds===todayStr;
+      const hasMeals=(S.mealPlan[ds]||[]).length;
+      const isCurrent=ds===existingDateStr;
+      return '<button data-ds="'+ds+'" style="display:flex;align-items:center;justify-content:space-between;padding:.65rem .9rem;border-radius:12px;border:1.5px solid '+(isCurrent?'var(--accent)':isToday?'var(--border2)':'var(--border)')+';background:'+(isCurrent?'var(--accent-bg)':isToday?'var(--surface2)':'var(--surface)')+';cursor:pointer;font-family:var(--font);text-align:left;width:100%"><div><span style="font-size:.88rem;font-weight:600;color:var(--text)">'+(isToday?(S.lang==='en'?'Today':'Heute')+' · ':'')+plannerDayLabel(d)+'</span></div><span style="font-size:.72rem;color:'+(hasMeals?'var(--accent)':'var(--muted)')+'">'+( hasMeals?hasMeals+(S.lang==='en'?' meal':'🍽'):'')+'</span></button>';
+    }).join('')+'</div>';
+  ov.appendChild(md);document.body.appendChild(ov);
+  const close=()=>document.body.removeChild(ov);
+  md.querySelector('#pdpClose').onclick=close;
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  md.querySelectorAll('[data-ds]').forEach(btn=>{
+    btn.onclick=()=>{
+      const ds=btn.dataset.ds;
+      if(existingMealId&&existingDateStr&&existingDateStr!==ds){
+        S.mealPlan[existingDateStr]=(S.mealPlan[existingDateStr]||[]).filter(m=>m.id!==existingMealId);
+        if(!S.mealPlan[existingDateStr].length)delete S.mealPlan[existingDateStr];
+      }
+      if(!S.mealPlan[ds])S.mealPlan[ds]=[];
+      if(!existingMealId||existingDateStr!==ds) S.mealPlan[ds].push({id:uid(),recipeId});
+      saveMealPlan();close();
+      toast(S.lang==='en'?'Added to plan ✓':'Zum Plan hinzugefügt ✓');
+      if(S.view==='planner')renderApp();
+    };
+  });
 }
 
 function plannerDateStr(d){
