@@ -750,7 +750,7 @@ function showBringModal(ingredients, deeplink, b64){
       close();
       // Auto-open Bring! after short delay so clipboard is ready
       setTimeout(()=>{
-        window.open('https://app.getbring.com','_blank');
+        window.open('https://www.getbring.com','_blank');
       },300);
     }).catch(()=>{
       // Fallback: show text to copy manually
@@ -824,7 +824,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.3.8';
+const APP_VERSION = '2.3.9';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
