@@ -483,7 +483,7 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, bringMail:'', bringPwd:'', bringEnabled:false, dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -595,6 +595,9 @@ async function load(){
   try{S.lang=localStorage.getItem('mrlang')||'de';}catch{}
   try{S.edamamAppKey=localStorage.getItem('mredk')||'';}catch{}
   try{S.edamamEnabled=localStorage.getItem('mredamen')==='1';}catch{}
+  try{S.bringMail=localStorage.getItem('mrbm')||'';}catch{}
+  try{S.bringPwd=localStorage.getItem('mrbp')||'';}catch{}
+  try{S.bringEnabled=localStorage.getItem('mrbringen')==='1';}catch{}
   try{S.plannerView=localStorage.getItem('mrpv')||'today';}catch{}
   try{S.dark=localStorage.getItem('mrdm')==='1';}catch{}
   try{const cc=localStorage.getItem('mrcats');if(cc)S.customCats=JSON.parse(cc);}catch{}
@@ -672,6 +675,72 @@ function saveSh(){
   }).catch(()=>{});
 }
 function saveKey(){try{localStorage.setItem('mrak',S.apiKey);}catch{}}
+function saveBring(){
+  S.bringMail=(document.getElementById('bringMail')?.value||'').trim();
+  S.bringPwd=(document.getElementById('bringPwd')?.value||'').trim();
+  try{localStorage.setItem('mrbm',S.bringMail);localStorage.setItem('mrbp',S.bringPwd);}catch{}
+  toast(S.lang==='en'?'Bring! credentials saved ✓':'Bring! Zugangsdaten gespeichert ✓');
+}
+
+// ══════════════ BRING! API ══════════════
+const BRING_API='https://api.getbring.com/rest/v2';
+
+async function bringLogin(){
+  const res=await fetch(BRING_API+'/bringauth',{
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'email='+encodeURIComponent(S.bringMail)+'&password='+encodeURIComponent(S.bringPwd)
+  });
+  if(!res.ok)throw new Error('Login failed: '+res.status);
+  return res.json();
+}
+
+async function bringGetLists(token,uuid){
+  const res=await fetch(BRING_API+'/bringusers/'+uuid+'/lists',{
+    headers:{'Authorization':'Bearer '+token,'X-BRING-CLIENT':'webbring'}
+  });
+  if(!res.ok)throw new Error('Lists failed: '+res.status);
+  return res.json();
+}
+
+async function bringAddItems(token, listUuid, items){
+  // items: [{name, specification}]
+  const purchase=items.map(i=>({itemId:i.name,spec:i.specification||''}));
+  const res=await fetch(BRING_API+'/bringlists/'+listUuid,{
+    method:'PUT',
+    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json','X-BRING-CLIENT':'webbring'},
+    body:JSON.stringify({uuid:listUuid,items:{purchase,recently:[]}})
+  });
+  if(!res.ok)throw new Error('Add items failed: '+res.status);
+}
+
+async function syncToBring(){
+  if(!S.bringEnabled||!S.bringMail||!S.bringPwd){
+    toast(S.lang==='en'?'⚠ Enable Bring! and enter credentials in Settings':'⚠ Bring! in den Einstellungen aktivieren und Zugangsdaten eingeben','err');
+    return;
+  }
+  const openItems=S.shopping.filter(x=>!x.done);
+  if(!openItems.length){toast(S.lang==='en'?'Shopping list is empty':'Einkaufsliste ist leer','err');return;}
+  toast(S.lang==='en'?'Connecting to Bring!…':'Verbinde mit Bring!…');
+  try{
+    const auth=await bringLogin();
+    const {lists}=await bringGetLists(auth.access_token,auth.uuid);
+    if(!lists||!lists.length)throw new Error('No Bring! lists found');
+    // Use first list (or let user pick)
+    const listUuid=lists[0].listUuid;
+    // Parse items: split "300g Mehl" → name="Mehl", spec="300g"
+    const parsed=openItems.map(it=>{
+      const m=it.text.match(/^([\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher)?)\s*(.+)$/i);
+      if(m)return{name:m[2].trim(),specification:m[1].trim()};
+      return{name:it.text,specification:''};
+    });
+    await bringAddItems(auth.access_token,listUuid,parsed);
+    toast(S.lang==='en'?`✓ ${parsed.length} items sent to Bring!`:`✓ ${parsed.length} Artikel zu Bring! gesendet`);
+  }catch(e){
+    toast('⚠ Bring!: '+e.message,'err');
+  }
+}
+
 function saveEdamam(){
   S.edamamAppId=(document.getElementById('edamamId')?.value||'').trim();
   S.edamamAppKey=(document.getElementById('edamamKey')?.value||'').trim();
@@ -726,7 +795,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.3.4';
+const APP_VERSION = '2.3.5';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
@@ -2105,6 +2174,7 @@ function renderShop(app){
       <div style="display:flex;gap:.45rem;flex-wrap:wrap">
         ${done>0?`<button class="btn bg sm" onclick="clearDone()">${t('sh_clear_done')}</button>`:''}
         ${items.length>0?`<button class="btn bg sm" onclick="copySh()">${t('sh_copy')}</button>`:''}
+        ${S.bringEnabled&&items.length>0?`<button class="btn bg sm" onclick="syncToBring()" style="background:rgba(250,87,80,.2);color:#fa5750;border-color:rgba(250,87,80,.4)">🛍 Bring!</button>`:''}
         ${items.length>0?`<button class="btn bdo sm" onclick="clearAllSh()">${t('sh_clear_all')}</button>`:''}
       </div>
     </div>
@@ -2230,6 +2300,18 @@ function renderSettings(app){
         <input class="aki" type="text" id="edamamId" value="${esc(S.edamamAppId)}" placeholder="App ID" style="width:100%">
         <input class="aki" type="password" id="edamamKey" value="${esc(S.edamamAppKey)}" placeholder="App Key" style="margin-top:.4rem;width:100%">
         <button class="btn bg sm" style="margin-top:.5rem" onclick="saveEdamam()">${t('btn_save_keys')}</button>
+      </div>`:''}
+    </div>
+    <div class="ss"><div class="st2">Bring! Einkaufsapp</div>
+      <div class="sr2">
+        <div><div class="sl">🛍 Bring! Sync</div><div class="ss2">${S.lang==='en'?'Send shopping list to Bring! (unofficial API)':'Einkaufsliste zu Bring! senden (inoffizielle API)'}</div></div>
+        <button class="tgl${S.bringEnabled?' on':''}" id="bringtgl"></button>
+      </div>
+      ${S.bringEnabled?`<div class="sr2" style="flex-direction:column;align-items:flex-start;margin-top:.3rem">
+        <input class="aki" type="email" id="bringMail" value="${esc(S.bringMail)}" placeholder="Bring! E-Mail" style="width:100%">
+        <input class="aki" type="password" id="bringPwd" value="${esc(S.bringPwd)}" placeholder="Bring! Passwort" style="margin-top:.4rem;width:100%">
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.35rem;font-family:var(--ui);font-style:italic">${S.lang==='en'?'Credentials stored locally only. Unofficial API – may break without notice.':'Zugangsdaten nur lokal gespeichert. Inoffizielle API – kann jederzeit aufhören zu funktionieren.'}</div>
+        <button class="btn bg sm" style="margin-top:.5rem" onclick="saveBring()">${S.lang==='en'?'Save credentials':'Zugangsdaten speichern'}</button>
       </div>`:''}
     </div>
     <div class="ss"><div class="st2">${t('set_data')}</div>
@@ -2397,6 +2479,11 @@ function renderSettings(app){
 
   document.getElementById('dtgl').addEventListener('click',()=>{S.dark=!S.dark;saveDark();applyTheme();renderApp();});
   document.getElementById('wltgl')?.addEventListener('click',()=>toggleWakeLock());
+  document.getElementById('bringtgl')?.addEventListener('click',()=>{
+    S.bringEnabled=!S.bringEnabled;
+    try{localStorage.setItem('mrbringen',S.bringEnabled?'1':'0');}catch{}
+    renderApp();
+  });
   document.getElementById('edamamtgl')?.addEventListener('click',()=>{
     S.edamamEnabled=!S.edamamEnabled;
     try{localStorage.setItem('mredamen',S.edamamEnabled?'1':'0');}catch{}
