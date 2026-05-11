@@ -323,6 +323,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 <nav class="bnav" id="bnav">
   <button class="nb" data-nav="list"><div class="ic">🍳</div><span id="navLblRecipes">Rezepte</span></button>
   <button class="nb" data-nav="shopping"><div class="ic">🛒</div><span id="shopLbl">Liste</span></button>
+  <button class="nb" data-nav="planner"><div class="ic">📅</div><span id="navLblPlanner">Plan</span></button>
   <button class="nb" data-nav="favorites"><div class="ic">❤️</div><span id="navLblFavs">Favoriten</span></button>
   <button class="nb" data-nav="aisearch"><div class="ic">✨</div><span id="navLblAi">KI-Suche</span></button>
   <button class="nb" data-nav="import"><div class="ic">📥</div><span id="navLblImport">Import</span></button>
@@ -482,14 +483,14 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
 // ══════════════ INDEXEDDB LAYER ══════════════
 let _db = null;
 const DB_NAME = 'MeineRezepteDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDB(){
   return new Promise((resolve, reject) => {
@@ -503,6 +504,8 @@ function openDB(){
         db.createObjectStore('photos', {keyPath:'id'});
       if(!db.objectStoreNames.contains('shopping'))
         db.createObjectStore('shopping', {keyPath:'id'});
+      if(!db.objectStoreNames.contains('mealplan'))
+        db.createObjectStore('mealplan', {keyPath:'date'});
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
     req.onerror = () => reject(req.error);
@@ -592,6 +595,7 @@ async function load(){
   try{S.lang=localStorage.getItem('mrlang')||'de';}catch{}
   try{S.edamamAppKey=localStorage.getItem('mredk')||'';}catch{}
   try{S.edamamEnabled=localStorage.getItem('mredamen')==='1';}catch{}
+  try{S.plannerView=localStorage.getItem('mrpv')||'today';}catch{}
   try{S.dark=localStorage.getItem('mrdm')==='1';}catch{}
   try{const cc=localStorage.getItem('mrcats');if(cc)S.customCats=JSON.parse(cc);}catch{}
   try{const ccol=localStorage.getItem('mrcatcol');if(ccol)S.customCatColors=JSON.parse(ccol);}catch{}
@@ -603,17 +607,20 @@ async function load(){
   await migrateIfNeeded();
   // Load recipes + photos from IndexedDB
   try{
-    const [recipes, photos, shopping] = await Promise.all([
+    const [recipes, photos, shopping, mealplan] = await Promise.all([
       dbGetAll('recipes'),
       dbGetAll('photos'),
-      dbGetAll('shopping')
+      dbGetAll('shopping'),
+      dbGetAll('mealplan')
     ]);
-    // Merge photos into recipes
     const photoMap = {};
     photos.forEach(p => photoMap[p.id] = p.data);
     S.recipes = recipes.map(r => ({...r, photo: photoMap[r.id]||null}));
     if(!S.recipes.length) S.recipes = SAMPLE;
     S.shopping = shopping || [];
+    // mealPlan: {date: {date:'2026-05-12', meals:[{id,recipeId}]}}
+    S.mealPlan = {};
+    (mealplan||[]).forEach(row => { S.mealPlan[row.date] = row.meals||[]; });
   }catch(e){
     console.warn('IndexedDB load failed, falling back:', e);
     // Fallback to localStorage or SAMPLE
@@ -645,6 +652,17 @@ function saveR(){
   });
 }
 
+function saveMealPlan(){
+  openDB().then(db=>{
+    const tx=db.transaction('mealplan','readwrite');
+    const store=tx.objectStore('mealplan');
+    store.clear();
+    Object.entries(S.mealPlan).forEach(([date,meals])=>{
+      if(meals&&meals.length) store.put({date,meals});
+    });
+  }).catch(()=>{});
+  try{localStorage.setItem('mrpv',S.plannerView);}catch{}
+}
 function saveSh(){
   openDB().then(db => {
     const tx = db.transaction('shopping','readwrite');
@@ -708,7 +726,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.2.8';
+const APP_VERSION = '2.3.0';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
@@ -929,6 +947,14 @@ function renderHdr(){
     tit.textContent=S.editId?t('hdr_edit'):t('hdr_new');sub.textContent='';
     acts.innerHTML=`<button class="btn bp" onclick="submitForm()">${t('btn_save')}</button>`;
   } else if(S.view==='shopping'){tit.textContent=t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
+  else if(S.view==='planner'){
+    tit.textContent=S.lang==='en'?'🗓 Meal Plan':'🗓 Wochenplan';sub.textContent='';
+    acts.innerHTML=`<div style="display:flex;gap:.3rem">
+      <button onclick="S.plannerView='today';saveMealPlan();renderApp()" style="background:${S.plannerView==='today'?'var(--accent)':'var(--surface2)'};border:none;border-radius:8px;padding:.3rem .5rem;font-size:.85rem;cursor:pointer" title="${S.lang==='en'?'Today':'Heute'}">☀️</button>
+      <button onclick="S.plannerView='strip';saveMealPlan();renderApp()" style="background:${S.plannerView==='strip'?'var(--accent)':'var(--surface2)'};border:none;border-radius:8px;padding:.3rem .5rem;font-size:.85rem;cursor:pointer" title="${S.lang==='en'?'Week strip':'Wochenstreifen'}">≡</button>
+      <button onclick="S.plannerView='kanban';saveMealPlan();renderApp()" style="background:${S.plannerView==='kanban'?'var(--accent)':'var(--surface2)'};border:none;border-radius:8px;padding:.3rem .5rem;font-size:.85rem;cursor:pointer" title="Kanban">⊞</button>
+    </div>`;
+  }
   else if(S.view==='aisearch'){tit.textContent=t('hdr_ai');sub.textContent='';acts.innerHTML='';}
   else if(S.view==='import'){tit.textContent=t('hdr_import');sub.textContent='';acts.innerHTML='';}
   else if(S.view==='settings'){tit.textContent=t('hdr_settings');sub.textContent='';acts.innerHTML='';}
@@ -948,6 +974,7 @@ function renderNav(){
   // Update nav labels for language
   const navMap={navLblRecipes:'nav_recipes',navLblFavs:'nav_favorites',navLblAi:'nav_ai',navLblImport:'nav_import',navLblMore:'nav_more'};
   Object.entries(navMap).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.textContent=t(key);});
+  const planLbl=document.getElementById('navLblPlanner');if(planLbl)planLbl.textContent=S.lang==='en'?'Plan':'Plan';
 }
 
 function renderApp(){
@@ -956,6 +983,7 @@ function renderApp(){
   else if(S.view==='detail')renderDetail(app);
   else if(S.view==='form')renderForm(app);
   else if(S.view==='shopping')renderShop(app);
+  else if(S.view==='planner')renderPlanner(app);
   else if(S.view==='aisearch')renderAISearch(app);
   else if(S.view==='import')renderImportPage(app);
   else if(S.view==='settings')renderSettings(app);
@@ -2894,6 +2922,239 @@ function showVersionHistory(){
   ov.addEventListener('click',e=>{if(e.target===ov)document.body.removeChild(ov);});
 }
 
+// ══════════════ MEAL PLANNER ══════════════
+function plannerDateStr(d){
+  return d.toISOString().slice(0,10);
+}
+function plannerDayLabel(d,short=false){
+  const days=S.lang==='en'?['Sun','Mon','Tue','Wed','Thu','Fri','Sat']:['So','Mo','Di','Mi','Do','Fr','Sa'];
+  const months=S.lang==='en'?['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']:['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  if(short)return days[d.getDay()];
+  return days[d.getDay()]+' '+d.getDate()+'. '+months[d.getMonth()];
+}
+function getWeekDates(offsetWeeks=0){
+  const today=new Date();today.setHours(0,0,0,0);
+  const dow=today.getDay();
+  const mon=new Date(today);mon.setDate(today.getDate()-((dow+6)%7)+offsetWeeks*7);
+  return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});
+}
+
+function showAddMealModal(dateStr){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;justify-content:center;z-index:300';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem 1rem 2rem;width:100%;max-width:540px;max-height:85dvh;display:flex;flex-direction:column;font-family:var(--font)';
+  const d=new Date(dateStr+'T12:00:00');
+  md.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem">
+      <div style="font-size:.95rem;font-weight:700;color:var(--text)">📅 ${plannerDayLabel(d)}</div>
+      <button id="amlClose" style="background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:pointer">✕</button>
+    </div>
+    <input id="amlSearch" placeholder="${S.lang==='en'?'Search recipe…':'Rezept suchen…'}" style="width:100%;padding:.6rem .9rem;border-radius:10px;border:1.5px solid var(--border2);background:var(--surface2);color:var(--text);font-size:.9rem;font-family:var(--font);margin-bottom:.7rem">
+    <div id="amlList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:.4rem"></div>`;
+  ov.appendChild(md);document.body.appendChild(ov);
+  const close=()=>document.body.removeChild(ov);
+  md.querySelector('#amlClose').onclick=close;
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  const existing=S.mealPlan[dateStr]||[];
+  function renderList(query=''){
+    const list=md.querySelector('#amlList');
+    const filtered=S.recipes.filter(r=>!query||r.title.toLowerCase().includes(query.toLowerCase())).slice(0,30);
+    list.innerHTML=filtered.map(r=>`
+      <div data-rid="${r.id}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .4rem;border-bottom:1px solid var(--border);cursor:pointer">
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--surface2);flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:1rem">
+          ${r.photo?`<img src="${r.photo}" style="width:100%;height:100%;object-fit:cover">`:'🍽'}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.88rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.title)}</div>
+          <div style="font-size:.7rem;color:var(--muted)">${esc(r.category)} · ${mins(r)} Min.</div>
+        </div>
+        ${existing.some(m=>m.recipeId===r.id)?'<span style="font-size:.7rem;color:var(--accent)">✓</span>':''}
+      </div>`).join('');
+    list.querySelectorAll('[data-rid]').forEach(row=>{
+      row.onclick=()=>{
+        if(!S.mealPlan[dateStr])S.mealPlan[dateStr]=[];
+        S.mealPlan[dateStr].push({id:uid(),recipeId:row.dataset.rid});
+        saveMealPlan();close();renderApp();
+      };
+    });
+  }
+  md.querySelector('#amlSearch').addEventListener('input',e=>renderList(e.target.value));
+  renderList();
+}
+
+function removeMeal(dateStr,mealId){
+  if(!S.mealPlan[dateStr])return;
+  S.mealPlan[dateStr]=S.mealPlan[dateStr].filter(m=>m.id!==mealId);
+  if(!S.mealPlan[dateStr].length)delete S.mealPlan[dateStr];
+  saveMealPlan();renderApp();
+}
+
+function plannerShopAll(){
+  const added=[];
+  Object.values(S.mealPlan).forEach(meals=>{
+    meals.forEach(m=>{
+      const r=S.recipes.find(x=>x.id===m.recipeId);
+      if(r)(r.ingredients||'').split('\n').filter(l=>l.trim()).forEach(l=>{
+        const res=mergeIntoShopping(l,r.title);
+        if(res==='added'||res==='merged')added.push(l);
+      });
+    });
+  });
+  saveSh();renderNav();
+  toast(S.lang==='en'?`${added.length} ingredients added to shopping list`:`${added.length} Zutaten zur Einkaufsliste hinzugefügt`);
+}
+
+function renderPlanner(app){
+  if(S.plannerView==='today')renderPlannerToday(app);
+  else if(S.plannerView==='strip')renderPlannerStrip(app);
+  else renderPlannerKanban(app);
+}
+
+function plannerMealCards(dateStr,compact=false){
+  const meals=S.mealPlan[dateStr]||[];
+  const cards=meals.map(m=>{
+    const r=S.recipes.find(x=>x.id===m.recipeId);
+    if(!r)return '';
+    const catColor=getCatColor(r.category);
+    return `<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .5rem;background:var(--surface2);border-radius:10px;margin-bottom:.35rem;border-left:3px solid ${catColor};cursor:pointer" onclick="openDetail('${r.id}')">
+      <div style="width:${compact?28:34}px;height:${compact?28:34}px;border-radius:7px;background:var(--surface);flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:.85rem">
+        ${r.photo?`<img src="${r.photo}" style="width:100%;height:100%;object-fit:cover">`:'🍽'}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:${compact?.72:.82}rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)">${esc(r.title)}</div>
+        ${compact?'':`<div style="font-size:.65rem;color:var(--muted)">⏱ ${mins(r)} Min.</div>`}
+      </div>
+      <button onclick="event.stopPropagation();removeMeal('${dateStr}','${m.id}')" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.75rem;padding:.1rem .25rem;flex-shrink:0">✕</button>
+    </div>`;
+  }).join('');
+  const addBtn=`<div onclick="showAddMealModal('${dateStr}')" style="border:1.5px dashed var(--border2);border-radius:10px;padding:.4rem;text-align:center;color:var(--faint);font-size:.75rem;cursor:pointer;margin-top:.1rem">+ ${S.lang==='en'?'Add recipe':'Rezept hinzufügen'}</div>`;
+  return cards+addBtn;
+}
+
+function renderPlannerToday(app){
+  const today=new Date();today.setHours(0,0,0,0);
+  const todayStr=plannerDateStr(today);
+  const week=getWeekDates();
+  const months=S.lang==='en'?['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']:['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  app.innerHTML=`<div style="padding:.8rem 1rem 1rem;display:flex;flex-direction:column;gap:.9rem">
+    <!-- Week dots -->
+    <div style="display:flex;gap:.4rem;justify-content:space-between">
+      ${week.map(d=>{
+        const ds=plannerDateStr(d);
+        const isToday=ds===todayStr;
+        const hasMeals=(S.mealPlan[ds]||[]).length>0;
+        return `<div onclick="document.getElementById('pd_${ds}')?.scrollIntoView({behavior:'smooth'})" style="flex:1;text-align:center;cursor:pointer">
+          <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">${plannerDayLabel(d,true)}</div>
+          <div style="font-size:.8rem;font-weight:${isToday?'700':'400'};color:${isToday?'var(--accent)':'var(--text2)'};margin:.1rem 0">${d.getDate()}</div>
+          <div style="width:6px;height:6px;border-radius:50%;margin:0 auto;background:${hasMeals?'var(--accent)':'var(--border2)'}"></div>
+        </div>`;
+      }).join('')}
+    </div>
+    <!-- Today hero -->
+    <div style="background:var(--surface2);border-radius:14px;padding:1rem;border:1px solid var(--border2)">
+      <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.5rem">
+        ${S.lang==='en'?'Today':'Heute'} · ${plannerDayLabel(today)}
+      </div>
+      ${plannerMealCards(todayStr)}
+    </div>
+    <!-- Rest of week -->
+    <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:600">${S.lang==='en'?'This week':'Diese Woche'}</div>
+    ${week.filter(d=>plannerDateStr(d)!==todayStr).map(d=>{
+      const ds=plannerDateStr(d);
+      const meals=S.mealPlan[ds]||[];
+      return `<div id="pd_${ds}" style="border-radius:12px;padding:.75rem;background:var(--surface);border:1px solid var(--border)">
+        <div style="font-size:.72rem;font-weight:600;color:var(--text2);margin-bottom:.4rem">${plannerDayLabel(d)}</div>
+        ${plannerMealCards(ds)}
+      </div>`;
+    }).join('')}
+    <!-- Shop button -->
+    <button onclick="plannerShopAll()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:.7rem;font-family:var(--font);font-size:.88rem;font-weight:600;cursor:pointer;margin-top:.3rem">🛒 ${S.lang==='en'?'All ingredients to shopping list':'Alle Zutaten zur Einkaufsliste'}</button>
+  </div>`;
+}
+
+function renderPlannerStrip(app){
+  const today=new Date();today.setHours(0,0,0,0);
+  const todayStr=plannerDateStr(today);
+  if(!S.plannerStrip)S.plannerStrip={selectedDate:todayStr,weekOffset:0};
+  const week=getWeekDates(S.plannerStrip.weekOffset||0);
+  const selDate=S.plannerStrip.selectedDate||todayStr;
+  const selD=new Date(selDate+'T12:00:00');
+  app.innerHTML=`<div style="display:flex;flex-direction:column;height:100%">
+    <!-- Week nav -->
+    <div style="display:flex;align-items:center;gap:.3rem;padding:.5rem .8rem;border-bottom:1px solid var(--border)">
+      <button onclick="S.plannerStrip.weekOffset=(S.plannerStrip.weekOffset||0)-1;renderApp()" style="background:var(--surface2);border:none;border-radius:8px;padding:.35rem .6rem;color:var(--text);cursor:pointer;font-size:.8rem">‹</button>
+      <div style="flex:1;display:flex;gap:.3rem;overflow-x:auto;scrollbar-width:none">
+        ${week.map(d=>{
+          const ds=plannerDateStr(d);
+          const isToday=ds===todayStr;
+          const isSel=ds===selDate;
+          const hasMeals=(S.mealPlan[ds]||[]).length>0;
+          return `<div onclick="S.plannerStrip.selectedDate='${ds}';renderApp()" style="flex-shrink:0;width:40px;text-align:center;border-radius:10px;padding:.4rem .2rem;cursor:pointer;background:${isSel?'var(--accent)':isToday?'var(--surface2)':'transparent'}">
+            <div style="font-size:.52rem;text-transform:uppercase;color:${isSel?'rgba(255,255,255,.8)':'var(--muted)'}">  ${plannerDayLabel(d,true)}</div>
+            <div style="font-size:.88rem;font-weight:${isToday?'700':'400'};color:${isSel?'#fff':isToday?'var(--accent)':'var(--text2)'}">${d.getDate()}</div>
+            <div style="width:5px;height:5px;border-radius:50%;margin:.2rem auto 0;background:${hasMeals?(isSel?'rgba(255,255,255,.8)':'var(--accent)'):'transparent'}"></div>
+          </div>`;
+        }).join('')}
+      </div>
+      <button onclick="S.plannerStrip.weekOffset=(S.plannerStrip.weekOffset||0)+1;renderApp()" style="background:var(--surface2);border:none;border-radius:8px;padding:.35rem .6rem;color:var(--text);cursor:pointer;font-size:.8rem">›</button>
+    </div>
+    <!-- Selected day meals -->
+    <div style="flex:1;overflow-y:auto;padding:.9rem 1rem">
+      <div style="font-size:.75rem;font-weight:600;color:var(--text2);margin-bottom:.6rem">${plannerDayLabel(selD)}</div>
+      ${plannerMealCards(selDate)}
+    </div>
+    <div style="padding:.7rem 1rem;border-top:1px solid var(--border)">
+      <button onclick="plannerShopAll()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:.65rem;font-family:var(--font);font-size:.85rem;font-weight:600;cursor:pointer">🛒 ${S.lang==='en'?'To shopping list':'Zur Einkaufsliste'}</button>
+    </div>
+  </div>`;
+}
+
+function renderPlannerKanban(app){
+  const today=new Date();today.setHours(0,0,0,0);
+  const todayStr=plannerDateStr(today);
+  if(!S.plannerKanban)S.plannerKanban={weekOffset:0};
+  const week=getWeekDates(S.plannerKanban.weekOffset||0);
+  const months=S.lang==='en'?['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']:['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  app.innerHTML=`<div style="display:flex;flex-direction:column;height:100%">
+    <div style="display:flex;align-items:center;gap:.4rem;padding:.4rem .8rem;border-bottom:1px solid var(--border)">
+      <button onclick="S.plannerKanban.weekOffset=(S.plannerKanban.weekOffset||0)-1;renderApp()" style="background:var(--surface2);border:none;border-radius:8px;padding:.3rem .6rem;color:var(--text);cursor:pointer;font-size:.8rem">‹</button>
+      <span style="flex:1;text-align:center;font-size:.78rem;color:var(--muted)">KW · ${week[0].getDate()}. – ${week[6].getDate()}. ${months[week[6].getMonth()]}</span>
+      <button onclick="S.plannerKanban.weekOffset=(S.plannerKanban.weekOffset||0)+1;renderApp()" style="background:var(--surface2);border:none;border-radius:8px;padding:.3rem .6rem;color:var(--text);cursor:pointer;font-size:.8rem">›</button>
+    </div>
+    <div style="display:flex;flex:1;overflow-x:auto;overflow-y:hidden;gap:0">
+      ${week.map(d=>{
+        const ds=plannerDateStr(d);
+        const isToday=ds===todayStr;
+        return `<div style="flex-shrink:0;width:120px;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden">
+          <div style="padding:.45rem .5rem;background:${isToday?'var(--accent-bg)':'var(--surface)'};border-bottom:1px solid var(--border)">
+            <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.5px;color:${isToday?'var(--accent)':'var(--muted)'}">${plannerDayLabel(d,true)}</div>
+            <div style="font-size:.9rem;font-weight:700;color:${isToday?'var(--accent)':'var(--text)'}">${d.getDate()}.</div>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:.4rem">
+            ${(S.mealPlan[ds]||[]).map(m=>{
+              const r=S.recipes.find(x=>x.id===m.recipeId);
+              if(!r)return '';
+              const cc=getCatColor(r.category);
+              return `<div onclick="openDetail('${r.id}')" style="background:var(--surface2);border-radius:8px;padding:.4rem;margin-bottom:.3rem;border-left:2px solid ${cc};cursor:pointer">
+                <div style="font-size:.65rem;font-weight:600;line-height:1.3;color:var(--text)">${esc(r.title)}</div>
+                <div style="display:flex;justify-content:flex-end;margin-top:.2rem">
+                  <button onclick="event.stopPropagation();removeMeal('${ds}','${m.id}')" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.65rem">✕</button>
+                </div>
+              </div>`;
+            }).join('')}
+            <div onclick="showAddMealModal('${ds}')" style="border:1px dashed var(--border2);border-radius:8px;padding:.4rem;text-align:center;color:var(--faint);font-size:.7rem;cursor:pointer">+</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="padding:.7rem 1rem;border-top:1px solid var(--border)">
+      <button onclick="plannerShopAll()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:.65rem;font-family:var(--font);font-size:.85rem;font-weight:600;cursor:pointer">🛒 ${S.lang==='en'?'To shopping list':'Zur Einkaufsliste'}</button>
+    </div>
+  </div>`;
+}
+// ══════════════ END PLANNER ══════════════
+
 function exportRecipeJSON(id){
   const r=S.recipes.find(x=>x.id===id);if(!r)return;
   const defaultName=(r.title.replace(/[^a-z0-9äöüß]/gi,'_').toLowerCase()||'rezept')+'.json';
@@ -3956,7 +4217,7 @@ function loadSession(){
   initWakeLock();
   // ══ Swipe navigation ══
   (()=>{
-    const NAV_ORDER=['list','shopping','favorites','aisearch','import','settings'];
+    const NAV_ORDER=['list','shopping','planner','favorites','aisearch','import','settings'];
     let tx=0,ty=0;
     const appEl=document.getElementById('app');
     appEl.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});

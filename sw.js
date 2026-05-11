@@ -1,5 +1,5 @@
 // Service Worker – Meine Rezepte App v2.1.1
-const CACHE = 'rezepte-v2.1.1';
+const CACHE = 'rezepte-v2.3.0';
 const FILES = ['./', './index.html'];
 
 self.addEventListener('install', e => {
