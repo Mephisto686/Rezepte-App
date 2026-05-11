@@ -682,63 +682,50 @@ function saveBring(){
   toast(S.lang==='en'?'Bring! credentials saved ✓':'Bring! Zugangsdaten gespeichert ✓');
 }
 
-// ══════════════ BRING! API ══════════════
-const BRING_API='https://api.getbring.com/rest/v2';
-
-async function bringLogin(){
-  const res=await fetch(BRING_API+'/bringauth',{
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:'email='+encodeURIComponent(S.bringMail)+'&password='+encodeURIComponent(S.bringPwd)
-  });
-  if(!res.ok)throw new Error('Login failed: '+res.status);
-  return res.json();
-}
-
-async function bringGetLists(token,uuid){
-  const res=await fetch(BRING_API+'/bringusers/'+uuid+'/lists',{
-    headers:{'Authorization':'Bearer '+token,'X-BRING-CLIENT':'webbring'}
-  });
-  if(!res.ok)throw new Error('Lists failed: '+res.status);
-  return res.json();
-}
-
-async function bringAddItems(token, listUuid, items){
-  // items: [{name, specification}]
-  const purchase=items.map(i=>({itemId:i.name,spec:i.specification||''}));
-  const res=await fetch(BRING_API+'/bringlists/'+listUuid,{
-    method:'PUT',
-    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json','X-BRING-CLIENT':'webbring'},
-    body:JSON.stringify({uuid:listUuid,items:{purchase,recently:[]}})
-  });
-  if(!res.ok)throw new Error('Add items failed: '+res.status);
-}
-
-async function syncToBring(){
-  if(!S.bringEnabled||!S.bringMail||!S.bringPwd){
-    toast(S.lang==='en'?'⚠ Enable Bring! and enter credentials in Settings':'⚠ Bring! in den Einstellungen aktivieren und Zugangsdaten eingeben','err');
+// ══════════════ BRING! DEEPLINK ══════════════
+function syncToBring(){
+  const openItems=S.shopping.filter(x=>!x.done);
+  if(!openItems.length){
+    toast(S.lang==='en'?'Shopping list is empty':'Einkaufsliste ist leer','err');
     return;
   }
-  const openItems=S.shopping.filter(x=>!x.done);
-  if(!openItems.length){toast(S.lang==='en'?'Shopping list is empty':'Einkaufsliste ist leer','err');return;}
-  toast(S.lang==='en'?'Connecting to Bring!…':'Verbinde mit Bring!…');
-  try{
-    const auth=await bringLogin();
-    const {lists}=await bringGetLists(auth.access_token,auth.uuid);
-    if(!lists||!lists.length)throw new Error('No Bring! lists found');
-    // Use first list (or let user pick)
-    const listUuid=lists[0].listUuid;
-    // Parse items: split "300g Mehl" → name="Mehl", spec="300g"
-    const parsed=openItems.map(it=>{
-      const m=it.text.match(/^([\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher)?)\s*(.+)$/i);
-      if(m)return{name:m[2].trim(),specification:m[1].trim()};
-      return{name:it.text,specification:''};
-    });
-    await bringAddItems(auth.access_token,listUuid,parsed);
-    toast(S.lang==='en'?`✓ ${parsed.length} items sent to Bring!`:`✓ ${parsed.length} Artikel zu Bring! gesendet`);
-  }catch(e){
-    toast('⚠ Bring!: '+e.message,'err');
-  }
+  // Build a minimal HTML page with Schema.org HowToSupply markup
+  // that Bring! parser can read
+  const itemsHtml=openItems.map(it=>{
+    const m=it.text.match(/^([\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher)?)\s*(.+)$/i);
+    const name=m?m[2].trim():it.text;
+    const amount=m?m[1].trim():'';
+    return `<li itemprop="ingredients">${amount?amount+' ':''}<span itemprop="name">${name}</span></li>`;
+  }).join('\n');
+  const page=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Recipe","name":"${S.lang==='en'?'Shopping List':'Einkaufsliste'}","recipeIngredient":[${openItems.map(it=>{
+    const m=it.text.match(/^([\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher)?)\s*(.+)$/i);
+    return '"'+it.text.replace(/"/g,'\\"')+'"';
+  }).join(',')}]}
+<\/script></head><body>
+<h1>${S.lang==='en'?'Shopping List':'Einkaufsliste'}</h1>
+<ul>${itemsHtml}</ul>
+</body></html>`;
+  // Encode as data URL and use Bring! deeplink
+  const b64=btoa(unescape(encodeURIComponent(page)));
+  const dataUrl='data:text/html;base64,'+b64;
+  // Use Bring! deeplink endpoint
+  const bringUrl='https://api.getbring.com/rest/bringrecipes/deeplink?url='
+    +encodeURIComponent('https://mephisto686.github.io/Rezepte-App/')
+    +'&source=web';
+  // Fallback: open bring:// deeplink with items directly
+  const itemNames=openItems.map(it=>{
+    const m=it.text.match(/^[\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher)?\s*(.+)$/i);
+    return m?m[1].trim():it.text;
+  });
+  // Try bring:// URL scheme first (app deeplink), fall back to web
+  const bringDeeplink='bring://?shareList='+encodeURIComponent(itemNames.join(','));
+  window.location.href=bringDeeplink;
+  // If app not installed, open web fallback after 500ms
+  setTimeout(()=>{
+    window.open('https://www.getbring.com','_blank');
+  },500);
 }
 
 function saveEdamam(){
@@ -795,7 +782,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.3.5';
+const APP_VERSION = '2.3.6';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
@@ -2304,15 +2291,9 @@ function renderSettings(app){
     </div>
     <div class="ss"><div class="st2">Bring! Einkaufsapp</div>
       <div class="sr2">
-        <div><div class="sl">🛍 Bring! Sync</div><div class="ss2">${S.lang==='en'?'Send shopping list to Bring! (unofficial API)':'Einkaufsliste zu Bring! senden (inoffizielle API)'}</div></div>
+        <div><div class="sl">🛍 Bring! Button</div><div class="ss2">${S.lang==='en'?'Show Bring! button on shopping list (no account needed)':'Bring!-Button auf der Einkaufsliste anzeigen (kein Account nötig)'}</div></div>
         <button class="tgl${S.bringEnabled?' on':''}" id="bringtgl"></button>
       </div>
-      ${S.bringEnabled?`<div class="sr2" style="flex-direction:column;align-items:flex-start;margin-top:.3rem">
-        <input class="aki" type="email" id="bringMail" value="${esc(S.bringMail)}" placeholder="Bring! E-Mail" style="width:100%">
-        <input class="aki" type="password" id="bringPwd" value="${esc(S.bringPwd)}" placeholder="Bring! Passwort" style="margin-top:.4rem;width:100%">
-        <div style="font-size:.72rem;color:var(--muted);margin-top:.35rem;font-family:var(--ui);font-style:italic">${S.lang==='en'?'Credentials stored locally only. Unofficial API – may break without notice.':'Zugangsdaten nur lokal gespeichert. Inoffizielle API – kann jederzeit aufhören zu funktionieren.'}</div>
-        <button class="btn bg sm" style="margin-top:.5rem" onclick="saveBring()">${S.lang==='en'?'Save credentials':'Zugangsdaten speichern'}</button>
-      </div>`:''}
     </div>
     <div class="ss"><div class="st2">${t('set_data')}</div>
       <div class="sr2"><div><div class="sl">${t('set_compress')}</div><div class="ss2">${t('set_compress_hint')}</div></div><button class="btn bg sm" onclick="recompressAllPhotos()">${t('btn_compress')}</button></div>
