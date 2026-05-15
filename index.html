@@ -323,7 +323,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 <nav class="bnav" id="bnav">
   <button class="nb" data-nav="list"><div class="ic">🍳</div><span id="navLblRecipes">Rezepte</span></button>
   <button class="nb" data-nav="shopping"><div class="ic">🛒</div><span id="shopLbl">Liste</span></button>
-  <button class="nb" data-nav="planner"><div class="ic">📅</div><span id="navLblPlanner">Plan</span></button>
+  <button class="nb" data-nav="planner"><div class="ic">📅</div><span id="navLblPlanner">Speiseplan</span></button>
   <button class="nb" data-nav="favorites"><div class="ic">❤️</div><span id="navLblFavs">Favoriten</span></button>
   <button class="nb" data-nav="aisearch"><div class="ic">✨</div><span id="navLblAi">KI-Suche</span></button>
   <button class="nb" data-nav="import"><div class="ic">📥</div><span id="navLblImport">Import</span></button>
@@ -483,7 +483,7 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, bringMail:'', bringPwd:'', bringEnabled:false, dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, firebaseId:'', firebaseEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -595,9 +595,9 @@ async function load(){
   try{S.lang=localStorage.getItem('mrlang')||'de';}catch{}
   try{S.edamamAppKey=localStorage.getItem('mredk')||'';}catch{}
   try{S.edamamEnabled=localStorage.getItem('mredamen')==='1';}catch{}
-  try{S.bringMail=localStorage.getItem('mrbm')||'';}catch{}
-  try{S.bringPwd=localStorage.getItem('mrbp')||'';}catch{}
-  try{S.bringEnabled=localStorage.getItem('mrbringen')==='1';}catch{}
+  try{S.firebaseId=localStorage.getItem('mrfbid')||'';}catch{}
+  try{S.firebaseEnabled=localStorage.getItem('mrfben')==='1';}catch{}
+  
   try{S.plannerView=localStorage.getItem('mrpv')||'today';}catch{}
   try{S.dark=localStorage.getItem('mrdm')==='1';}catch{}
   try{const cc=localStorage.getItem('mrcats');if(cc)S.customCats=JSON.parse(cc);}catch{}
@@ -667,6 +667,8 @@ function saveMealPlan(){
   try{localStorage.setItem('mrpv',S.plannerView);}catch{}
 }
 function saveSh(){
+  // Also sync to Firebase if enabled
+  if(S.firebaseEnabled&&S.firebaseId)fbPush();
   openDB().then(db => {
     const tx = db.transaction('shopping','readwrite');
     const store = tx.objectStore('shopping');
@@ -675,106 +677,70 @@ function saveSh(){
   }).catch(()=>{});
 }
 function saveKey(){try{localStorage.setItem('mrak',S.apiKey);}catch{}}
-function saveBring(){
-  S.bringMail=(document.getElementById('bringMail')?.value||'').trim();
-  S.bringPwd=(document.getElementById('bringPwd')?.value||'').trim();
-  try{localStorage.setItem('mrbm',S.bringMail);localStorage.setItem('mrbp',S.bringPwd);}catch{}
-  toast(S.lang==='en'?'Bring! credentials saved ✓':'Bring! Zugangsdaten gespeichert ✓');
+
+// ══════════════ FIREBASE REAL-TIME SYNC ══════════════
+let _fbPollTimer=null;
+let _fbEtag=null;
+
+function fbUrl(){
+  return 'https://'+S.firebaseId+'-default-rtdb.firebaseio.com/shopping.json';
 }
 
-// ══════════════ BRING! DEEPLINK ══════════════
-function syncToBring(){
-  const openItems=S.shopping.filter(x=>!x.done);
-  if(!openItems.length){
-    toast(S.lang==='en'?'Shopping list is empty':'Einkaufsliste ist leer','err');
-    return;
-  }
-  // Build ingredient list as JSON compatible with Bring! parser
-  const ingredients=openItems.map(it=>it.text);
-  // Use Bring! official deeplink with a publicly hosted JSON
-  // We generate a JSON and encode it, then use the Bring! deeplink API
-  // The deeplink redirects to the app on mobile
-  const bringBase='https://api.getbring.com/rest/bringrecipes/deeplink';
-  // Encode items as a simple text page Bring! can parse
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"Recipe","name":"${S.lang==='en'?'Shopping List':'Einkaufsliste'}","recipeIngredient":${JSON.stringify(ingredients)}}<\/script>
-</head><body><h1>${S.lang==='en'?'Shopping List':'Einkaufsliste'}</h1><ul>${ingredients.map(i=>`<li>${i}</li>`).join('')}</ul></body></html>`;
-  // Encode as base64 data URL
-  const b64=btoa(unescape(encodeURIComponent(html)));
-  const dataUrl='data:text/html;base64,'+b64;
-  // Use the Bring! deeplink with our GitHub URL as source
-  // Bring! will parse the page and extract recipeIngredient
-  const githubUrl='https://mephisto686.github.io/Rezepte-App/';
-  const deeplink=`${bringBase}?url=${encodeURIComponent(githubUrl)}&source=web`;
-  // Show modal with instructions + direct link
-  showBringModal(ingredients, deeplink, b64);
+function saveFirebase(){
+  S.firebaseId=(document.getElementById('firebaseIdInp')?.value||'').trim();
+  try{localStorage.setItem('mrfbid',S.firebaseId);}catch{}
+  if(S.firebaseId&&S.firebaseEnabled)initFirebase();
+  toast(S.lang==='en'?'Firebase saved ✓':'Firebase gespeichert ✓');
+  renderApp();
 }
 
-function showBringModal(ingredients, deeplink, b64){
-  const ov=document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;z-index:300';
-  const md=document.createElement('div');
-  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.4rem 1.2rem 2.5rem;width:100%;max-width:540px;font-family:var(--font)';
-  const close=()=>document.body.removeChild(ov);
-  md.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-      <div style="font-size:1rem;font-weight:700">🛍 Bring! Export</div>
-      <button id="bringClose" style="background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:pointer">✕</button>
-    </div>
-    <div style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.6">
-      ${S.lang==='en'
-        ?`${ingredients.length} items ready. Open Bring! and paste the list, or use the link below.`
-        :`${ingredients.length} Artikel bereit. Öffne Bring! und füge die Liste ein, oder nutze den Link unten.`}
-    </div>
-    <div style="background:var(--surface2);border-radius:10px;padding:.8rem;margin-bottom:.9rem;max-height:140px;overflow-y:auto">
-      ${ingredients.map(i=>`<div style="font-size:.8rem;color:var(--text2);padding:.2rem 0;border-bottom:1px solid var(--border)">${esc(i)}</div>`).join('')}
-    </div>
-    <div style="display:flex;flex-direction:column;gap:.5rem">
-      <button id="bringCopy" style="width:100%;padding:.75rem;border-radius:12px;border:none;background:#fa5750;color:#fff;font-family:var(--font);font-size:.92rem;font-weight:700;cursor:pointer">
-        🛍 ${S.lang==='en'?'Copy & open Bring!':'Kopieren & Bring! öffnen'}
-      </button>
-      <div style="font-size:.72rem;color:var(--muted);text-align:center;font-family:var(--ui)">
-        ${S.lang==='en'?'Bring! will detect the copied list automatically':'Bring! erkennt die kopierte Liste automatisch'}
-      </div>
-      <button id="bringOpen" style="width:100%;padding:.65rem;border-radius:12px;border:1px solid var(--border2);background:none;color:var(--muted);font-family:var(--font);font-size:.82rem;cursor:pointer">
-        ${S.lang==='en'?'Open Bring! without copying':'Bring! öffnen ohne Kopieren'}
-      </button>
-    </div>`;
-  ov.appendChild(md);document.body.appendChild(ov);
-  md.querySelector('#bringClose').onclick=close;
-  ov.addEventListener('click',e=>{if(e.target===ov)close();});
-  md.querySelector('#bringCopy').onclick=()=>{
-    const text=ingredients.join('\n');
-    navigator.clipboard?.writeText(text).then(()=>{
-      toast(S.lang==='en'?'✓ Copied – opening Bring!…':'✓ Kopiert – öffne Bring!…');
-      close();
-      // Auto-open Bring! after short delay so clipboard is ready
-      setTimeout(()=>{
-        const isIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
-        if(isIOS){
-          // iOS Universal Link
-          window.location.href='https://go.getbring.com/';
-        } else {
-          // Android Intent URL – opens app if installed, Play Store if not
-          window.location.href='intent://go.getbring.com#Intent;scheme=https;package=ch.publisheria.bring;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dch.publisheria.bring;end';
-        }
-      },300);
-    }).catch(()=>{
-      // Fallback: show text to copy manually
-      toast(S.lang==='en'?'Could not copy automatically':'Konnte nicht automatisch kopieren','err');
+async function fbPush(){
+  if(!S.firebaseEnabled||!S.firebaseId)return;
+  try{
+    await fetch(fbUrl(),{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(S.shopping)
     });
-  };
-  md.querySelector('#bringOpen').onclick=()=>{
-    // Try multiple approaches
-    // 1. bring:// deep link
-    // 2. https://go.getbring.com redirect
-    // 3. Play Store fallback
-    const attempts=['bring://','intent://getbring.com#Intent;scheme=https;package=ch.publisheria.bring;end'];
-    // Use the official web redirect which handles app opening
-    const url=`https://api.getbring.com/rest/bringrecipes/deeplink?url=${encodeURIComponent('https://mephisto686.github.io/Rezepte-App/')}&source=web`;
-    window.open(url,'_blank');
-    close();
-  };
+  }catch(e){console.warn('Firebase push failed:',e);}
+}
+
+async function fbPoll(){
+  if(!S.firebaseEnabled||!S.firebaseId)return;
+  try{
+    const headers={};
+    if(_fbEtag)headers['If-None-Match']=_fbEtag;
+    const res=await fetch(fbUrl(),{headers});
+    if(res.status===304)return; // no change
+    _fbEtag=res.headers.get('ETag')||null;
+    const data=await res.json();
+    if(Array.isArray(data)){
+      // Merge: use remote if different from local
+      const remoteStr=JSON.stringify(data);
+      const localStr=JSON.stringify(S.shopping);
+      if(remoteStr!==localStr){
+        S.shopping=data;
+        saveSh(); // save to IndexedDB too
+        if(S.view==='shopping')renderApp();
+        renderNav();
+      }
+    }
+  }catch(e){console.warn('Firebase poll failed:',e);}
+}
+
+function initFirebase(){
+  stopFirebase();
+  if(!S.firebaseId||!S.firebaseEnabled)return;
+  // Initial push of current list
+  fbPush();
+  // Poll every 5 seconds
+  _fbPollTimer=setInterval(fbPoll,5000);
+  // Also poll immediately
+  setTimeout(fbPoll,500);
+}
+
+function stopFirebase(){
+  if(_fbPollTimer){clearInterval(_fbPollTimer);_fbPollTimer=null;}
 }
 
 function saveEdamam(){
@@ -831,7 +797,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.3.11';
+const APP_VERSION = '2.4.0';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
@@ -1053,12 +1019,8 @@ function renderHdr(){
     acts.innerHTML=`<button class="btn bp" onclick="submitForm()">${t('btn_save')}</button>`;
   } else if(S.view==='shopping'){tit.textContent=t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
   else if(S.view==='planner'){
-    tit.textContent=S.lang==='en'?'🗓 Meal Plan':'🗓 Wochenplan';sub.textContent='';
-    acts.innerHTML=`<div style="display:flex;background:var(--surface2);border-radius:10px;padding:2px;gap:2px">
-      <button onclick="S.plannerView='today';saveMealPlan();render()" style="background:${S.plannerView==='today'?'var(--accent)':'transparent'};border:none;border-radius:8px;padding:.35rem .6rem;font-size:.82rem;cursor:pointer;transition:.15s" title="${S.lang==='en'?'Today':'Heute'}">☀️</button>
-      <button onclick="S.plannerView='strip';saveMealPlan();render()" style="background:${S.plannerView==='strip'?'var(--accent)':'transparent'};border:none;border-radius:8px;padding:.35rem .6rem;font-size:.82rem;cursor:pointer;transition:.15s" title="${S.lang==='en'?'Week':'Woche'}">≡</button>
-      <button onclick="S.plannerView='kanban';saveMealPlan();render()" style="background:${S.plannerView==='kanban'?'var(--accent)':'transparent'};border:none;border-radius:8px;padding:.35rem .6rem;font-size:.82rem;cursor:pointer;transition:.15s" title="Kanban">⊞</button>
-    </div>`;
+    tit.textContent=S.lang==='en'?'📅 Meal Plan':'📅 Speiseplan';sub.textContent='';
+    acts.innerHTML='';
   }
   else if(S.view==='aisearch'){tit.textContent=t('hdr_ai');sub.textContent='';acts.innerHTML='';}
   else if(S.view==='import'){tit.textContent=t('hdr_import');sub.textContent='';acts.innerHTML='';}
@@ -1079,7 +1041,7 @@ function renderNav(){
   // Update nav labels for language
   const navMap={navLblRecipes:'nav_recipes',navLblFavs:'nav_favorites',navLblAi:'nav_ai',navLblImport:'nav_import',navLblMore:'nav_more'};
   Object.entries(navMap).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.textContent=t(key);});
-  const planLbl=document.getElementById('navLblPlanner');if(planLbl)planLbl.textContent=S.lang==='en'?'Plan':'Plan';
+  const planLbl=document.getElementById('navLblPlanner');if(planLbl)planLbl.textContent=S.lang==='en'?'Speiseplan':'Meal Plan';
 }
 
 function renderApp(){
@@ -2210,7 +2172,6 @@ function renderShop(app){
       <div style="display:flex;gap:.45rem;flex-wrap:wrap">
         ${done>0?`<button class="btn bg sm" onclick="clearDone()">${t('sh_clear_done')}</button>`:''}
         ${items.length>0?`<button class="btn bg sm" onclick="copySh()">${t('sh_copy')}</button>`:''}
-        ${S.bringEnabled&&items.length>0?`<button class="btn bg sm" onclick="syncToBring()" style="background:rgba(250,87,80,.2);color:#fa5750;border-color:rgba(250,87,80,.4)">🛍 Bring!</button>`:''}
         ${items.length>0?`<button class="btn bdo sm" onclick="clearAllSh()">${t('sh_clear_all')}</button>`:''}
       </div>
     </div>
@@ -2338,11 +2299,20 @@ function renderSettings(app){
         <button class="btn bg sm" style="margin-top:.5rem" onclick="saveEdamam()">${t('btn_save_keys')}</button>
       </div>`:''}
     </div>
-    <div class="ss"><div class="st2">Bring! Einkaufsapp</div>
+    <div class="ss"><div class="st2">🔴 Live-Sync Einkaufsliste</div>
       <div class="sr2">
-        <div><div class="sl">🛍 Bring! Button</div><div class="ss2">${S.lang==='en'?'Show Bring! button on shopping list (no account needed)':'Bring!-Button auf der Einkaufsliste anzeigen (kein Account nötig)'}</div></div>
-        <button class="tgl${S.bringEnabled?' on':''}" id="bringtgl"></button>
+        <div>
+          <div class="sl">${S.lang==='en'?'Firebase Real-time Sync':'Firebase Echtzeit-Sync'}</div>
+          <div class="ss2">${S.lang==='en'?'Share your shopping list live with your partner. Both need the same Project ID.':'Einkaufsliste live mit Partner teilen. Beide brauchen dieselbe Projekt-ID.'}</div>
+        </div>
+        <button class="tgl${S.firebaseEnabled?' on':''}" id="firebasetgl"></button>
       </div>
+      ${S.firebaseEnabled?`<div class="sr2" style="flex-direction:column;align-items:flex-start;margin-top:.3rem">
+        <div class="ss2" style="margin-bottom:.4rem">${S.lang==='en'?'Create free project at':'Kostenloses Projekt erstellen auf'} <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a> → Realtime Database</div>
+        <input class="aki" type="text" id="firebaseIdInp" value="${esc(S.firebaseId)}" placeholder="${S.lang==='en'?'Project ID (e.g. meine-rezepte-abc12)':'Projekt-ID (z.B. meine-rezepte-abc12)'}" style="width:100%">
+        <button class="btn bg sm" style="margin-top:.5rem" onclick="saveFirebase()">${S.lang==='en'?'Save & connect':'Speichern & verbinden'}</button>
+        ${S.firebaseId?`<div style="font-size:.7rem;color:var(--ok);margin-top:.35rem;font-family:var(--ui)">✓ ${S.lang==='en'?'Connected to':'Verbunden mit'}: ${esc(S.firebaseId)}</div>`:''}
+      </div>`:''}
     </div>
     <div class="ss"><div class="st2">${t('set_data')}</div>
       <div class="sr2"><div><div class="sl">${t('set_compress')}</div><div class="ss2">${t('set_compress_hint')}</div></div><button class="btn bg sm" onclick="recompressAllPhotos()">${t('btn_compress')}</button></div>
@@ -2509,9 +2479,11 @@ function renderSettings(app){
 
   document.getElementById('dtgl').addEventListener('click',()=>{S.dark=!S.dark;saveDark();applyTheme();renderApp();});
   document.getElementById('wltgl')?.addEventListener('click',()=>toggleWakeLock());
-  document.getElementById('bringtgl')?.addEventListener('click',()=>{
-    S.bringEnabled=!S.bringEnabled;
-    try{localStorage.setItem('mrbringen',S.bringEnabled?'1':'0');}catch{}
+  document.getElementById('firebasetgl')?.addEventListener('click',()=>{
+    S.firebaseEnabled=!S.firebaseEnabled;
+    try{localStorage.setItem('mrfben',S.firebaseEnabled?'1':'0');}catch{}
+    if(S.firebaseEnabled&&S.firebaseId) initFirebase();
+    else stopFirebase();
     renderApp();
   });
   document.getElementById('edamamtgl')?.addEventListener('click',()=>{
@@ -3175,13 +3147,8 @@ function plannerShopAll(){
 }
 
 function renderPlanner(app){
-  try{
-    if(S.plannerView==='today')renderPlannerToday(app);
-    else if(S.plannerView==='strip')renderPlannerStrip(app);
-    else renderPlannerKanban(app);
-  }catch(e){
-    app.innerHTML=`<div style="padding:2rem;color:var(--danger);font-family:var(--ui);font-size:.8rem">Planner error: ${e.message}<br><pre style="font-size:.7rem;overflow:auto">${e.stack}</pre></div>`;
-  }
+  try{renderPlannerStrip(app);}
+  catch(e){app.innerHTML=`<div style="padding:2rem;color:var(--danger);font-family:var(--ui);font-size:.8rem">Speiseplan Fehler: ${e.message}</div>`;}
 }
 
 function plannerMealCards(dateStr,compact=false){
@@ -3250,37 +3217,42 @@ function renderPlannerToday(app){
 function renderPlannerStrip(app){
   const today=new Date();today.setHours(0,0,0,0);
   const todayStr=plannerDateStr(today);
-  if(!S.plannerStrip)S.plannerStrip={selectedDate:todayStr,weekOffset:0};
-  const week=getWeekDates(S.plannerStrip.weekOffset||0);
-  const selDate=S.plannerStrip.selectedDate||todayStr;
-  const selD=new Date(selDate+'T12:00:00');
-  app.innerHTML=`<div style="display:flex;flex-direction:column;height:100%">
-    <!-- Week nav -->
-    <div style="display:flex;align-items:center;gap:.3rem;padding:.5rem .8rem;border-bottom:1px solid var(--border)">
-      <button onclick="S.plannerStrip.weekOffset=(S.plannerStrip.weekOffset||0)-1;renderApp()" style="background:var(--surface2);border:none;border-radius:8px;padding:.35rem .6rem;color:var(--text);cursor:pointer;font-size:.8rem">‹</button>
-      <div style="flex:1;display:flex;gap:.3rem;overflow-x:auto;scrollbar-width:none">
-        ${week.map(d=>{
-          const ds=plannerDateStr(d);
-          const isToday=ds===todayStr;
-          const isSel=ds===selDate;
-          const hasMeals=(S.mealPlan[ds]||[]).length>0;
-          return `<div onclick="S.plannerStrip.selectedDate='${ds}';renderApp()" style="flex-shrink:0;width:40px;text-align:center;border-radius:10px;padding:.4rem .2rem;cursor:pointer;background:${isSel?'var(--accent)':isToday?'var(--surface2)':'transparent'}">
-            <div style="font-size:.52rem;text-transform:uppercase;color:${isSel?'rgba(255,255,255,.8)':'var(--muted)'}">  ${plannerDayLabel(d,true)}</div>
-            <div style="font-size:.88rem;font-weight:${isToday?'700':'400'};color:${isSel?'#fff':isToday?'var(--accent)':'var(--text2)'}">${d.getDate()}</div>
-            <div style="width:5px;height:5px;border-radius:50%;margin:.2rem auto 0;background:${hasMeals?(isSel?'rgba(255,255,255,.8)':'var(--accent)'):'transparent'}"></div>
-          </div>`;
-        }).join('')}
+  if(!S.plannerStrip)S.plannerStrip={showPast:false};
+  const showPast=S.plannerStrip.showPast||false;
+
+  // Past 7 days (yesterday to -6)
+  const pastDays=Array.from({length:7},(_,i)=>{const d=new Date(today);d.setDate(today.getDate()-(7-i));return d;});
+  // Next 7 days (today to +6)
+  const futureDays=Array.from({length:7},(_,i)=>{const d=new Date(today);d.setDate(today.getDate()+i);return d;});
+
+  function dayBlock(d){
+    const ds=plannerDateStr(d);
+    const isToday=ds===todayStr;
+    const isPast=d<today;
+    return `<div style="border-radius:12px;padding:.75rem;background:${isToday?'var(--surface2)':'var(--surface)'};border:1px solid ${isToday?'var(--accent)':'var(--border)'};${isPast?'opacity:.6':''}">
+      <div style="font-size:.75rem;font-weight:${isToday?'700':'500'};color:${isToday?'var(--accent)':'var(--text2)'};margin-bottom:.4rem">
+        ${isToday?(S.lang==='en'?'Today · ':'Heute · '):''}<span>${plannerDayLabel(d)}</span>
       </div>
-      <button onclick="S.plannerStrip.weekOffset=(S.plannerStrip.weekOffset||0)+1;renderApp()" style="background:var(--surface2);border:none;border-radius:8px;padding:.35rem .6rem;color:var(--text);cursor:pointer;font-size:.8rem">›</button>
-    </div>
-    <!-- Selected day meals -->
-    <div style="flex:1;overflow-y:auto;padding:.9rem 1rem">
-      <div style="font-size:.75rem;font-weight:600;color:var(--text2);margin-bottom:.6rem">${plannerDayLabel(selD)}</div>
-      ${plannerMealCards(selDate)}
-    </div>
-    <div style="padding:.7rem 1rem;border-top:1px solid var(--border)">
-      <button onclick="plannerShopAll()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:.65rem;font-family:var(--font);font-size:.85rem;font-weight:600;cursor:pointer">🛒 ${S.lang==='en'?'To shopping list':'Zur Einkaufsliste'}</button>
-    </div>
+      ${plannerMealCards(ds)}
+    </div>`;
+  }
+
+  app.innerHTML=`<div style="padding:.7rem 1rem 5rem;display:flex;flex-direction:column;gap:.7rem">
+    <!-- Past toggle -->
+    <button onclick="S.plannerStrip.showPast=!S.plannerStrip.showPast;renderApp()"
+      style="background:none;border:none;color:var(--muted);font-family:var(--ui);font-size:.75rem;cursor:pointer;text-align:left;padding:.2rem 0">
+      ${showPast?'▲':'▼'} ${S.lang==='en'?'Last 7 days':'Letzte 7 Tage'}
+    </button>
+    <!-- Past days -->
+    ${showPast?pastDays.map(dayBlock).join(''):''}
+    <!-- Divider if past shown -->
+    ${showPast?`<div style="border-top:1px solid var(--accent);margin:.2rem 0;opacity:.3"></div>`:''}
+    <!-- Next 7 days -->
+    ${futureDays.map(dayBlock).join('')}
+    <!-- Shop button -->
+    <button onclick="plannerShopAll()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:.7rem;font-family:var(--font);font-size:.88rem;font-weight:600;cursor:pointer;margin-top:.3rem">
+      🛒 ${S.lang==='en'?'All ingredients to shopping list':'Alle Zutaten zur Einkaufsliste'}
+    </button>
   </div>`;
 }
 
@@ -4390,6 +4362,7 @@ function loadSession(){
   loadSession();
   render();
   initWakeLock();
+  if(S.firebaseEnabled&&S.firebaseId)initFirebase();
   // ══ Swipe navigation ══
   (()=>{
     const NAV_ORDER=['list','shopping','planner','favorites','aisearch','import','settings'];
