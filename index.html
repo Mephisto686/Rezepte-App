@@ -683,7 +683,9 @@ let _fbPollTimer=null;
 let _fbEtag=null;
 
 function fbUrl(){
-  return 'https://'+S.firebaseId+'-default-rtdb.firebaseio.com/shopping.json';
+  // S.firebaseId stores the full database URL
+  const base=S.firebaseId.replace(/\/+$/,'');
+  return base+'/shopping.json';
 }
 
 function saveFirebase(){
@@ -797,7 +799,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.4.1';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.2.4', date:'2026-05-10', de:['Scrollposition wird pro Ansicht gespeichert und wiederhergestellt'], en:['Scroll position saved and restored per view'] },
@@ -2308,8 +2310,8 @@ function renderSettings(app){
         <button class="tgl${S.firebaseEnabled?' on':''}" id="firebasetgl"></button>
       </div>
       ${S.firebaseEnabled?`<div class="sr2" style="flex-direction:column;align-items:flex-start;margin-top:.3rem">
-        <div class="ss2" style="margin-bottom:.4rem">${S.lang==='en'?'Create free project at':'Kostenloses Projekt erstellen auf'} <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a> → Realtime Database</div>
-        <input class="aki" type="text" id="firebaseIdInp" value="${esc(S.firebaseId)}" placeholder="${S.lang==='en'?'Project ID (e.g. meine-rezepte-abc12)':'Projekt-ID (z.B. meine-rezepte-abc12)'}" style="width:100%">
+        <div class="ss2" style="margin-bottom:.4rem">${S.lang==='en'?'Create free project at':'Kostenloses Projekt erstellen auf'} <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a> → Realtime Database → ${S.lang==='en'?'copy the Database URL from the Data tab':'Database-URL aus dem Data-Tab kopieren'}</div>
+        <input class="aki" type="text" id="firebaseIdInp" value="${esc(S.firebaseId)}" placeholder="https://mein-projekt-default-rtdb.europe-west1.firebasedatabase.app" style="width:100%">
         <button class="btn bg sm" style="margin-top:.5rem" onclick="saveFirebase()">${S.lang==='en'?'Save & connect':'Speichern & verbinden'}</button>
         ${S.firebaseId?`<div style="font-size:.7rem;color:var(--ok);margin-top:.35rem;font-family:var(--ui)">✓ ${S.lang==='en'?'Connected to':'Verbunden mit'}: ${esc(S.firebaseId)}</div>`:''}
       </div>`:''}
