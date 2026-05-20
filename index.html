@@ -843,9 +843,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.4.5';
+const APP_VERSION = '2.4.6';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
+  { version:'2.4.6', date:'2026-05-16', de:['Wake Lock: Video-Fallback mit opacity:.01 für iOS Safari'], en:['Wake lock: video fallback with opacity:.01 for iOS Safari'] },
   { version:'2.4.5', date:'2026-05-16', de:['Wake Lock: aktiviert beim ersten Tap (iOS Safari Fix)'], en:['Wake lock: activates on first tap (iOS Safari fix)'] },
   { version:'2.4.4', date:'2026-05-16', de:['Firebase: Alles löschen synchronisiert jetzt korrekt','Wake Lock: AudioContext-Fallback für Hermit'], en:['Firebase: clear all now syncs correctly','Wake lock: AudioContext fallback for Hermit'] },
   { version:'2.4.3', date:'2026-05-16', de:['Zutaten-Cluster: gleiche Optik & Syntax wie Zubereitung (Text: = einklappbar)'], en:['Ingredient clusters: same style & syntax as steps (Text: = collapsible)'] },
@@ -4296,40 +4297,41 @@ async function toggleWakeLock(){
 // Auto-acquire wake lock on startup if enabled
 async function initWakeLock(){
   if(!S.wakeLock)return;
-  // Try native Wake Lock API first (works in Chrome, Edge)
+  // Try native Wake Lock API first (Chrome, Edge, Safari 16.4+)
   if('wakeLock' in navigator){
     try{
       S.wakeLockSentinel=await navigator.wakeLock.request('screen');
-      // Re-acquire on page visibility change
       document.addEventListener('visibilitychange',async()=>{
         if(S.wakeLock&&document.visibilityState==='visible'){
           try{S.wakeLockSentinel=await navigator.wakeLock.request('screen');}catch{}
         }
-      });
+      },{once:false});
       return;
-    }catch{}
+    }catch(e){console.log('Native wake lock failed:',e);}
   }
-  // Fallback 1: NoSleep-style silent audio loop (works in most WebViews)
-  try{
-    if(!window._wlAudio){
+  // Fallback: NoSleep.js style – looping video with audio track (iOS Safari)
+  if(!window._noSleep){
+    const v=document.createElement('video');
+    v.setAttribute('playsinline','');
+    v.setAttribute('muted','');
+    v.loop=true;
+    v.style.cssText='position:fixed;top:-2px;left:-2px;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:-1';
+    // Minimal MP4 with blank frames – enough to keep iOS screen awake
+    v.src='data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAs1tZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE1NSByMjkxNyAwYTg0ZDk4IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxOCAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiBicmFtZXM9MyBvcGVuX2dvcD0wIHdlaWdodHA9MiByZWZzPTEga2V5aW50PTI1MCBrZXlpbnRfbWluPTI1IHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9NDAgcmM9Y3JmIG1idHJlZT0xIGNyZj0yMy4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4wMACAAAAFZ2xpYmcAEAAA//73iB8GNgPGAnHpBwABAAASAAGQAA==';
+    document.body.appendChild(v);
+    window._noSleep=v;
+    S.wakeLockSentinel={release:()=>{v.pause();v.remove();window._noSleep=null;}};
+  }
+  window._noSleep.play().catch(()=>{
+    // If autoplay blocked, try AudioContext
+    try{
       const ctx=new(window.AudioContext||window.webkitAudioContext)();
       const buf=ctx.createBuffer(1,1,22050);
       const src=ctx.createBufferSource();
       src.buffer=buf;src.loop=true;src.connect(ctx.destination);src.start(0);
-      window._wlAudio={ctx,src,stop:()=>{try{src.stop();ctx.close();}catch{}}};
-      S.wakeLockSentinel={release:()=>{window._wlAudio?.stop();window._wlAudio=null;}};
-    }
-    return;
-  }catch{}
-  // Fallback 2: invisible video loop
-  if(!document.getElementById('_wlvid')){
-    const v=document.createElement('video');
-    v.id='_wlvid';v.setAttribute('playsinline','');v.setAttribute('muted','');v.loop=true;
-    v.style.cssText='position:fixed;top:-1px;left:-1px;width:1px;height:1px;opacity:0;pointer-events:none';
-    v.src='data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAs1tZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE1NSByMjkxNyAwYTg0ZDk4IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxOCAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiBicmFtZXM9MyBvcGVuX2dvcD0wIHdlaWdodHA9MiByZWZzPTEga2V5aW50PTI1MCBrZXlpbnRfbWluPTI1IHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9NDAgcmM9Y3JmIG1idHJlZT0xIGNyZj0yMy4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4wMACAAAAFZ2xpYmcAEAAA//73iB8GNgPGAnHpBwABAAASAAGQAA==';
-    document.body.appendChild(v);v.play().catch(()=>{});
-    S.wakeLockSentinel={release:()=>{v.pause();v.remove();}};
-  }
+      S.wakeLockSentinel={release:()=>{try{src.stop();ctx.close();}catch{}}};
+    }catch{}
+  });
 }
 
 // ══════════════ TOAST ══════════════
