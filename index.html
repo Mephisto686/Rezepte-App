@@ -934,7 +934,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.6';
+const APP_VERSION = '2.5.7';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -2506,7 +2506,7 @@ function renderSettings(app){
         ${S.firebaseId?`<div style="font-size:.7rem;color:var(--ok);margin-top:.35rem;font-family:var(--ui)">✓ ${S.lang==='en'?'Connected to':'Verbunden mit'}: ${esc(S.firebaseId)}</div>`:''}
       </div>`:''}
     </div>
-    <!-- Recipe sync toggle (only shown when Firebase is enabled and URL is set) -->
+    <!-- Recipe sync toggle - independent of shopping sync -->
     ${S.firebaseEnabled&&S.firebaseId?`<div class="ss">
       <div class="sr2">
         <div>
@@ -2791,10 +2791,28 @@ function setDetTab(id,tab){
   document.querySelectorAll('.det-tab').forEach((b,i)=>b.classList.toggle('act',i===tab));
 }
 
-// Update tab indicator when user swipes natively
+// Detail tab swipe – scroll listener + back-swipe on tab 0
 function initDetSwipe(){
-  // Listen to scroll on detPanels to sync tab buttons
+  // Sync tab buttons when user swipes natively via scroll snap
   document.addEventListener('scroll',updateDetTabFromScroll,{passive:true,capture:true});
+
+  // Back-swipe: when on tab 0 and swiping right → go back to recipe list
+  let _tx=0,_ty=0,_scrollAtStart=0;
+  document.addEventListener('touchstart',e=>{
+    if(S.view!=='detail')return;
+    _tx=e.touches[0].clientX;
+    _ty=e.touches[0].clientY;
+    const p=document.getElementById('detPanels');
+    _scrollAtStart=p?p.scrollLeft:0;
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(S.view!=='detail'||!S.selId)return;
+    const dx=e.changedTouches[0].clientX-_tx;
+    const dy=e.changedTouches[0].clientY-_ty;
+    // Only handle clear rightward swipes when at tab 0
+    if(dx<60||Math.abs(dy)>Math.abs(dx)*0.6)return;
+    if(_scrollAtStart===0&&(S.detTab[S.selId]||0)===0) goList();
+  },{passive:true});
 }
 
 function updateDetTabFromScroll(e){
