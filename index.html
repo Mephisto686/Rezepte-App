@@ -181,9 +181,9 @@ body{display:flex;flex-direction:column;min-height:100dvh;overscroll-behavior:no
 .det-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:10}
 .det-tab{flex:1;padding:.6rem .2rem;text-align:center;font-size:.76rem;font-family:var(--ui);font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s}
 .det-tab.act{color:var(--accent);border-bottom-color:var(--accent)}
-.det-panels-wrap{overflow:hidden;width:100%}
-.det-panels{display:flex;width:300%;transition:transform .25s cubic-bezier(.4,0,.2,1)}
-.det-panel{width:33.333%;flex-shrink:0;padding:1rem 1.3rem 2rem;box-sizing:border-box}
+.det-panels{display:flex;overflow-x:scroll;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;scroll-behavior:smooth}
+.det-panels::-webkit-scrollbar{display:none}
+.det-panel{flex:0 0 100%;width:100%;scroll-snap-align:start;padding:1rem 1.3rem 2rem;box-sizing:border-box;min-height:50dvh}
 .st{color:var(--accent);font-size:.74rem;text-transform:uppercase;letter-spacing:2px;margin-bottom:.65rem;padding-bottom:.35rem;border-bottom:2px solid var(--border);font-family:var(--ui);font-weight:700}
 .sec{margin-bottom:1.4rem}
 .ir{display:flex;gap:.5rem;align-items:flex-start;padding:.07rem 0;line-height:1.85;font-size:.92rem;color:var(--text2)}
@@ -732,7 +732,12 @@ function showFirebaseHelp(){
       <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.72rem;color:var(--ok);margin-bottom:.8rem;white-space:pre">{"rules":{"shopping":{".read":true,".write":true},"recipes":{".read":true,".write":true},"photos":{".read":true,".write":true}}}</div>
       
       <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 5 – Mit anderen teilen</div>
-      <p style="margin-bottom:.8rem">Alle mit denen du einkaufst oder kochst – Partner, Partnerin, Freunde, Familie – tragen dieselbe <strong>Database URL</strong> in ihrer App ein und aktivieren die gewünschten Sync-Optionen. Fertig!</p>
+      <p style="margin-bottom:.5rem">Alle mit denen du einkaufst oder kochst – Partner, Partnerin, Freunde, Familie – tragen dieselbe <strong>Database URL</strong> in ihrer App ein und aktivieren die gewünschten Sync-Optionen.</p>
+      <div style="background:var(--surface2);border-radius:10px;padding:.7rem .9rem;margin-bottom:.8rem;font-size:.8rem;line-height:1.8">
+        <div style="font-weight:700;margin-bottom:.3rem">Welche Sync-Optionen gibt es?</div>
+        <div>🔴 <strong>Live-Sync Einkaufsliste</strong> – synchronisiert die Einkaufsliste in Echtzeit (alle 5 Sek.). Ideal fürs gemeinsame Einkaufen.</div>
+        <div style="margin-top:.4rem">📖 <strong>Rezepte synchronisieren</strong> – erscheint nur wenn Live-Sync aktiv ist. Synchronisiert alle Rezepte inkl. Fotos. Beim ersten Mal: <strong>⬆ Meine Rezepte hochladen</strong> tippen, damit andere die Rezepte bekommen. Die andere Person tippt dann <strong>⬇ Aus Cloud herunterladen</strong>.</div>
+      </div>
       
       <div style="background:var(--surface2);border-radius:8px;padding:.7rem;font-size:.75rem;color:var(--muted)">💡 <strong>Kostenlos:</strong> Bis 1 GB Speicher – reicht für hunderte Rezepte inkl. Fotos und die Einkaufsliste. Keine versteckten Kosten.</div>
     </div>`;
@@ -929,7 +934,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.4';
+const APP_VERSION = '2.5.6';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -1707,9 +1712,8 @@ function renderDetail(app){
         <button class="det-tab${(S.detTab[r.id]||0)===1?' act':''}" onclick="setDetTab('${r.id}',1)">${S.lang==='en'?'Steps':'Zubereitung'}</button>
         <button class="det-tab${(S.detTab[r.id]||0)===2?' act':''}" onclick="setDetTab('${r.id}',2)">${S.lang==='en'?'Notes & Log':'Notizen & Log'}</button>
       </div>
-      <!-- Sliding panels -->
-      <div class="det-panels-wrap">
-      <div class="det-panels" id="detPanels" style="transform:translateX(calc(-${(S.detTab[r.id]||0)} * 33.333%))">
+      <!-- Sliding panels via CSS scroll snap -->
+      <div class="det-panels" id="detPanels">
         <!-- TAB 0: ZUTATEN -->
         <div class="det-panel">
           ${ings.length?`<div class="sec">
@@ -1802,13 +1806,18 @@ function renderDetail(app){
           </div>
         </div>
       </div>
-      </div>
     </div></div>`;
   // Ingredient checkboxes
   if(!S.ingSelected)S.ingSelected={};
   if(!S.ingSelected[r.id])S.ingSelected[r.id]={};
-  // Init swipe between detail tabs
-  initDetSwipe(r.id);
+  // Restore tab scroll position after render
+  const _tab=S.detTab[r.id]||0;
+  if(_tab>0){
+    requestAnimationFrame(()=>{
+      const p=document.getElementById('detPanels');
+      if(p)p.scrollLeft=_tab*p.offsetWidth;
+    });
+  }
   function updateIngBar(){
     const sel=Object.values(S.ingSelected[r.id]).filter(Boolean).length;
     const bar=document.getElementById('ingAddBar');
@@ -2762,7 +2771,7 @@ function restoreScroll(key){
   // Use setTimeout to ensure DOM is painted before scrolling
   setTimeout(()=>{const page=document.querySelector('.page');if(page)page.scrollTop=y;},50);
 }
-const goList=()=>{saveScroll();const _p=document.querySelector('.page');if(_p)_p._detSwipe=false;S.view='list';S.selId=null;S.scaleFactor=1;S.lastSelId=null;saveSession();render();restoreScroll('list');};
+const goList=()=>{saveScroll();S.view='list';S.selId=null;S.scaleFactor=1;S.lastSelId=null;saveSession();render();restoreScroll('list');};
 const openDetail=id=>{
   saveScroll();
   S.lastSelId=id;
@@ -2776,39 +2785,30 @@ function setTag(t){S.filterTag=t;renderApp();}
 function setDetTab(id,tab){
   S.detTab[id]=tab;
   const panels=document.getElementById('detPanels');
-  if(panels)panels.style.transform=`translateX(calc(-${tab} * 33.333%))`;
+  if(panels){
+    panels.scrollTo({left:tab*panels.offsetWidth,behavior:'smooth'});
+  }
   document.querySelectorAll('.det-tab').forEach((b,i)=>b.classList.toggle('act',i===tab));
 }
 
-// Swipe between detail tabs – attached to .page so content scrolling doesn't block it
-function initDetSwipe(rid){
-  const page=document.querySelector('.page');
-  if(!page||page._detSwipe)return; // only attach once
-  page._detSwipe=true;
-  let tx=0,ty=0,startTab=0;
-  page.addEventListener('touchstart',e=>{
-    if(S.view!=='detail')return;
-    tx=e.touches[0].clientX;
-    ty=e.touches[0].clientY;
-    startTab=S.detTab[S.selId]||0;
-  },{passive:true});
-  page.addEventListener('touchend',e=>{
-    if(S.view!=='detail')return;
-    const dx=e.changedTouches[0].clientX-tx;
-    const dy=e.changedTouches[0].clientY-ty;
-    // Only handle clearly horizontal swipes
-    if(Math.abs(dx)<55||Math.abs(dx)<Math.abs(dy)*1.2)return;
-    const rid2=S.selId;
-    const cur=S.detTab[rid2]||0;
-    if(dx<0){
-      // Swipe left → next tab
-      if(cur<2)setDetTab(rid2,cur+1);
-    } else {
-      // Swipe right → previous tab, or back to list if on first tab
-      if(cur>0)setDetTab(rid2,cur-1);
-      else goList();
-    }
-  },{passive:true});
+// Update tab indicator when user swipes natively
+function initDetSwipe(){
+  // Listen to scroll on detPanels to sync tab buttons
+  document.addEventListener('scroll',updateDetTabFromScroll,{passive:true,capture:true});
+}
+
+function updateDetTabFromScroll(e){
+  const panels=e.target;
+  if(!panels||panels.id!=='detPanels')return;
+  const w=panels.offsetWidth;
+  if(!w)return;
+  const tab=Math.round(panels.scrollLeft/w);
+  const rid=S.selId;
+  if(!rid)return;
+  if((S.detTab[rid]||0)!==tab){
+    S.detTab[rid]=tab;
+    document.querySelectorAll('.det-tab').forEach((b,i)=>b.classList.toggle('act',i===tab));
+  }
 }
 
 function toggleIngSec(recipeId, secKey){
@@ -4644,6 +4644,7 @@ function loadSession(){
   }
   if(S.firebaseEnabled&&S.firebaseId)initFirebase();
   if(S.recipesSyncEnabled&&S.firebaseEnabled&&S.firebaseId)initRecipeSync();
+  initDetSwipe(); // Detail tab swipe – runs once for entire app lifetime
   // ══ Swipe navigation ══
   (()=>{
     const NAV_ORDER=['list','shopping','planner','favorites','aisearch','import','settings'];
