@@ -2853,25 +2853,37 @@ function setDetTab(id,tab){
 
 // Detail tab swipe – scroll listener + back-swipe on tab 0
 function initDetSwipe(){
-  // Sync tab buttons when user swipes natively via scroll snap
   document.addEventListener('scroll',updateDetTabFromScroll,{passive:true,capture:true});
 
-  // Back-swipe: when on tab 0 and swiping right → go back to recipe list
   let _tx=0,_ty=0,_scrollAtStart=0;
   document.addEventListener('touchstart',e=>{
     if(S.view!=='detail')return;
     _tx=e.touches[0].clientX;
     _ty=e.touches[0].clientY;
     const p=document.getElementById('detPanels');
-    _scrollAtStart=p?p.scrollLeft:0;
+    _scrollAtStart=p?Math.round(p.scrollLeft):0;
   },{passive:true});
+
   document.addEventListener('touchend',e=>{
     if(S.view!=='detail'||!S.selId)return;
     const dx=e.changedTouches[0].clientX-_tx;
     const dy=e.changedTouches[0].clientY-_ty;
-    // Only handle clear rightward swipes when at tab 0
-    if(dx<60||Math.abs(dy)>Math.abs(dx)*0.6)return;
-    if(_scrollAtStart===0&&(S.detTab[S.selId]||0)===0) goList();
+    if(Math.abs(dx)<50||Math.abs(dy)>Math.abs(dx)*0.65)return;
+
+    const p=document.getElementById('detPanels');
+    const w=p?p.offsetWidth:window.innerWidth;
+    const wasOnTab0=_scrollAtStart<w*0.3;  // was at Tab 0 at touch START
+    const wasOnTab1=_scrollAtStart>w*0.7;  // was at Tab 1 at touch START
+
+    if(dx>0){
+      // Finger moved L→R
+      if(wasOnTab0) goList();         // Tab 0 + L→R → back to library
+      // Tab 1 + L→R → CSS snap handles going to Tab 0 ✓
+    } else {
+      // Finger moved R→L
+      if(wasOnTab1) setDetTab(S.selId,0); // Tab 1 + R→L → back to Tab 0
+      // Tab 0 + R→L → CSS snap handles going to Tab 1 ✓
+    }
   },{passive:true});
 }
 
