@@ -849,7 +849,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.1';
+const APP_VERSION = '2.5.2';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -2681,20 +2681,24 @@ function setDetTab(id,tab){
 
 // Swipe between detail tabs
 function initDetSwipe(rid){
-  const panels=document.getElementById('detPanels');
-  if(!panels)return;
-  let tx=0,ty=0,dragging=false;
-  panels.addEventListener('touchstart',e=>{
-    tx=e.touches[0].clientX;ty=e.touches[0].clientY;dragging=true;
+  const wrap=document.querySelector('.det-panels-wrap');
+  if(!wrap)return;
+  let tx=0,ty=0;
+  wrap.addEventListener('touchstart',e=>{
+    tx=e.touches[0].clientX;ty=e.touches[0].clientY;
   },{passive:true});
-  panels.addEventListener('touchend',e=>{
-    if(!dragging)return;dragging=false;
+  wrap.addEventListener('touchend',e=>{
     const dx=e.changedTouches[0].clientX-tx;
     const dy=e.changedTouches[0].clientY-ty;
-    if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy)*1.5){
-      const cur=S.detTab[rid]||0;
-      const next=dx<0?Math.min(2,cur+1):Math.max(0,cur-1);
-      if(next!==cur)setDetTab(rid,next);
+    if(Math.abs(dx)<50||Math.abs(dx)<Math.abs(dy)*1.5)return;
+    const cur=S.detTab[rid]||0;
+    if(dx<0){
+      // Swipe left → next tab
+      if(cur<2)setDetTab(rid,cur+1);
+    } else {
+      // Swipe right → previous tab, or back to list if on first tab
+      if(cur>0) setDetTab(rid,cur-1);
+      else goList();
     }
   },{passive:true});
 }
