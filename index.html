@@ -181,8 +181,9 @@ body{display:flex;flex-direction:column;min-height:100dvh;overscroll-behavior:no
 .det-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:10}
 .det-tab{flex:1;padding:.6rem .2rem;text-align:center;font-size:.76rem;font-family:var(--ui);font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s}
 .det-tab.act{color:var(--accent);border-bottom-color:var(--accent)}
-.det-panels{display:flex;overflow:hidden}
-.det-panel{min-width:100%;padding:1rem 1.3rem 5rem;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.det-panels-wrap{overflow:hidden;width:100%}
+.det-panels{display:flex;width:300%;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.det-panel{width:33.333%;flex-shrink:0;padding:1rem 1.3rem 2rem;box-sizing:border-box}
 .st{color:var(--accent);font-size:.74rem;text-transform:uppercase;letter-spacing:2px;margin-bottom:.65rem;padding-bottom:.35rem;border-bottom:2px solid var(--border);font-family:var(--ui);font-weight:700}
 .sec{margin-bottom:1.4rem}
 .ir{display:flex;gap:.5rem;align-items:flex-start;padding:.07rem 0;line-height:1.85;font-size:.92rem;color:var(--text2)}
@@ -848,9 +849,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.5.1';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
+  { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
   { version:'2.5.0', date:'2026-05-24', de:['Rezeptansicht: 3 Tabs (Zutaten, Zubereitung, Notizen & Log) mit Swipe-Navigation'], en:['Recipe view: 3 tabs (Ingredients, Steps, Notes & Log) with swipe navigation'] },
   { version:'2.4.6', date:'2026-05-16', de:['Wake Lock: Video-Fallback mit opacity:.01 für iOS Safari'], en:['Wake lock: video fallback with opacity:.01 for iOS Safari'] },
   { version:'2.4.5', date:'2026-05-16', de:['Wake Lock: aktiviert beim ersten Tap (iOS Safari Fix)'], en:['Wake lock: activates on first tap (iOS Safari fix)'] },
@@ -1626,7 +1628,8 @@ function renderDetail(app){
         <button class="det-tab${(S.detTab[r.id]||0)===2?' act':''}" onclick="setDetTab('${r.id}',2)">${S.lang==='en'?'Notes & Log':'Notizen & Log'}</button>
       </div>
       <!-- Sliding panels -->
-      <div class="det-panels" id="detPanels" style="transform:translateX(-${(S.detTab[r.id]||0)*100}%)">
+      <div class="det-panels-wrap">
+      <div class="det-panels" id="detPanels" style="transform:translateX(calc(-${(S.detTab[r.id]||0)} * 33.333%))">
         <!-- TAB 0: ZUTATEN -->
         <div class="det-panel">
           ${ings.length?`<div class="sec">
@@ -1718,6 +1721,7 @@ function renderDetail(app){
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div></div>`;
   // Ingredient checkboxes
@@ -2670,10 +2674,8 @@ function openEdit(id){const r=S.recipes.find(x=>x.id===id);if(!r)return;S.formDa
 function setTag(t){S.filterTag=t;renderApp();}
 function setDetTab(id,tab){
   S.detTab[id]=tab;
-  // Update panel position without re-render
   const panels=document.getElementById('detPanels');
-  if(panels)panels.style.transform=`translateX(-${tab*100}%)`;
-  // Update tab buttons
+  if(panels)panels.style.transform=`translateX(calc(-${tab} * 33.333%))`;
   document.querySelectorAll('.det-tab').forEach((b,i)=>b.classList.toggle('act',i===tab));
 }
 
