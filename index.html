@@ -181,9 +181,9 @@ body{display:flex;flex-direction:column;min-height:100dvh;overscroll-behavior:no
 .det-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:10}
 .det-tab{flex:1;padding:.6rem .2rem;text-align:center;font-size:.76rem;font-family:var(--ui);font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s}
 .det-tab.act{color:var(--accent);border-bottom-color:var(--accent)}
-.det-panels{display:flex;overflow-x:scroll;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;scroll-behavior:smooth;touch-action:pan-x}
+.det-panels{display:flex;overflow-x:scroll;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;scroll-behavior:smooth}
 .det-panels::-webkit-scrollbar{display:none}
-.det-panel{flex:0 0 100%;width:100%;scroll-snap-align:start;padding:1rem 1.3rem 2rem;box-sizing:border-box;min-height:50dvh;touch-action:pan-y}
+.det-panel{flex:0 0 100%;width:100%;scroll-snap-align:start;padding:1rem 1.3rem 2rem;box-sizing:border-box;min-height:50dvh}
 .st{color:var(--accent);font-size:.74rem;text-transform:uppercase;letter-spacing:2px;margin-bottom:.65rem;padding-bottom:.35rem;border-bottom:2px solid var(--border);font-family:var(--ui);font-weight:700}
 .sec{margin-bottom:1.4rem}
 .ir{display:flex;gap:.5rem;align-items:flex-start;padding:.07rem 0;line-height:1.85;font-size:.92rem;color:var(--text2)}
@@ -835,6 +835,10 @@ async function fbPullAllRecipes(showToast=false){
   if(!S.firebaseEnabled||!S.firebaseId||!S.recipesSyncEnabled)return;
   try{
     const res=await fetch(fbRecipesUrl());
+    if(res.status===404||res.status===204){
+      if(showToast)toast(S.lang==='en'?'Cloud is empty – upload your recipes first':'Cloud ist leer – Rezepte erst hochladen');
+      return;
+    }
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     if(!data){if(showToast)toast(S.lang==='en'?'Cloud is empty':'Cloud ist leer');return;}
@@ -934,7 +938,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.8';
+const APP_VERSION = '2.5.9';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
