@@ -488,7 +488,7 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, firebaseId:'', firebaseEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, firebaseId:'', firebaseEnabled:false, recipesSyncEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -602,6 +602,7 @@ async function load(){
   try{S.edamamEnabled=localStorage.getItem('mredamen')==='1';}catch{}
   try{S.firebaseId=localStorage.getItem('mrfbid')||'';}catch{}
   try{S.firebaseEnabled=localStorage.getItem('mrfben')==='1';}catch{}
+  try{S.recipesSyncEnabled=localStorage.getItem('mrrsyn')==='1';}catch{}
   
   try{S.plannerView=localStorage.getItem('mrpv')||'today';}catch{}
   try{S.dark=localStorage.getItem('mrdm')==='1';}catch{}
@@ -652,7 +653,11 @@ function saveR(){
       recipeStore.put(rest);
       if(photo) photoStore.put({id:r.id, data:photo});
     });
-    tx.oncomplete = () => { setTimeout(()=>{S.saving=false;renderHdr();},400); };
+    tx.oncomplete = () => {
+      setTimeout(()=>{S.saving=false;renderHdr();},400);
+      // Push to Firebase if recipe sync enabled
+      if(S.recipesSyncEnabled&&S.firebaseEnabled&&S.firebaseId) fbPushAllRecipes();
+    };
     tx.onerror = () => { toast('Speicherfehler','err'); S.saving=false; renderHdr(); };
   }).catch(e => {
     toast('Datenbank-Fehler: '+e.message,'err');
@@ -723,13 +728,13 @@ function showFirebaseHelp(){
       <p style="margin-bottom:.8rem">Diese <strong>vollständige URL</strong> (nicht die Projekt-ID!) in der App unter <strong>„Live-Sync" → URL-Feld</strong> eintragen.</p>
       
       <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 4 – Regeln nach 30 Tagen</div>
-      <p style="margin-bottom:.4rem">Gehe zu <strong>Realtime Database → Regeln</strong>.<br>Ersetze den gesamten Inhalt durch:</p>
-      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.72rem;color:var(--ok);margin-bottom:.8rem;white-space:pre">{"rules":{"shopping":{".read":true,".write":true}}}</div>
+      <p style="margin-bottom:.4rem">Gehe zu <strong>Realtime Database → Regeln</strong>.<br>Ersetze den gesamten Inhalt durch (gilt für Einkaufsliste + Rezepte + Fotos):</p>
+      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.72rem;color:var(--ok);margin-bottom:.8rem;white-space:pre">{"rules":{"shopping":{".read":true,".write":true},"recipes":{".read":true,".write":true},"photos":{".read":true,".write":true}}}</div>
       
       <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 5 – Mit anderen teilen</div>
-      <p style="margin-bottom:.8rem">Alle mit denen du einkaufst – Partner, Partnerin, Freunde, Familie – tragen dieselbe <strong>Database URL</strong> in ihrer App ein. Fertig – ab jetzt synchronisiert alles automatisch für alle!</p>
+      <p style="margin-bottom:.8rem">Alle mit denen du einkaufst oder kochst – Partner, Partnerin, Freunde, Familie – tragen dieselbe <strong>Database URL</strong> in ihrer App ein und aktivieren die gewünschten Sync-Optionen. Fertig!</p>
       
-      <div style="background:var(--surface2);border-radius:8px;padding:.7rem;font-size:.75rem;color:var(--muted)">💡 <strong>Kostenlos:</strong> Bis 1 GB Speicher und 100 gleichzeitige Verbindungen – für eine Einkaufsliste mehr als genug.</div>
+      <div style="background:var(--surface2);border-radius:8px;padding:.7rem;font-size:.75rem;color:var(--muted)">💡 <strong>Kostenlos:</strong> Bis 1 GB Speicher – reicht für hunderte Rezepte inkl. Fotos und die Einkaufsliste. Keine versteckten Kosten.</div>
     </div>`;
   ov.appendChild(md);document.body.appendChild(ov);
   md.querySelector('#fbhClose').onclick=()=>document.body.removeChild(ov);
@@ -795,6 +800,81 @@ function stopFirebase(){
   if(_fbPollTimer){clearInterval(_fbPollTimer);_fbPollTimer=null;}
 }
 
+// ══════════════ FIREBASE RECIPE SYNC ══════════════
+let _fbRecipeTimer=null;
+
+function fbRecipesUrl(){return S.firebaseId.replace(/\/+$/,'')+'/recipes.json';}
+function fbPhotosUrl(id){return S.firebaseId.replace(/\/+$/,'')+'/photos/'+id+'.json';}
+
+async function fbPushAllRecipes(showToast=false){
+  if(!S.firebaseEnabled||!S.firebaseId||!S.recipesSyncEnabled)return;
+  try{
+    // Push recipe metadata (without photo – stored separately)
+    const recipesData={};
+    S.recipes.forEach(r=>{
+      const {photo,...rest}=r;
+      recipesData[r.id]={...rest,_updatedAt:Date.now()};
+    });
+    await fetch(fbRecipesUrl(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(recipesData)});
+    // Push photos separately
+    for(const r of S.recipes){
+      if(r.photo){
+        await fetch(fbPhotosUrl(r.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(r.photo)});
+      }
+    }
+    if(showToast)toast(S.lang==='en'?`✓ ${S.recipes.length} recipes uploaded`:`✓ ${S.recipes.length} Rezepte hochgeladen`);
+  }catch(e){if(showToast)toast('⚠ Upload: '+e.message,'err');}
+}
+
+async function fbPullAllRecipes(showToast=false){
+  if(!S.firebaseEnabled||!S.firebaseId||!S.recipesSyncEnabled)return;
+  try{
+    const res=await fetch(fbRecipesUrl());
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    if(!data){if(showToast)toast(S.lang==='en'?'Cloud is empty':'Cloud ist leer');return;}
+    const remoteRecipes=Object.values(data);
+    // Merge: keep newer version of each recipe
+    const localMap={};
+    S.recipes.forEach(r=>{localMap[r.id]=r;});
+    let changed=false;
+    for(const remote of remoteRecipes){
+      const local=localMap[remote.id];
+      if(!local||(remote._updatedAt||0)>(local._updatedAt||0)){
+        localMap[remote.id]=remote;
+        changed=true;
+      }
+    }
+    if(changed){
+      S.recipes=Object.values(localMap);
+      // Pull photos for updated recipes
+      for(const r of S.recipes){
+        if(!r.photo){
+          try{
+            const pr=await fetch(fbPhotosUrl(r.id));
+            if(pr.ok){const p=await pr.json();if(p)r.photo=p;}
+          }catch{}
+        }
+      }
+      await saveR();
+      if(S.view==='list'||S.view==='detail')renderApp();
+      renderNav();
+    }
+    if(showToast)toast(S.lang==='en'?`✓ ${remoteRecipes.length} recipes downloaded`:`✓ ${remoteRecipes.length} Rezepte heruntergeladen`);
+  }catch(e){if(showToast)toast('⚠ Download: '+e.message,'err');}
+}
+
+function initRecipeSync(){
+  stopRecipeSync();
+  if(!S.firebaseId||!S.recipesSyncEnabled)return;
+  fbPullAllRecipes();
+  _fbRecipeTimer=setInterval(fbPullAllRecipes,60000);
+}
+
+function stopRecipeSync(){
+  if(_fbRecipeTimer){clearInterval(_fbRecipeTimer);_fbRecipeTimer=null;}
+}
+
 function saveEdamam(){
   S.edamamAppId=(document.getElementById('edamamId')?.value||'').trim();
   S.edamamAppKey=(document.getElementById('edamamKey')?.value||'').trim();
@@ -849,7 +929,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.2';
+const APP_VERSION = '2.5.4';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -1685,7 +1765,7 @@ function renderDetail(app){
         </div>
         <!-- TAB 2: NOTIZEN & ERFAHRUNGEN -->
         <div class="det-panel">
-          ${r.notes?`<div class="nb2"><div class="nbl2">📝 Notizen</div><div class="nbt2" style="white-space:pre-wrap">${esc(r.notes)}</div></div>`:''}
+          ${r.notes?`<div class="nb2" style="margin-bottom:1.4rem"><div class="nbl2">📝 Notizen</div><div class="nbt2" style="white-space:pre-wrap">${esc(r.notes)}</div></div>`:''}
           <div style="margin-bottom:.8rem">
             <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-family:var(--font);font-weight:700;margin-bottom:.6rem">📓 Erfahrungen</div>
             ${(r.experiences||[]).length===0?`<div style="font-size:.78rem;color:var(--faint);font-family:var(--font);font-style:italic;margin-bottom:.6rem">Noch keine Erfahrungen eingetragen.</div>`:''}
@@ -2417,6 +2497,20 @@ function renderSettings(app){
         ${S.firebaseId?`<div style="font-size:.7rem;color:var(--ok);margin-top:.35rem;font-family:var(--ui)">✓ ${S.lang==='en'?'Connected to':'Verbunden mit'}: ${esc(S.firebaseId)}</div>`:''}
       </div>`:''}
     </div>
+    <!-- Recipe sync toggle (only shown when Firebase is enabled and URL is set) -->
+    ${S.firebaseEnabled&&S.firebaseId?`<div class="ss">
+      <div class="sr2">
+        <div>
+          <div class="sl">📖 ${S.lang==='en'?'Recipe Sync (incl. Photos)':'Rezepte synchronisieren (inkl. Fotos)'}</div>
+          <div class="ss2">${S.lang==='en'?'Sync all recipes and photos. Use carefully – overwrites on all devices.':'Alle Rezepte & Fotos synchronisieren. Vorsicht – überschreibt auf allen Geräten.'}</div>
+        </div>
+        <button class="tgl${S.recipesSyncEnabled?' on':''}" id="recipeSynctgl"></button>
+      </div>
+      ${S.recipesSyncEnabled?`<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">
+        <button class="btn bg sm" onclick="fbPushAllRecipes(true)">${S.lang==='en'?'⬆ Upload my recipes':'⬆ Meine Rezepte hochladen'}</button>
+        <button class="btn bg sm" onclick="fbPullAllRecipes(true)">${S.lang==='en'?'⬇ Download from cloud':'⬇ Aus Cloud herunterladen'}</button>
+      </div>`:''}
+    </div>`:''}
     <div class="ss"><div class="st2">${t('set_data')}</div>
       <div class="sr2"><div><div class="sl">${t('set_compress')}</div><div class="ss2">${t('set_compress_hint')}</div></div><button class="btn bg sm" onclick="recompressAllPhotos()">${t('btn_compress')}</button></div>
       <div class="sr2"><div><div class="sl">${t('set_backup')}</div><div class="ss2">${t('set_backup_hint')}</div></div>
@@ -2582,6 +2676,13 @@ function renderSettings(app){
 
   document.getElementById('dtgl').addEventListener('click',()=>{S.dark=!S.dark;saveDark();applyTheme();renderApp();});
   document.getElementById('wltgl')?.addEventListener('click',()=>toggleWakeLock());
+  document.getElementById('recipeSynctgl')?.addEventListener('click',()=>{
+    S.recipesSyncEnabled=!S.recipesSyncEnabled;
+    try{localStorage.setItem('mrrsyn',S.recipesSyncEnabled?'1':'0');}catch{}
+    if(S.recipesSyncEnabled)initRecipeSync();
+    else stopRecipeSync();
+    renderApp();
+  });
   document.getElementById('firebasetgl')?.addEventListener('click',()=>{
     S.firebaseEnabled=!S.firebaseEnabled;
     try{localStorage.setItem('mrfben',S.firebaseEnabled?'1':'0');}catch{}
@@ -2661,7 +2762,7 @@ function restoreScroll(key){
   // Use setTimeout to ensure DOM is painted before scrolling
   setTimeout(()=>{const page=document.querySelector('.page');if(page)page.scrollTop=y;},50);
 }
-const goList=()=>{saveScroll();S.view='list';S.selId=null;S.scaleFactor=1;S.lastSelId=null;saveSession();render();restoreScroll('list');};
+const goList=()=>{saveScroll();const _p=document.querySelector('.page');if(_p)_p._detSwipe=false;S.view='list';S.selId=null;S.scaleFactor=1;S.lastSelId=null;saveSession();render();restoreScroll('list');};
 const openDetail=id=>{
   saveScroll();
   S.lastSelId=id;
@@ -2679,25 +2780,32 @@ function setDetTab(id,tab){
   document.querySelectorAll('.det-tab').forEach((b,i)=>b.classList.toggle('act',i===tab));
 }
 
-// Swipe between detail tabs
+// Swipe between detail tabs – attached to .page so content scrolling doesn't block it
 function initDetSwipe(rid){
-  const wrap=document.querySelector('.det-panels-wrap');
-  if(!wrap)return;
-  let tx=0,ty=0;
-  wrap.addEventListener('touchstart',e=>{
-    tx=e.touches[0].clientX;ty=e.touches[0].clientY;
+  const page=document.querySelector('.page');
+  if(!page||page._detSwipe)return; // only attach once
+  page._detSwipe=true;
+  let tx=0,ty=0,startTab=0;
+  page.addEventListener('touchstart',e=>{
+    if(S.view!=='detail')return;
+    tx=e.touches[0].clientX;
+    ty=e.touches[0].clientY;
+    startTab=S.detTab[S.selId]||0;
   },{passive:true});
-  wrap.addEventListener('touchend',e=>{
+  page.addEventListener('touchend',e=>{
+    if(S.view!=='detail')return;
     const dx=e.changedTouches[0].clientX-tx;
     const dy=e.changedTouches[0].clientY-ty;
-    if(Math.abs(dx)<50||Math.abs(dx)<Math.abs(dy)*1.5)return;
-    const cur=S.detTab[rid]||0;
+    // Only handle clearly horizontal swipes
+    if(Math.abs(dx)<55||Math.abs(dx)<Math.abs(dy)*1.2)return;
+    const rid2=S.selId;
+    const cur=S.detTab[rid2]||0;
     if(dx<0){
       // Swipe left → next tab
-      if(cur<2)setDetTab(rid,cur+1);
+      if(cur<2)setDetTab(rid2,cur+1);
     } else {
       // Swipe right → previous tab, or back to list if on first tab
-      if(cur>0) setDetTab(rid,cur-1);
+      if(cur>0)setDetTab(rid2,cur-1);
       else goList();
     }
   },{passive:true});
@@ -4535,6 +4643,7 @@ function loadSession(){
     document.addEventListener('click',_wlInit,{once:true});
   }
   if(S.firebaseEnabled&&S.firebaseId)initFirebase();
+  if(S.recipesSyncEnabled&&S.firebaseEnabled&&S.firebaseId)initRecipeSync();
   // ══ Swipe navigation ══
   (()=>{
     const NAV_ORDER=['list','shopping','planner','favorites','aisearch','import','settings'];
