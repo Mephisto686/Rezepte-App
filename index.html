@@ -1756,7 +1756,7 @@ function renderDetail(app){
                   const title=isBold?t2.replace(/^\*\*|\*\*:?\*\*$/,'').replace(/:$/,''):t2.slice(0,-1);
                   const secKey='ingsec'+i;
                   const isOpen=!(S.ingSecState?.[r.id]?.[secKey]);
-                  html2+=`<div class="step-sec-hdr" data-ingsec="${secKey}" onclick="toggleIngSec('${r.id}','${secKey}')"><span class="step-sec-arr${isOpen?' open':''}">▶</span><span class="step-sec-title">${esc(title)}</span><button class="step-toggle-btn" data-ingaction="demote" data-ingline="${esc(l)}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui);margin-left:auto">${S.lang==='en'?'↓ Item':'↓ Zutat'}</button></div><div class="step-sec-body${isOpen?'':' closed'}" id="ingsec_${secKey}">`;
+                  html2+=`<div class="step-sec-hdr" data-ingsec="${secKey}" onclick="toggleIngSec('${r.id}','${secKey}')"><span class="step-sec-arr${isOpen?' open':''}">▶</span><span class="step-sec-title">${esc(title)}</span><button class="step-toggle-btn" data-ingaction="demote" data-ingline="${esc(l)}" onclick="event.stopPropagation()" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui);margin-left:auto">${S.lang==='en'?'↓ Item':'↓ Zutat'}</button></div><div class="step-sec-body${isOpen?'':' closed'}" id="ingsec_${secKey}">`;
                   inSec=true;
                 } else {
                   const sel=!!(S.ingSelected?.[r.id]||{})[i];
