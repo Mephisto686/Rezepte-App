@@ -177,7 +177,12 @@ body{display:flex;flex-direction:column;min-height:100dvh;overscroll-behavior:no
 .d-hdr{background:linear-gradient(160deg,var(--header-from),var(--header-to));padding:1.2rem 1.4rem}
 .d-hdr h2{color:var(--ht);font-size:1.35rem;margin:.4rem 0;line-height:1.3}
 .d-meta{display:flex;gap:1rem;color:var(--hm);font-size:.77rem;flex-wrap:wrap;margin-top:.3rem;font-family:var(--ui)}
-.d-body{padding:1.3rem 1.4rem}
+.d-body{padding:0}
+.det-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:10}
+.det-tab{flex:1;padding:.6rem .2rem;text-align:center;font-size:.76rem;font-family:var(--ui);font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s}
+.det-tab.act{color:var(--accent);border-bottom-color:var(--accent)}
+.det-panels{display:flex;overflow:hidden}
+.det-panel{min-width:100%;padding:1rem 1.3rem 5rem;transition:transform .25s cubic-bezier(.4,0,.2,1)}
 .st{color:var(--accent);font-size:.74rem;text-transform:uppercase;letter-spacing:2px;margin-bottom:.65rem;padding-bottom:.35rem;border-bottom:2px solid var(--border);font-family:var(--ui);font-weight:700}
 .sec{margin-bottom:1.4rem}
 .ir{display:flex;gap:.5rem;align-items:flex-start;padding:.07rem 0;line-height:1.85;font-size:.92rem;color:var(--text2)}
@@ -482,7 +487,7 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, firebaseId:'', firebaseEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, firebaseId:'', firebaseEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -843,9 +848,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.4.6';
+const APP_VERSION = '2.5.0';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
+  { version:'2.5.0', date:'2026-05-24', de:['Rezeptansicht: 3 Tabs (Zutaten, Zubereitung, Notizen & Log) mit Swipe-Navigation'], en:['Recipe view: 3 tabs (Ingredients, Steps, Notes & Log) with swipe navigation'] },
   { version:'2.4.6', date:'2026-05-16', de:['Wake Lock: Video-Fallback mit opacity:.01 für iOS Safari'], en:['Wake lock: video fallback with opacity:.01 for iOS Safari'] },
   { version:'2.4.5', date:'2026-05-16', de:['Wake Lock: aktiviert beim ersten Tap (iOS Safari Fix)'], en:['Wake lock: activates on first tap (iOS Safari fix)'] },
   { version:'2.4.4', date:'2026-05-16', de:['Firebase: Alles löschen synchronisiert jetzt korrekt','Wake Lock: AudioContext-Fallback für Hermit'], en:['Firebase: clear all now syncs correctly','Wake lock: AudioContext fallback for Hermit'] },
@@ -1613,94 +1619,112 @@ function renderDetail(app){
       </div>`:''}
     </div>
     <div class="d-body">
-      ${ings.length?`<div class="sec">
-        <div class="scale-row">
-          <span class="scale-lbl">${t('det_portions')}</span>
-          <div class="sctrl">
-            <button class="sbtn" onclick="chgSc(-1)">−</button>
-            <span class="sval">${(()=>{const r=Math.round(sc*100)/100;return Number.isInteger(r)?r:r.toFixed(1);})()} ${sc!==1?t('det_portions_pl'):t('det_portion')}</span>
-            <button class="sbtn" onclick="chgSc(1)">+</button>
-          </div>
-          ${sf!==1?`<button onclick="resetSc()" style="background:none;border:none;font-size:.72rem;color:var(--muted);cursor:pointer;padding:.2rem .4rem;font-family:var(--ui)" title="${S.lang==='en'?'Reset to default':'Zurücksetzen'}">↺ ${r.servings}</button>`:''}
-        </div>
-        <div class="st">${t('det_ingredients')}</div>
-        <div id="ingList">
-        ${(()=>{
-          let inSec=false;
-          let html='';
-          ings.forEach((l,i)=>{
-            const t2=l.trim();
-            const isBold=/^\*\*[^*]+:\*\*\s*$/.test(t2);
-            const isColon=t2.endsWith(':')&&t2.length<80&&!t2.match(/^\d/);
-            if(isBold||isColon){
-              if(inSec) html+='</div>';
-              const title=isBold?t2.replace(/^\*\*|\*\*:?\*\*$/,'').replace(/:$/,''):t2.slice(0,-1);
-              const secKey='ingsec'+i;
-              const isOpen=!(S.ingSecState?.[r.id]?.[secKey]);
-              html+=`<div class="step-sec-hdr" data-ingsec="${secKey}" onclick="toggleIngSec('${r.id}','${secKey}')"><span class="step-sec-arr${isOpen?' open':''}">▶</span><span class="step-sec-title">${esc(title)}</span></div><div class="step-sec-body${isOpen?'':' closed'}" id="ingsec_${secKey}">`;
-              inSec=true;
-            } else {
-              const sel=!!(S.ingSelected?.[r.id]||{})[i];
-              html+=`<div class="ing-cb-row${sel?' checked':''}" data-ing="${i}"><div class="ing-cb${sel?' checked':''}">${sel?'✓':''}</div><span class="ing-cb-text${sel?' checked':''}">${esc(scaleI(l,sf))}</span></div>`;
-            }
-          });
-          if(inSec) html+='</div>';
-          return html;
-        })()}
-        </div>
-        <div id="ingAddBar" style="display:none" class="ing-add-bar">
-          <span id="ingAddLabel">0 ausgewählt</span>
-          <span>🛒 In Einkaufsliste →</span>
-        </div>
-      </div>`:''}
-      ${r.steps?`<div class="sec">
-        <div class="st" style="display:flex;justify-content:space-between;align-items:center">
-          <span>Zubereitung</span>
-          ${Object.keys(S.stepsDone[r.id]||{}).length?`<button style="background:none;border:none;font-family:var(--ui);font-size:.72rem;color:var(--faint);cursor:pointer" id="resetSteps">${t('det_reset_steps')}</button>`:''}
-        </div>
-        <div id="stepsList">${renderStepSections(r.steps, S.stepsDone[r.id]||{}, S.stepSections?.[r.id]||{})}</div>
-      </div>`:''}
-      ${r.notes?`<div class="nb2"><div class="nbl2">📝 Notizen</div><div class="nbt2" style="white-space:pre-wrap">${esc(r.notes)}</div></div>`:''}
-      <hr>
-      <!-- Erfahrungen -->
-      <div style="margin-bottom:.8rem">
-        <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-family:var(--font);font-weight:700;margin-bottom:.6rem">📓 Erfahrungen</div>
-        ${(r.experiences||[]).length===0?`<div style="font-size:.78rem;color:var(--faint);font-family:var(--font);font-style:italic;margin-bottom:.6rem">Noch keine Erfahrungen eingetragen.</div>`:''}
-        <div id="expList">
-          ${(r.experiences||[]).map((e,i)=>`
-            <div class="exp-item" data-expidx="${i}" style="display:flex;align-items:flex-start;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--border)">
-              <span style="color:var(--accent);font-size:.9rem;flex-shrink:0;margin-top:.15rem">·</span>
-              <div style="flex:1;min-width:0">
-                <div id="exp-text-${i}" style="font-size:.88rem;color:var(--text2);line-height:1.6">${esc(e.text)}</div>
-                <textarea id="exp-edit-${i}" style="display:none;width:100%;font-family:var(--font);font-size:.88rem;border:1px solid var(--border2);border-radius:8px;padding:.4rem .6rem;background:var(--bg);color:var(--text);resize:vertical" rows="2">${esc(e.text)}</textarea>
-                <div style="font-size:.65rem;color:var(--faint);font-family:var(--font);margin-top:.15rem">${new Date(e.date).toLocaleDateString('de-DE')}</div>
-              </div>
-              <div style="display:flex;gap:.3rem;flex-shrink:0">
-                <button class="exp-edit-btn" data-expidx="${i}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;padding:.2rem .3rem" title="Bearbeiten">✏️</button>
-                <button class="exp-save-btn" data-expidx="${i}" style="display:none;background:var(--accent);border:none;color:#fff;cursor:pointer;font-size:.72rem;padding:.2rem .5rem;border-radius:6px;font-family:var(--font)" title="Speichern">OK</button>
-                <button class="exp-del-btn" data-expidx="${i}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;padding:.2rem .3rem" title="Löschen">✕</button>
-              </div>
-            </div>`).join('')}
-        </div>
-        <div style="display:flex;gap:.5rem;margin-top:.7rem;align-items:flex-end">
-          <textarea id="expInp" class="chat-inp" rows="2" placeholder="Neue Erfahrung hinzufügen…" style="flex:1"></textarea>
-          <button id="expAddBtn" class="btn bp sm" style="align-self:flex-end;white-space:nowrap;min-width:80px">+ Hinzufügen</button>
-        </div>
-        <div id="expSavedMsg" style="display:none;font-size:.75rem;color:var(--ok);font-family:var(--font);margin-top:.3rem;font-weight:600">✓ Gespeichert</div>
+      <!-- Tab bar -->
+      <div class="det-tabs">
+        <button class="det-tab${(S.detTab[r.id]||0)===0?' act':''}" onclick="setDetTab('${r.id}',0)">${S.lang==='en'?'Ingredients':'Zutaten'}</button>
+        <button class="det-tab${(S.detTab[r.id]||0)===1?' act':''}" onclick="setDetTab('${r.id}',1)">${S.lang==='en'?'Steps':'Zubereitung'}</button>
+        <button class="det-tab${(S.detTab[r.id]||0)===2?' act':''}" onclick="setDetTab('${r.id}',2)">${S.lang==='en'?'Notes & Log':'Notizen & Log'}</button>
       </div>
-      <!-- Chat / Rückfragen -->
-      <div style="margin-top:1.4rem;border-top:2px solid var(--border);padding-top:1rem;margin-bottom:1rem">
-        <div style="font-size:.74rem;text-transform:uppercase;letter-spacing:2px;color:var(--accent);font-weight:700;font-family:var(--ui);margin-bottom:.8rem">💬 Rückfragen zum Rezept</div>
-        <div class="chat-msgs" id="detailChat"></div>
-        <div style="display:flex;gap:.5rem;align-items:stretch;border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--bg);margin:0 0 .5rem 0">
-          <textarea id="detailChatInp" rows="2" placeholder="z.B. „Kann ich Butter durch Öl ersetzen?"" style="flex:1;border:none;outline:none;background:transparent;font-family:var(--ui);font-size:.88rem;color:var(--text);padding:.7rem .8rem;resize:none;line-height:1.5"></textarea>
-          <button id="detailChatSend" style="background:var(--accent);border:none;color:#fff;padding:0 1rem;cursor:pointer;font-size:1.1rem;flex-shrink:0">↑</button>
+      <!-- Sliding panels -->
+      <div class="det-panels" id="detPanels" style="transform:translateX(-${(S.detTab[r.id]||0)*100}%)">
+        <!-- TAB 0: ZUTATEN -->
+        <div class="det-panel">
+          ${ings.length?`<div class="sec">
+            <div class="scale-row">
+              <span class="scale-lbl">${t('det_portions')}</span>
+              <div class="sctrl">
+                <button class="sbtn" onclick="chgSc(-1)">−</button>
+                <span class="sval">${(()=>{const rv=Math.round(sc*100)/100;return Number.isInteger(rv)?rv:rv.toFixed(1);})()} ${sc!==1?t('det_portions_pl'):t('det_portion')}</span>
+                <button class="sbtn" onclick="chgSc(1)">+</button>
+              </div>
+              ${sf!==1?`<button onclick="resetSc()" style="background:none;border:none;font-size:.72rem;color:var(--muted);cursor:pointer;padding:.2rem .4rem;font-family:var(--ui)">↺ ${r.servings}</button>`:''}
+            </div>
+            <div class="st">${t('det_ingredients')}</div>
+            <div id="ingList">
+            ${(()=>{
+              let inSec=false;
+              let html2='';
+              ings.forEach((l,i)=>{
+                const t2=l.trim();
+                const isBold=/^\*\*[^*]+:\*\*\s*$/.test(t2);
+                const isColon=t2.endsWith(':')&&t2.length<80&&!t2.match(/^\d/);
+                if(isBold||isColon){
+                  if(inSec) html2+='</div>';
+                  const title=isBold?t2.replace(/^\*\*|\*\*:?\*\*$/,'').replace(/:$/,''):t2.slice(0,-1);
+                  const secKey='ingsec'+i;
+                  const isOpen=!(S.ingSecState?.[r.id]?.[secKey]);
+                  html2+=`<div class="step-sec-hdr" data-ingsec="${secKey}" onclick="toggleIngSec('${r.id}','${secKey}')"><span class="step-sec-arr${isOpen?' open':''}">▶</span><span class="step-sec-title">${esc(title)}</span></div><div class="step-sec-body${isOpen?'':' closed'}" id="ingsec_${secKey}">`;
+                  inSec=true;
+                } else {
+                  const sel=!!(S.ingSelected?.[r.id]||{})[i];
+                  html2+=`<div class="ing-cb-row${sel?' checked':''}" data-ing="${i}"><div class="ing-cb${sel?' checked':''}">${sel?'✓':''}</div><span class="ing-cb-text${sel?' checked':''}">${esc(scaleI(l,sf))}</span></div>`;
+                }
+              });
+              if(inSec) html2+='</div>';
+              return html2;
+            })()}
+            </div>
+            <div id="ingAddBar" style="display:none" class="ing-add-bar">
+              <span id="ingAddLabel">0 ausgewählt</span>
+              <span>🛒 In Einkaufsliste →</span>
+            </div>
+          </div>`:'<div style="padding:1rem;color:var(--faint);font-size:.85rem">Keine Zutaten eingetragen.</div>'}
+        </div>
+        <!-- TAB 1: ZUBEREITUNG -->
+        <div class="det-panel">
+          ${r.steps?`<div class="sec">
+            <div class="st" style="display:flex;justify-content:space-between;align-items:center">
+              <span>Zubereitung</span>
+              ${Object.keys(S.stepsDone[r.id]||{}).length?`<button style="background:none;border:none;font-family:var(--ui);font-size:.72rem;color:var(--faint);cursor:pointer" id="resetSteps">${t('det_reset_steps')}</button>`:''}
+            </div>
+            <div id="stepsList">${renderStepSections(r.steps, S.stepsDone[r.id]||{}, S.stepSections?.[r.id]||{})}</div>
+          </div>`:'<div style="padding:1rem;color:var(--faint);font-size:.85rem">Keine Zubereitung eingetragen.</div>'}
+        </div>
+        <!-- TAB 2: NOTIZEN & ERFAHRUNGEN -->
+        <div class="det-panel">
+          ${r.notes?`<div class="nb2"><div class="nbl2">📝 Notizen</div><div class="nbt2" style="white-space:pre-wrap">${esc(r.notes)}</div></div>`:''}
+          <div style="margin-bottom:.8rem">
+            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-family:var(--font);font-weight:700;margin-bottom:.6rem">📓 Erfahrungen</div>
+            ${(r.experiences||[]).length===0?`<div style="font-size:.78rem;color:var(--faint);font-family:var(--font);font-style:italic;margin-bottom:.6rem">Noch keine Erfahrungen eingetragen.</div>`:''}
+            <div id="expList">
+              ${(r.experiences||[]).map((e,i)=>`
+                <div class="exp-item" data-expidx="${i}" style="display:flex;align-items:flex-start;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--border)">
+                  <span style="color:var(--accent);font-size:.9rem;flex-shrink:0;margin-top:.15rem">·</span>
+                  <div style="flex:1;min-width:0">
+                    <div id="exp-text-${i}" style="font-size:.88rem;color:var(--text2);line-height:1.6">${esc(e.text)}</div>
+                    <textarea id="exp-edit-${i}" style="display:none;width:100%;font-family:var(--font);font-size:.88rem;border:1px solid var(--border2);border-radius:8px;padding:.4rem .6rem;background:var(--bg);color:var(--text);resize:vertical" rows="2">${esc(e.text)}</textarea>
+                    <div style="font-size:.65rem;color:var(--faint);font-family:var(--font);margin-top:.15rem">${new Date(e.date).toLocaleDateString('de-DE')}</div>
+                  </div>
+                  <div style="display:flex;gap:.3rem;flex-shrink:0">
+                    <button class="exp-edit-btn" data-expidx="${i}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;padding:.2rem .3rem">✏️</button>
+                    <button class="exp-save-btn" data-expidx="${i}" style="display:none;background:var(--accent);border:none;color:#fff;cursor:pointer;font-size:.72rem;padding:.2rem .5rem;border-radius:6px;font-family:var(--font)">OK</button>
+                    <button class="exp-del-btn" data-expidx="${i}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;padding:.2rem .3rem">✕</button>
+                  </div>
+                </div>`).join('')}
+            </div>
+            <div style="display:flex;gap:.5rem;margin-top:.7rem;align-items:flex-end">
+              <textarea id="expInp" class="chat-inp" rows="2" placeholder="Neue Erfahrung hinzufügen…" style="flex:1"></textarea>
+              <button id="expAddBtn" class="btn bp sm" style="align-self:flex-end;white-space:nowrap;min-width:80px">+ Hinzufügen</button>
+            </div>
+            <div id="expSavedMsg" style="display:none;font-size:.75rem;color:var(--ok);font-family:var(--font);margin-top:.3rem;font-weight:600">✓ Gespeichert</div>
+          </div>
+          <!-- Chat -->
+          <div style="margin-top:1.4rem;border-top:2px solid var(--border);padding-top:1rem;margin-bottom:1rem">
+            <div style="font-size:.74rem;text-transform:uppercase;letter-spacing:2px;color:var(--accent);font-weight:700;font-family:var(--ui);margin-bottom:.8rem">💬 Rückfragen zum Rezept</div>
+            <div class="chat-msgs" id="detailChat"></div>
+            <div style="display:flex;gap:.5rem;align-items:stretch;border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--bg);margin:0 0 .5rem 0">
+              <textarea id="detailChatInp" rows="2" placeholder="z.B. „Kann ich Butter durch Öl ersetzen?"" style="flex:1;border:none;outline:none;background:transparent;font-family:var(--ui);font-size:.88rem;color:var(--text);padding:.7rem .8rem;resize:none;line-height:1.5"></textarea>
+              <button id="detailChatSend" style="background:var(--accent);border:none;color:#fff;padding:0 1rem;cursor:pointer;font-size:1.1rem;flex-shrink:0">↑</button>
+            </div>
+          </div>
         </div>
       </div>
     </div></div>`;
   // Ingredient checkboxes
   if(!S.ingSelected)S.ingSelected={};
   if(!S.ingSelected[r.id])S.ingSelected[r.id]={};
+  // Init swipe between detail tabs
+  initDetSwipe(r.id);
   function updateIngBar(){
     const sel=Object.values(S.ingSelected[r.id]).filter(Boolean).length;
     const bar=document.getElementById('ingAddBar');
@@ -2644,6 +2668,35 @@ const openDetail=id=>{
 const openNew=()=>{S.formData=defForm();S.formTags=[];S.formPhoto=null;S.editId=null;S.view='form';render();scrollTo(0,0);};
 function openEdit(id){const r=S.recipes.find(x=>x.id===id);if(!r)return;S.formData={...r};S.formTags=[...(r.tags||[])];S.formPhoto=null;S.editId=id;S.view='form';render();scrollTo(0,0);}
 function setTag(t){S.filterTag=t;renderApp();}
+function setDetTab(id,tab){
+  S.detTab[id]=tab;
+  // Update panel position without re-render
+  const panels=document.getElementById('detPanels');
+  if(panels)panels.style.transform=`translateX(-${tab*100}%)`;
+  // Update tab buttons
+  document.querySelectorAll('.det-tab').forEach((b,i)=>b.classList.toggle('act',i===tab));
+}
+
+// Swipe between detail tabs
+function initDetSwipe(rid){
+  const panels=document.getElementById('detPanels');
+  if(!panels)return;
+  let tx=0,ty=0,dragging=false;
+  panels.addEventListener('touchstart',e=>{
+    tx=e.touches[0].clientX;ty=e.touches[0].clientY;dragging=true;
+  },{passive:true});
+  panels.addEventListener('touchend',e=>{
+    if(!dragging)return;dragging=false;
+    const dx=e.changedTouches[0].clientX-tx;
+    const dy=e.changedTouches[0].clientY-ty;
+    if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy)*1.5){
+      const cur=S.detTab[rid]||0;
+      const next=dx<0?Math.min(2,cur+1):Math.max(0,cur-1);
+      if(next!==cur)setDetTab(rid,next);
+    }
+  },{passive:true});
+}
+
 function toggleIngSec(recipeId, secKey){
   if(!S.ingSecState[recipeId])S.ingSecState[recipeId]={};
   S.ingSecState[recipeId][secKey]=!S.ingSecState[recipeId][secKey];
