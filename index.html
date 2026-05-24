@@ -1756,7 +1756,7 @@ function renderDetail(app){
                   const title=isBold?t2.replace(/^\*\*|\*\*:?\*\*$/,'').replace(/:$/,''):t2.slice(0,-1);
                   const secKey='ingsec'+i;
                   const isOpen=!(S.ingSecState?.[r.id]?.[secKey]);
-                  html2+=`<div class="step-sec-hdr" data-ingsec="${secKey}" onclick="toggleIngSec('${r.id}','${secKey}')">
+                  html2+=`<div class="step-sec-hdr" data-ingsec="${secKey}">
                     <span class="step-sec-arr${isOpen?' open':''}">▶</span>
                     <span class="step-sec-title">${esc(title)}</span>
                     <button class="ing-toggle-btn" data-ingaction="demote" data-ingline="${esc(title)}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui)">${S.lang==='en'?'↓ Item':'↓ Zutat'}</button>
@@ -1865,6 +1865,13 @@ function renderDetail(app){
       }
       S.recipes=S.recipes.map(x=>x.id===r.id?{...x,ingredients:lines.join('\n')}:x);
       saveR();renderDetail(app);return;
+    }
+    // Handle cluster header click (toggle open/closed)
+    const hdr=e.target.closest('.step-sec-hdr[data-ingsec]');
+    if(hdr){
+      const secKey=hdr.dataset.ingsec;
+      toggleIngSec(r.id, secKey);
+      return;
     }
     const row=e.target.closest('.ing-cb-row');if(!row)return;
     const i=Number(row.dataset.ing);
