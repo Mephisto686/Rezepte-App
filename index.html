@@ -949,7 +949,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.13';
+const APP_VERSION = '2.5.14';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -1756,11 +1756,15 @@ function renderDetail(app){
                   const title=isBold?t2.replace(/^\*\*|\*\*:?\*\*$/,'').replace(/:$/,''):t2.slice(0,-1);
                   const secKey='ingsec'+i;
                   const isOpen=!(S.ingSecState?.[r.id]?.[secKey]);
-                  html2+=`<div class="step-sec-hdr" data-ingsec="${secKey}" onclick="toggleIngSec('${r.id}','${secKey}')"><span class="step-sec-arr${isOpen?' open':''}">▶</span><span class="step-sec-title">${esc(title)}</span></div><div class="step-sec-body${isOpen?'':' closed'}" id="ingsec_${secKey}">`;
+                  html2+=`<div class="step-sec-hdr" data-ingsec="${secKey}" onclick="toggleIngSec('${r.id}','${secKey}')"><span class="step-sec-arr${isOpen?' open':''}">▶</span><span class="step-sec-title">${esc(title)}</span><button class="step-toggle-btn" data-ingaction="demote" data-ingline="${esc(l)}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui);margin-left:auto">${S.lang==='en'?'↓ Item':'↓ Zutat'}</button></div><div class="step-sec-body${isOpen?'':' closed'}" id="ingsec_${secKey}">`;
                   inSec=true;
                 } else {
                   const sel=!!(S.ingSelected?.[r.id]||{})[i];
-                  html2+=`<div class="ing-cb-row${sel?' checked':''}" data-ing="${i}"><div class="ing-cb${sel?' checked':''}">${sel?'✓':''}</div><span class="ing-cb-text${sel?' checked':''}">${esc(scaleI(l,sf))}</span></div>`;
+                  html2+=`<div class="ing-cb-row${sel?' checked':''}" data-ing="${i}" style="position:relative">
+                    <div class="ing-cb${sel?' checked':''}">${sel?'✓':''}</div>
+                    <span class="ing-cb-text${sel?' checked':''}">${esc(scaleI(l,sf))}</span>
+                    <button class="step-toggle-btn" data-ingaction="promote" data-ingline="${esc(l)}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.6rem;cursor:pointer;padding:.1rem .3rem;flex-shrink:0;font-family:var(--ui);opacity:.5;margin-left:auto">${S.lang==='en'?'↑ Header':'↑ Titel'}</button>
+                  </div>`;
                 }
               });
               if(inSec) html2+='</div>';
@@ -1838,6 +1842,26 @@ function renderDetail(app){
     if(bar){bar.style.display=sel>0?'flex':'none';document.getElementById('ingAddLabel').textContent=sel+' ausgewählt';}
   }
   document.getElementById('ingList')?.addEventListener('click',e=>{
+    // Handle promote/demote buttons
+    const toggleBtn=e.target.closest('[data-ingaction]');
+    if(toggleBtn){
+      e.stopPropagation();
+      const action=toggleBtn.dataset.ingaction;
+      const line=toggleBtn.dataset.ingline;
+      let lines=(r.ingredients||'').split('\n');
+      if(action==='promote'){
+        lines=lines.map(l=>l.trim()===line.trim()?`**${l.trim()}:**`:l);
+      } else {
+        lines=lines.map(l=>{
+          const t2=l.trim();
+          if(t2===`**${line.trim()}**`||t2===`**${line.trim()}:**`)return line.trim().replace(/^\*\*|\*\*:?\*\*$/g,'').replace(/:$/,'');
+          if(t2===line.trim()+':')return l.replace(/:$/,'');
+          return l;
+        });
+      }
+      S.recipes=S.recipes.map(x=>x.id===r.id?{...x,ingredients:lines.join('\n')}:x);
+      saveR();renderDetail(app);return;
+    }
     const row=e.target.closest('.ing-cb-row');if(!row)return;
     const i=Number(row.dataset.ing);
     S.ingSelected[r.id][i]=!S.ingSelected[r.id][i];
