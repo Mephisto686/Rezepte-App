@@ -949,7 +949,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.12';
+const APP_VERSION = '2.5.13';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -1726,12 +1726,11 @@ function renderDetail(app){
       <!-- Tab bar -->
       <div class="det-tabs">
         <button class="det-tab${(S.detTab[r.id]||0)===0?' act':''}" onclick="setDetTab('${r.id}',0)">${S.lang==='en'?'Ingredients':'Zutaten'}</button>
-        <button class="det-tab${(S.detTab[r.id]||0)===1?' act':''}" onclick="setDetTab('${r.id}',1)">${S.lang==='en'?'Steps':'Zubereitung'}</button>
-        <button class="det-tab${(S.detTab[r.id]||0)===2?' act':''}" onclick="setDetTab('${r.id}',2)">${S.lang==='en'?'Notes & Log':'Notizen & Log'}</button>
+        <button class="det-tab${(S.detTab[r.id]||0)===1?' act':''}" onclick="setDetTab('${r.id}',1)">${S.lang==='en'?'Steps & Log':'Zubereitung & Log'}</button>
       </div>
       <!-- Sliding panels via CSS scroll snap -->
       <div class="det-panels" id="detPanels">
-        <!-- TAB 0: ZUTATEN -->
+        <!-- TAB 0: ZUTATEN + NOTIZEN -->
         <div class="det-panel" style="padding:1rem 1.3rem 5rem">
           ${ings.length?`<div class="sec">
             <div class="scale-row">
@@ -1773,8 +1772,9 @@ function renderDetail(app){
               <span>🛒 In Einkaufsliste →</span>
             </div>
           </div>`:'<div style="padding:1rem;color:var(--faint);font-size:.85rem">Keine Zutaten eingetragen.</div>'}
+          ${r.notes?`<div class="nb2" style="margin-top:1.2rem;margin-bottom:.5rem"><div class="nbl2">📝 Notizen</div><div class="nbt2" style="white-space:pre-wrap">${esc(r.notes)}</div></div>`:''}
         </div>
-        <!-- TAB 1: ZUBEREITUNG -->
+        <!-- TAB 1: ZUBEREITUNG + ERFAHRUNGEN + CHAT -->
         <div class="det-panel" style="padding:1rem 1.3rem 5rem">
           ${r.steps?`<div class="sec">
             <div class="st" style="display:flex;justify-content:space-between;align-items:center">
@@ -1783,11 +1783,8 @@ function renderDetail(app){
             </div>
             <div id="stepsList">${renderStepSections(r.steps, S.stepsDone[r.id]||{}, S.stepSections?.[r.id]||{})}</div>
           </div>`:'<div style="padding:1rem;color:var(--faint);font-size:.85rem">Keine Zubereitung eingetragen.</div>'}
-        </div>
-        <!-- TAB 2: NOTIZEN & ERFAHRUNGEN -->
-        <div class="det-panel" style="padding:1rem 1.3rem 5rem">
-          ${r.notes?`<div class="nb2" style="margin-bottom:1.4rem"><div class="nbl2">📝 Notizen</div><div class="nbt2" style="white-space:pre-wrap">${esc(r.notes)}</div></div>`:''}
-          <div style="margin-bottom:.8rem">
+          <!-- Erfahrungen -->
+          <div style="margin-top:1.4rem;border-top:2px solid var(--border);padding-top:1rem;margin-bottom:.8rem">
             <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-family:var(--font);font-weight:700;margin-bottom:.6rem">📓 Erfahrungen</div>
             ${(r.experiences||[]).length===0?`<div style="font-size:.78rem;color:var(--faint);font-family:var(--font);font-style:italic;margin-bottom:.6rem">Noch keine Erfahrungen eingetragen.</div>`:''}
             <div id="expList">
