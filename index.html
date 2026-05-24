@@ -65,7 +65,6 @@ body{display:flex;flex-direction:column;min-height:100dvh;overscroll-behavior:no
 
 /* CONTENT */
 .page{flex:1;overflow-y:auto;padding:1rem;padding-bottom:1.5rem;max-width:800px;width:100%;margin:0 auto}
-.page.det-view{overflow:hidden;padding:0}
 
 /* BUTTONS */
 .btn{font-family:var(--font);cursor:pointer;border-radius:24px;font-size:.82rem;padding:.46rem .95rem;
@@ -184,7 +183,7 @@ body{display:flex;flex-direction:column;min-height:100dvh;overscroll-behavior:no
 .det-tab.act{color:var(--accent);border-bottom-color:var(--accent)}
 .det-panels{display:flex;overflow-x:scroll;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;scroll-behavior:smooth;overscroll-behavior-x:contain}
 .det-panels::-webkit-scrollbar{display:none}
-.det-panel{flex:0 0 100%;width:100%;scroll-snap-align:start;box-sizing:border-box;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.det-panel{flex:0 0 100%;width:100%;scroll-snap-align:start;box-sizing:border-box}
 .st{color:var(--accent);font-size:.74rem;text-transform:uppercase;letter-spacing:2px;margin-bottom:.65rem;padding-bottom:.35rem;border-bottom:2px solid var(--border);font-family:var(--ui);font-weight:700}
 .sec{margin-bottom:1.4rem}
 .ir{display:flex;gap:.5rem;align-items:flex-start;padding:.07rem 0;line-height:1.85;font-size:.92rem;color:var(--text2)}
@@ -950,7 +949,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.11';
+const APP_VERSION = '2.5.12';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -1170,8 +1169,6 @@ function defForm(){return{title:'',category:getCats()[getCats().length-1]||'Sons
 
 // ══════════════ RENDER ══════════════
 function render(){
-  const page=document.querySelector('.page');
-  if(page)page.classList.toggle('det-view',S.view==='detail');
   renderHdr();renderApp();renderNav();
 }
 
@@ -1832,17 +1829,12 @@ function renderDetail(app){
   if(!S.ingSelected[r.id])S.ingSelected[r.id]={};
   // Restore tab scroll position after render
   const _tab=S.detTab[r.id]||0;
-  requestAnimationFrame(()=>{
-    const p=document.getElementById('detPanels');
-    if(!p)return;
-    // Set panel height to fill remaining viewport
-    const rect=p.getBoundingClientRect();
-    const h=window.innerHeight-rect.top-56; // 56 = bottom nav height
-    p.style.height=h+'px';
-    p.querySelectorAll('.det-panel').forEach(el=>el.style.height=h+'px');
-    // Restore tab position
-    if(_tab>0)p.scrollLeft=_tab*p.offsetWidth;
-  });
+  if(_tab>0){
+    requestAnimationFrame(()=>{
+      const p=document.getElementById('detPanels');
+      if(p)p.scrollLeft=_tab*p.offsetWidth;
+    });
+  }
   function updateIngBar(){
     const sel=Object.values(S.ingSelected[r.id]).filter(Boolean).length;
     const bar=document.getElementById('ingAddBar');
