@@ -701,45 +701,45 @@ function fbUrl(){
 
 function showFirebaseHelp(){
   const ov=document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:400;padding:1rem';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;z-index:400;padding:0';
   const md=document.createElement('div');
-  md.style.cssText='background:var(--surface);border-radius:16px;padding:1.4rem;width:100%;max-width:520px;max-height:90dvh;overflow-y:auto;font-family:var(--font)';
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.4rem 1.2rem 2.5rem;width:100%;max-height:90dvh;overflow-y:auto;font-family:var(--font)';
   md.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-      <div style="font-size:1rem;font-weight:700">🔴 Firebase einrichten</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem">
+      <div style="font-size:1rem;font-weight:700">🔄 Firebase einrichten</div>
       <button id="fbhClose" style="background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:pointer">✕</button>
     </div>
-    <div style="font-size:.82rem;line-height:1.8;color:var(--text2)">
+    <div style="font-size:.83rem;line-height:1.75;color:var(--text2)">
+
       <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Was ist Firebase?</div>
-      <p style="margin-bottom:.8rem">Ein kostenloser Google-Dienst der deine Einkaufsliste in Echtzeit mit anderen synchronisiert. Alle sehen Änderungen sofort – kein manuelles Teilen mehr.</p>
-      
+      <p style="margin-bottom:1rem">Ein kostenloser Google-Dienst der deine Einkaufsliste und Rezepte in Echtzeit mit anderen synchronisiert. Alle sehen Änderungen sofort.</p>
+
       <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 1 – Konto & Projekt</div>
       <p style="margin-bottom:.4rem">Öffne <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a> und melde dich mit einem Google-Konto an.</p>
-      <p style="margin-bottom:.8rem">Klicke auf <strong>„Projekt erstellen"</strong> → Namen vergeben (z.B. „Meine-Einkaufsliste") → Google Analytics deaktivieren → <strong>„Projekt erstellen"</strong>.</p>
-      
-      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 2 – Realtime Database</div>
-      <p style="margin-bottom:.4rem">Im linken Menü auf <strong>„Erstellen" → „Realtime Database"</strong> klicken.</p>
-      <p style="margin-bottom:.4rem">Auf <strong>„Datenbank erstellen"</strong> → Region <strong>Europe-west1</strong> wählen → <strong>„Im Testmodus starten"</strong> → <strong>„Aktivieren"</strong>.</p>
-      <p style="margin-bottom:.8rem">⚠️ Im Testmodus ist die Datenbank 30 Tage offen. Danach Regeln anpassen (Schritt 4).</p>
-      
+      <p style="margin-bottom:1rem">Klicke auf <strong>„Projekt erstellen"</strong> → Namen vergeben → Google Analytics deaktivieren → <strong>„Projekt erstellen"</strong>.</p>
+
+      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 2 – Realtime Database aktivieren</div>
+      <p style="margin-bottom:.4rem">Im linken Menü: <strong>„Erstellen" → „Realtime Database"</strong> klicken.</p>
+      <p style="margin-bottom:.4rem"><strong>„Datenbank erstellen"</strong> → Region <strong>Europe-west1</strong> wählen → <strong>„Im Testmodus starten"</strong> → <strong>„Aktivieren"</strong>.</p>
+      <p style="margin-bottom:1rem">⚠️ Testmodus ist 30 Tage offen. Danach Regeln anpassen (→ Schritt 4).</p>
+
       <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 3 – Database URL kopieren</div>
-      <p style="margin-bottom:.4rem">Klicke auf <strong>„Data"</strong> (Tab oben). Ganz oben steht die URL, z.B.:</p>
-      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.72rem;color:var(--ok);margin-bottom:.4rem;word-break:break-all">https://meine-einkaufsliste-abc12-default-rtdb.europe-west1.firebasedatabase.app</div>
-      <p style="margin-bottom:.8rem">Diese <strong>vollständige URL</strong> (nicht die Projekt-ID!) in der App unter <strong>„Live-Sync" → URL-Feld</strong> eintragen.</p>
-      
+      <p style="margin-bottom:.4rem">Klicke auf den <strong>„Data"</strong>-Tab. Ganz oben steht die URL:</p>
+      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.72rem;color:var(--ok);margin-bottom:.5rem;word-break:break-all">https://mein-projekt-default-rtdb.<wbr>europe-west1.firebasedatabase.app</div>
+      <p style="margin-bottom:1rem">Diese <strong>vollständige URL</strong> in der App unter <strong>Mehr → Einstellungen → Synchronisation</strong> eintragen und auf <strong>„Speichern"</strong> tippen.</p>
+
       <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 4 – Regeln nach 30 Tagen</div>
-      <p style="margin-bottom:.4rem">Gehe zu <strong>Realtime Database → Regeln</strong>.<br>Ersetze den gesamten Inhalt durch (gilt für Einkaufsliste + Rezepte + Fotos):</p>
-      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.72rem;color:var(--ok);margin-bottom:.8rem;white-space:pre">{"rules":{"shopping":{".read":true,".write":true},"recipes":{".read":true,".write":true},"photos":{".read":true,".write":true}}}</div>
-      
-      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 5 – Mit anderen teilen</div>
-      <p style="margin-bottom:.5rem">Alle mit denen du einkaufst oder kochst – Partner, Partnerin, Freunde, Familie – tragen dieselbe <strong>Database URL</strong> in ihrer App ein und aktivieren die gewünschten Sync-Optionen.</p>
-      <div style="background:var(--surface2);border-radius:10px;padding:.7rem .9rem;margin-bottom:.8rem;font-size:.8rem;line-height:1.8">
-        <div style="font-weight:700;margin-bottom:.3rem">Welche Sync-Optionen gibt es?</div>
-        <div>🔴 <strong>Live-Sync Einkaufsliste</strong> – synchronisiert die Einkaufsliste in Echtzeit (alle 5 Sek.). Ideal fürs gemeinsame Einkaufen.</div>
-        <div style="margin-top:.4rem">📖 <strong>Rezepte synchronisieren</strong> – erscheint nur wenn Live-Sync aktiv ist. Synchronisiert alle Rezepte inkl. Fotos. Beim ersten Mal: <strong>⬆ Meine Rezepte hochladen</strong> tippen, damit andere die Rezepte bekommen. Die andere Person tippt dann <strong>⬇ Aus Cloud herunterladen</strong>.</div>
+      <p style="margin-bottom:.4rem">Gehe zu <strong>Realtime Database → Regeln</strong> und ersetze alles durch:</p>
+      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.68rem;color:var(--ok);margin-bottom:1rem;word-break:break-all">{"rules":{"shopping":{".read":true,".write":true},"recipes":{".read":true,".write":true},"photos":{".read":true,".write":true}}}</div>
+
+      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 5 – Sync-Optionen wählen & teilen</div>
+      <p style="margin-bottom:.5rem">Alle anderen (Partner, Freunde, Familie) tragen dieselbe URL ein und aktivieren die gewünschten Optionen:</p>
+      <div style="background:var(--surface2);border-radius:10px;padding:.8rem;margin-bottom:1rem;display:flex;flex-direction:column;gap:.6rem">
+        <div><span style="font-size:.9rem">🛒</span> <strong>Einkaufsliste</strong><br><span style="color:var(--muted)">Echtzeit-Sync alle 5 Sek. – ideal fürs gemeinsame Einkaufen.</span></div>
+        <div style="border-top:1px solid var(--border);padding-top:.6rem"><span style="font-size:.9rem">📖</span> <strong>Rezepte (inkl. Fotos)</strong><br><span style="color:var(--muted)">Beim ersten Mal: Person A tippt <strong>⬆ Hochladen</strong>, Person B tippt <strong>⬇ Herunterladen</strong>. Danach automatisch alle 60 Sek.</span></div>
       </div>
-      
-      <div style="background:var(--surface2);border-radius:8px;padding:.7rem;font-size:.75rem;color:var(--muted)">💡 <strong>Kostenlos:</strong> Bis 1 GB Speicher – reicht für hunderte Rezepte inkl. Fotos und die Einkaufsliste. Keine versteckten Kosten.</div>
+
+      <div style="background:var(--surface2);border-radius:8px;padding:.7rem;font-size:.78rem;color:var(--muted)">💡 <strong>Kostenlos:</strong> Bis 1 GB – reicht für hunderte Rezepte inkl. Fotos. Keine versteckten Kosten.</div>
     </div>`;
   ov.appendChild(md);document.body.appendChild(ov);
   md.querySelector('#fbhClose').onclick=()=>document.body.removeChild(ov);
@@ -841,18 +841,29 @@ async function fbPullAllRecipes(showToast=false){
     }
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
-    if(!data){if(showToast)toast(S.lang==='en'?'Cloud is empty':'Cloud ist leer');return;}
+    if(!data){if(showToast)toast(S.lang==='en'?'Cloud is empty – upload your recipes first':'Cloud ist leer – Rezepte erst hochladen');return;}
     const remoteRecipes=Object.values(data);
-    // Merge: keep newer version of each recipe
+    // Build map from local recipes
     const localMap={};
     S.recipes.forEach(r=>{localMap[r.id]=r;});
     let changed=false;
     for(const remote of remoteRecipes){
       const local=localMap[remote.id];
-      if(!local||(remote._updatedAt||0)>(local._updatedAt||0)){
+      // Manual download (showToast=true): remote always wins
+      // Auto-poll: only update if remote is newer
+      const remoteWins=showToast||(remote._updatedAt||0)>=(local?._updatedAt||0);
+      if(!local||remoteWins){
         localMap[remote.id]=remote;
         changed=true;
       }
+    }
+    // Remove local recipes that don't exist in remote (only on manual download)
+    if(showToast){
+      const remoteIds=new Set(remoteRecipes.map(r=>r.id));
+      Object.keys(localMap).forEach(id=>{
+        if(!remoteIds.has(id))delete localMap[id];
+      });
+      changed=true;
     }
     if(changed){
       S.recipes=Object.values(localMap);
@@ -938,7 +949,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.9';
+const APP_VERSION = '2.5.10';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
