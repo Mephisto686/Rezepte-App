@@ -181,9 +181,9 @@ body{display:flex;flex-direction:column;min-height:100dvh;overscroll-behavior:no
 .det-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:10}
 .det-tab{flex:1;padding:.6rem .2rem;text-align:center;font-size:.76rem;font-family:var(--ui);font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s}
 .det-tab.act{color:var(--accent);border-bottom-color:var(--accent)}
-.det-panels{display:flex;overflow-x:scroll;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;scroll-behavior:smooth}
+.det-panels{display:flex;overflow-x:scroll;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;scroll-behavior:smooth;touch-action:pan-x}
 .det-panels::-webkit-scrollbar{display:none}
-.det-panel{flex:0 0 100%;width:100%;scroll-snap-align:start;padding:1rem 1.3rem 2rem;box-sizing:border-box;min-height:50dvh}
+.det-panel{flex:0 0 100%;width:100%;scroll-snap-align:start;padding:1rem 1.3rem 2rem;box-sizing:border-box;min-height:50dvh;touch-action:pan-y}
 .st{color:var(--accent);font-size:.74rem;text-transform:uppercase;letter-spacing:2px;margin-bottom:.65rem;padding-bottom:.35rem;border-bottom:2px solid var(--border);font-family:var(--ui);font-weight:700}
 .sec{margin-bottom:1.4rem}
 .ir{display:flex;gap:.5rem;align-items:flex-start;padding:.07rem 0;line-height:1.85;font-size:.92rem;color:var(--text2)}
@@ -934,7 +934,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.7';
+const APP_VERSION = '2.5.8';
 const APP_DATE = '2026-05-10';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -2491,35 +2491,44 @@ function renderSettings(app){
         <button class="btn bg sm" style="margin-top:.5rem" onclick="saveEdamam()">${t('btn_save_keys')}</button>
       </div>`:''}
     </div>
-    <div class="ss"><div class="st2">🔴 Live-Sync Einkaufsliste</div>
-      <div class="sr2">
-        <div>
-          <div class="sl" style="display:flex;align-items:center;gap:.5rem">${S.lang==='en'?'Firebase Real-time Sync':'Firebase Echtzeit-Sync'} <button onclick="showFirebaseHelp()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:50%;width:18px;height:18px;font-size:.65rem;cursor:pointer;color:var(--muted);line-height:1;flex-shrink:0;padding:0">?</button></div>
-          <div class="ss2">${S.lang==='en'?'Share your shopping list live with your partner. Both need the same Database URL.':'Einkaufsliste live mit Partner teilen. Beide brauchen dieselbe Datenbank-URL.'}</div>
+    <div class="ss"><div class="st2" style="display:flex;align-items:center;gap:.5rem">🔄 Synchronisation <button onclick="showFirebaseHelp()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:50%;width:18px;height:18px;font-size:.65rem;cursor:pointer;color:var(--muted);line-height:1;flex-shrink:0;padding:0">?</button></div>
+      <!-- URL input – always visible -->
+      <div style="margin-bottom:.9rem">
+        <div class="sl">${S.lang==='en'?'Firebase Database URL':'Firebase Datenbank-URL'}</div>
+        <div class="ss2" style="margin:.3rem 0 .5rem">${S.lang==='en'?'Free setup at':'Kostenlos einrichten auf'} <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a> → Realtime Database → Data-Tab</div>
+        <div style="display:flex;gap:.4rem;align-items:center">
+          <input class="aki" type="text" id="firebaseIdInp" value="${esc(S.firebaseId)}" placeholder="https://projekt-default-rtdb.europe-west1.firebasedatabase.app" style="flex:1;min-width:0">
+          <button class="btn bg sm" onclick="saveFirebase()" style="flex-shrink:0">${S.lang==='en'?'Save':'Speichern'}</button>
         </div>
-        <button class="tgl${S.firebaseEnabled?' on':''}" id="firebasetgl"></button>
+        ${S.firebaseId?`<div style="font-size:.7rem;color:var(--ok);margin-top:.3rem;font-family:var(--ui)">✓ ${S.lang==='en'?'Connected':'Verbunden'}</div>`:''}
       </div>
-      ${S.firebaseEnabled?`<div class="sr2" style="flex-direction:column;align-items:flex-start;margin-top:.3rem">
-        <div class="ss2" style="margin-bottom:.4rem">${S.lang==='en'?'Create free project at':'Kostenloses Projekt erstellen auf'} <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a> → Realtime Database → ${S.lang==='en'?'copy the Database URL from the Data tab':'Database-URL aus dem Data-Tab kopieren'}</div>
-        <input class="aki" type="text" id="firebaseIdInp" value="${esc(S.firebaseId)}" placeholder="https://mein-projekt-default-rtdb.europe-west1.firebasedatabase.app" style="width:100%">
-        <button class="btn bg sm" style="margin-top:.5rem" onclick="saveFirebase()">${S.lang==='en'?'Save & connect':'Speichern & verbinden'}</button>
-        ${S.firebaseId?`<div style="font-size:.7rem;color:var(--ok);margin-top:.35rem;font-family:var(--ui)">✓ ${S.lang==='en'?'Connected to':'Verbunden mit'}: ${esc(S.firebaseId)}</div>`:''}
-      </div>`:''}
+      <!-- Option 1: Shopping list -->
+      <div style="border-top:1px solid var(--border);padding-top:.8rem;margin-bottom:.8rem">
+        <div class="sr2" style="margin-bottom:.3rem">
+          <div>
+            <div class="sl">🛒 ${S.lang==='en'?'Shopping list live sync':'Einkaufsliste live synchronisieren'}</div>
+            <div class="ss2">${S.lang==='en'?'Real-time – changes appear instantly on all devices. Ideal for shopping together.':'Echtzeit – Änderungen erscheinen sofort auf allen Geräten. Ideal fürs gemeinsame Einkaufen.'}</div>
+          </div>
+          <button class="tgl${S.firebaseEnabled?' on':''}" id="firebasetgl"></button>
+        </div>
+        ${!S.firebaseId?`<div style="font-size:.72rem;color:var(--danger);font-family:var(--ui)">⚠ ${S.lang==='en'?'Enter Database URL first':'Zuerst Datenbank-URL eintragen'}</div>`:''}
+      </div>
+      <!-- Option 2: Recipe sync -->
+      <div style="border-top:1px solid var(--border);padding-top:.8rem">
+        <div class="sr2" style="margin-bottom:.3rem">
+          <div>
+            <div class="sl">📖 ${S.lang==='en'?'Recipe sync (incl. photos)':'Rezepte synchronisieren (inkl. Fotos)'}</div>
+            <div class="ss2">${S.lang==='en'?'Syncs every 60s + on save. First time: tap ⬆ Upload, others tap ⬇ Download. Careful – overwrites older recipes.':'Sync alle 60 Sek. + beim Speichern. Beim ersten Mal: ⬆ Hochladen tippen, andere tippen ⬇ Herunterladen. Vorsicht – überschreibt ältere Rezepte.'}</div>
+          </div>
+          <button class="tgl${S.recipesSyncEnabled?' on':''}" id="recipeSynctgl"></button>
+        </div>
+        ${S.recipesSyncEnabled?`<div style="display:flex;gap:.5rem;margin-top:.4rem;flex-wrap:wrap">
+          <button class="btn bg sm" onclick="fbPushAllRecipes(true)">⬆ ${S.lang==='en'?'Upload my recipes':'Meine Rezepte hochladen'}</button>
+          <button class="btn bg sm" onclick="fbPullAllRecipes(true)">⬇ ${S.lang==='en'?'Download from cloud':'Aus Cloud herunterladen'}</button>
+        </div>`:''}
+        ${!S.firebaseId?`<div style="font-size:.72rem;color:var(--danger);font-family:var(--ui)">⚠ ${S.lang==='en'?'Enter Database URL first':'Zuerst Datenbank-URL eintragen'}</div>`:''}
+      </div>
     </div>
-    <!-- Recipe sync toggle - independent of shopping sync -->
-    ${S.firebaseEnabled&&S.firebaseId?`<div class="ss">
-      <div class="sr2">
-        <div>
-          <div class="sl">📖 ${S.lang==='en'?'Recipe Sync (incl. Photos)':'Rezepte synchronisieren (inkl. Fotos)'}</div>
-          <div class="ss2">${S.lang==='en'?'Sync all recipes and photos. Use carefully – overwrites on all devices.':'Alle Rezepte & Fotos synchronisieren. Vorsicht – überschreibt auf allen Geräten.'}</div>
-        </div>
-        <button class="tgl${S.recipesSyncEnabled?' on':''}" id="recipeSynctgl"></button>
-      </div>
-      ${S.recipesSyncEnabled?`<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">
-        <button class="btn bg sm" onclick="fbPushAllRecipes(true)">${S.lang==='en'?'⬆ Upload my recipes':'⬆ Meine Rezepte hochladen'}</button>
-        <button class="btn bg sm" onclick="fbPullAllRecipes(true)">${S.lang==='en'?'⬇ Download from cloud':'⬇ Aus Cloud herunterladen'}</button>
-      </div>`:''}
-    </div>`:''}
     <div class="ss"><div class="st2">${t('set_data')}</div>
       <div class="sr2"><div><div class="sl">${t('set_compress')}</div><div class="ss2">${t('set_compress_hint')}</div></div><button class="btn bg sm" onclick="recompressAllPhotos()">${t('btn_compress')}</button></div>
       <div class="sr2"><div><div class="sl">${t('set_backup')}</div><div class="ss2">${t('set_backup_hint')}</div></div>
