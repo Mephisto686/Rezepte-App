@@ -2106,21 +2106,6 @@ function renderDetail(app){
   }
   chatSend?.addEventListener('click',sendDetailChat);
   chatInp?.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendDetailChat();}});
-
-  // Swipe right to go back - attach to document for reliability
-  let _sx=0,_sy=0,_swiping=false;
-  function _onTouchStart(e){_sx=e.touches[0].clientX;_sy=e.touches[0].clientY;_swiping=true;}
-  function _onTouchEnd(e){
-    if(!_swiping)return;_swiping=false;
-    const dx=e.changedTouches[0].clientX-_sx;
-    const dy=Math.abs(e.changedTouches[0].clientY-_sy);
-    if(dx>80&&dy<60){
-      if(S.view==='detail'){document.removeEventListener('touchstart',_onTouchStart);document.removeEventListener('touchend',_onTouchEnd);goList();}
-      else if(S.view==='form'){document.removeEventListener('touchstart',_onTouchStart);document.removeEventListener('touchend',_onTouchEnd);S.editId?openDetail(S.editId):goList();}
-    }
-  }
-  document.addEventListener('touchstart',_onTouchStart,{passive:true});
-  document.addEventListener('touchend',_onTouchEnd,{passive:true});
 }
 
 // FORM VIEW
