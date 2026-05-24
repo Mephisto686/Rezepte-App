@@ -877,7 +877,8 @@ async function fbPullAllRecipes(showToast=false){
         }
       }
       await saveR();
-      if(S.view==='list'||S.view==='detail')renderApp();
+      // Only re-render list view – never interrupt the user while cooking/reading a recipe
+      if(S.view==='list')renderApp();
       renderNav();
     }
     if(showToast)toast(S.lang==='en'?`✓ ${remoteRecipes.length} recipes downloaded`:`✓ ${remoteRecipes.length} Rezepte heruntergeladen`);
@@ -949,10 +950,21 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.14';
-const APP_DATE = '2026-05-10';
+const APP_VERSION = '2.5.16';
+const APP_DATE = '2026-05-24';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
+  { version:'2.5.16', date:'2026-05-24', de:['Rezept-Sync: kein Re-Render beim Kochen (nur in Listenansicht)'], en:['Recipe sync: no re-render while cooking (list view only)'] },
+  { version:'2.5.15', date:'2026-05-24', de:['Swipe-Fix: Alter doppelter Handler in renderDetail entfernt'], en:['Swipe fix: removed old duplicate handler in renderDetail'] },
+  { version:'2.5.14', date:'2026-05-24', de:['Zutaten Promote/Demote: exakt wie Zubereitung implementiert'], en:['Ingredients promote/demote: implemented exactly like steps'] },
+  { version:'2.5.13', date:'2026-05-24', de:['Nur 2 Tabs: Zutaten+Notizen / Zubereitung+Log'], en:['2 tabs: Ingredients+Notes / Steps+Log'] },
+  { version:'2.5.12', date:'2026-05-24', de:['Swipe: overscroll-behavior-x:contain für horizontale Tab-Navigation'], en:['Swipe: overscroll-behavior-x:contain for horizontal tab navigation'] },
+  { version:'2.5.11', date:'2026-05-24', de:['Swipe: .page overflow:hidden im Detail-View (wurde wieder rückgängig gemacht)'], en:['Swipe: .page overflow:hidden in detail view (reverted)'] },
+  { version:'2.5.10', date:'2026-05-24', de:['Firebase: Alles löschen synchronisiert korrekt (null = leere Liste)','Rezept-Download: 404 = Cloud leer (kein Fehler)'], en:['Firebase: clear all syncs correctly','Recipe download: 404 = cloud empty'] },
+  { version:'2.5.9', date:'2026-05-24', de:['Swipe CSS Scroll Snap + JS Back-Swipe neu implementiert','Sync-Einstellungen: eine Sektion mit URL und zwei unabhängigen Optionen'], en:['Swipe: CSS scroll snap + JS back-swipe','Sync settings restructured'] },
+  { version:'2.5.8', date:'2026-05-24', de:['Merge-Fix: manueller Download überschreibt lokal, Auto-Poll merged'], en:['Merge fix: manual download overwrites local'] },
+  { version:'2.5.6', date:'2026-05-24', de:['Firebase Hilfe-Modal: Sheet-Design, bessere Anleitung'], en:['Firebase help modal: sheet design, improved guide'] },
+  { version:'2.5.5', date:'2026-05-24', de:['Firebase Option C: Rezepte & Fotos synchronisieren'], en:['Firebase Option C: sync recipes & photos'] },
   { version:'2.5.0', date:'2026-05-24', de:['Rezeptansicht: 3 Tabs (Zutaten, Zubereitung, Notizen & Log) mit Swipe-Navigation'], en:['Recipe view: 3 tabs (Ingredients, Steps, Notes & Log) with swipe navigation'] },
   { version:'2.4.6', date:'2026-05-16', de:['Wake Lock: Video-Fallback mit opacity:.01 für iOS Safari'], en:['Wake lock: video fallback with opacity:.01 for iOS Safari'] },
   { version:'2.4.5', date:'2026-05-16', de:['Wake Lock: aktiviert beim ersten Tap (iOS Safari Fix)'], en:['Wake lock: activates on first tap (iOS Safari fix)'] },
