@@ -625,7 +625,7 @@ async function load(){
     const photoMap = {};
     photos.forEach(p => photoMap[p.id] = p.data);
     S.recipes = recipes.map(r => ({...r, photo: photoMap[r.id]||null}));
-    if(!S.recipes.length) S.recipes = SAMPLE;
+    // No sample fallback – empty list is fine
     S.shopping = shopping || [];
     // mealPlan: {date: {date:'2026-05-12', meals:[{id,recipeId}]}}
     S.mealPlan = {};
@@ -633,7 +633,7 @@ async function load(){
   }catch(e){
     console.warn('IndexedDB load failed, falling back:', e);
     // Fallback to localStorage or SAMPLE
-    try{const r=localStorage.getItem('mrv3');S.recipes=r?JSON.parse(r):SAMPLE;}catch{S.recipes=SAMPLE;}
+    try{const r=localStorage.getItem('mrv3');S.recipes=r?JSON.parse(r):[];}catch{S.recipes=[];}
     try{const sh=localStorage.getItem('mrsh');S.shopping=JSON.parse(sh)||[];}catch{S.shopping=[];}
   }
 }
@@ -980,10 +980,11 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.19';
+const APP_VERSION = '2.5.20';
 const APP_DATE = '2026-05-25';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
+  { version:'2.5.20', date:'2026-05-25', de:['Beispielrezept entfernt (kein SAMPLE-Fallback)','Alle löschen: schreibt Tombstones und leert Firebase'], en:['Removed sample recipe fallback','Delete all: writes tombstones and clears Firebase'] },
   { version:'2.5.19', date:'2026-05-25', de:['Lösch-Sync-Fix: kein Re-Push nach Tombstone/Poll – verhindert Wiederherstellung gelöschter Rezepte'], en:['Delete sync fix: no re-push after tombstone/poll – prevents restore of deleted recipes'] },
   { version:'2.5.18', date:'2026-05-25', de:['Gelöschte Rezepte werden per Tombstone auch bei anderen entfernt'], en:['Deleted recipes propagate to other devices via tombstoning'] },
   { version:'2.5.17', date:'2026-05-25', de:['_updatedAt wird bei jeder Rezeptänderung gesetzt (Bearbeiten, Bewerten, Erfahrungen)'], en:['_updatedAt set on every recipe change (edit, rating, experiences)'] },
@@ -3703,7 +3704,24 @@ function doExport(){
     doSave(filename, JSON.stringify(S.recipes,null,2));
   });
 }
-function delAll(){if(confirm('Wirklich ALLE Rezepte löschen?')){S.recipes=[];saveR();S.view='list';render();}}
+function delAll(){if(confirm('Wirklich ALLE Rezepte löschen?')){
+  const ids=S.recipes.map(r=>r.id);
+  S.recipes=[];
+  saveR(true); // skipFbPush - we handle Firebase manually
+  // Write tombstones and clear Firebase
+  if(S.recipesSyncEnabled&&S.firebaseEnabled&&S.firebaseId){
+    const now=Date.now();
+    const base=S.firebaseId.replace(/\/+$/,'');
+    const tombObj={};
+    ids.forEach(id=>{tombObj[id]={deletedAt:now};});
+    // Write all tombstones at once
+    fetch(base+'/deleted.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(tombObj)}).catch(()=>{});
+    // Clear all recipes and photos
+    fetch(base+'/recipes.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:'null'}).catch(()=>{});
+    fetch(base+'/photos.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:'null'}).catch(()=>{});
+  }
+  S.view='list';render();
+}}
 function saveKey2(){S.apiKey=(document.getElementById('akinp')?.value||'').trim();saveKey();toast('API Key gespeichert ✓');}
 
 function collectForm(){
