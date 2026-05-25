@@ -482,7 +482,7 @@ function getCatIcon(cat){return S.customCatIcons[cat]||DEFAULT_CAT_ICONS[cat]||'
 function saveCatIcons(){try{localStorage.setItem('mrcatico',JSON.stringify(S.customCatIcons));}catch{}}
 function getCats(){return S.customCats&&S.customCats.length?S.customCats:DEFAULT_CATS;}
 function getCatColor(cat){return CLR[cat]||(S.customCatColors&&S.customCatColors[cat])||COLOR_POOL[Math.abs(cat.split('').reduce((a,c)=>a+c.charCodeAt(0),0))%COLOR_POOL.length];}
-const SAMPLE=[{"cooked":false,"rating":0,"experiences":[],"title":"Spaghetti Bolognese","category":"Pizza & Pasta","servings":4,"prepTime":"20","cookTime":"40","ingredients":"500 g Hackfleisch\n400 g Spaghetti\n1 Zwiebel\n2 Knoblauchzehen\n400 g gehackte Tomaten\n2 EL Tomatenmark\n2 EL Olivenöl\nSalz und Pfeffer\nfrisches Basilikum","steps":"1. Zwiebel und Knoblauch fein hacken, in Olivenöl bei mittlerer Hitze andünsten.\n2. Hackfleisch dazugeben und krümelig anbraten.\n3. Tomatenmark einrühren und kurz mitrösten.\n4. Mit gehackten Tomaten ablöschen, mit Salz und Pfeffer würzen und 30 Minuten köcheln lassen.\n5. Spaghetti nach Packungsanweisung al dente kochen.\n6. Sauce über die Nudeln geben, mit frischem Basilikum garnieren.","notes":"Schmeckt am nächsten Tag noch besser! Mit Parmesan servieren.","favorite":false,"tags":["Klassiker"],"nutrition":{"kcal":"620","protein":"36","carbs":"72","fat":"19","fiber":"5","salt":"1.8"},"id":"sample001","createdAt":1000000000000}];
+const SAMPLE=[{"cooked":false,"rating":0,"experiences":[],"title":"Spaghetti Bolognese","category":"Pasta","servings":4,"prepTime":"20","cookTime":"40","ingredients":"500 g Hackfleisch\n400 g Spaghetti\n1 Zwiebel\n2 Knoblauchzehen\n400 g gehackte Tomaten\n2 EL Tomatenmark\n2 EL Olivenöl\nSalz und Pfeffer\nfrisches Basilikum","steps":"1. Zwiebel und Knoblauch fein hacken, in Olivenöl bei mittlerer Hitze andünsten.\n2. Hackfleisch dazugeben und krümelig anbraten.\n3. Tomatenmark einrühren und kurz mitrösten.\n4. Mit gehackten Tomaten ablöschen, mit Salz und Pfeffer würzen und 30 Minuten köcheln lassen.\n5. Spaghetti nach Packungsanweisung al dente kochen.\n6. Sauce über die Nudeln geben, mit frischem Basilikum garnieren.","notes":"Schmeckt am nächsten Tag noch besser! Mit Parmesan servieren.","favorite":false,"tags":["Klassiker"],"nutrition":{"kcal":"620","protein":"36","carbs":"72","fat":"19","fiber":"5","salt":"1.8"},"id":"sample001","createdAt":1000000000000}];
 
 const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
@@ -638,14 +638,12 @@ async function load(){
   }
 }
 
-function saveR(){
+function saveR(skipFbPush=false){
   S.saving=true;renderHdr();
-  // Save recipes without photos + photos separately in IndexedDB
   openDB().then(db => {
     const tx = db.transaction(['recipes','photos'],'readwrite');
     const recipeStore = tx.objectStore('recipes');
     const photoStore = tx.objectStore('photos');
-    // Clear and rewrite all (recipes are small without photos)
     recipeStore.clear();
     photoStore.clear();
     S.recipes.forEach(r => {
@@ -655,8 +653,7 @@ function saveR(){
     });
     tx.oncomplete = () => {
       setTimeout(()=>{S.saving=false;renderHdr();},400);
-      // Push to Firebase if recipe sync enabled
-      if(S.recipesSyncEnabled&&S.firebaseEnabled&&S.firebaseId) fbPushAllRecipes();
+      if(!skipFbPush&&S.recipesSyncEnabled&&S.firebaseEnabled&&S.firebaseId) fbPushAllRecipes();
     };
     tx.onerror = () => { toast('Speicherfehler','err'); S.saving=false; renderHdr(); };
   }).catch(e => {
@@ -864,7 +861,7 @@ async function fbPullAllRecipes(showToast=false){
           // Only delete locally if tombstone is newer than local recipe
           return (r._updatedAt||0)>(tomb.deletedAt||0);
         });
-        if(S.recipes.length!==before)saveR();
+        if(S.recipes.length!==before)saveR(true); // skipFbPush – deletion already reflected in Firebase
       }
     }
     const res=await fetch(fbRecipesUrl());
@@ -909,7 +906,7 @@ async function fbPullAllRecipes(showToast=false){
           }catch{}
         }
       }
-      await saveR();
+      await saveR(true); // skipFbPush – remote already has the correct state
       // Only re-render list view – never interrupt the user while cooking/reading a recipe
       if(S.view==='list')renderApp();
       renderNav();
@@ -983,10 +980,11 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.18';
+const APP_VERSION = '2.5.19';
 const APP_DATE = '2026-05-25';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
+  { version:'2.5.19', date:'2026-05-25', de:['Lösch-Sync-Fix: kein Re-Push nach Tombstone/Poll – verhindert Wiederherstellung gelöschter Rezepte'], en:['Delete sync fix: no re-push after tombstone/poll – prevents restore of deleted recipes'] },
   { version:'2.5.18', date:'2026-05-25', de:['Gelöschte Rezepte werden per Tombstone auch bei anderen entfernt'], en:['Deleted recipes propagate to other devices via tombstoning'] },
   { version:'2.5.17', date:'2026-05-25', de:['_updatedAt wird bei jeder Rezeptänderung gesetzt (Bearbeiten, Bewerten, Erfahrungen)'], en:['_updatedAt set on every recipe change (edit, rating, experiences)'] },
   { version:'2.5.16', date:'2026-05-24', de:['Rezept-Sync: kein Re-Render beim Kochen (nur in Listenansicht)'], en:['Recipe sync: no re-render while cooking (list view only)'] },
