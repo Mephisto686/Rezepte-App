@@ -650,7 +650,7 @@ function saveR(){
     photoStore.clear();
     S.recipes.forEach(r => {
       const {photo, ...rest} = r;
-      recipeStore.put(rest);
+      recipeStore.put({...rest, _updatedAt: r._updatedAt||Date.now()});
       if(photo) photoStore.put({id:r.id, data:photo});
     });
     tx.oncomplete = () => {
@@ -730,7 +730,7 @@ function showFirebaseHelp(){
 
       <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 4 – Regeln nach 30 Tagen</div>
       <p style="margin-bottom:.4rem">Gehe zu <strong>Realtime Database → Regeln</strong> und ersetze alles durch:</p>
-      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.68rem;color:var(--ok);margin-bottom:1rem;word-break:break-all">{"rules":{"shopping":{".read":true,".write":true},"recipes":{".read":true,".write":true},"photos":{".read":true,".write":true}}}</div>
+      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.68rem;color:var(--ok);margin-bottom:1rem;word-break:break-all">{"rules":{"shopping":{".read":true,".write":true},"recipes":{".read":true,".write":true},"photos":{".read":true,".write":true},"deleted":{".read":true,".write":true}}}</div>
 
       <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 5 – Sync-Optionen wählen & teilen</div>
       <p style="margin-bottom:.5rem">Alle anderen (Partner, Freunde, Familie) tragen dieselbe URL ein und aktivieren die gewünschten Optionen:</p>
@@ -810,6 +810,24 @@ let _fbRecipeTimer=null;
 
 function fbRecipesUrl(){return S.firebaseId.replace(/\/+$/,'')+'/recipes.json';}
 function fbPhotosUrl(id){return S.firebaseId.replace(/\/+$/,'')+'/photos/'+id+'.json';}
+function fbDeletedUrl(){return S.firebaseId.replace(/\/+$/,'')+'/deleted.json';}
+function fbDeletedItemUrl(id){return S.firebaseId.replace(/\/+$/,'')+'/deleted/'+id+'.json';}
+
+async function fbDeleteRecipe(id){
+  if(!S.firebaseEnabled||!S.firebaseId||!S.recipesSyncEnabled)return;
+  try{
+    const now=Date.now();
+    // Write tombstone
+    await fetch(fbDeletedItemUrl(id),{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({deletedAt:now})
+    });
+    // Remove from recipes and photos
+    await fetch(S.firebaseId.replace(/\/+$/,'')+'/recipes/'+id+'.json',{method:'DELETE'});
+    await fetch(fbPhotosUrl(id),{method:'DELETE'});
+  }catch(e){console.warn('Firebase delete failed:',e);}
+}
 
 async function fbPushAllRecipes(showToast=false){
   if(!S.firebaseEnabled||!S.firebaseId||!S.recipesSyncEnabled)return;
@@ -834,6 +852,21 @@ async function fbPushAllRecipes(showToast=false){
 async function fbPullAllRecipes(showToast=false){
   if(!S.firebaseEnabled||!S.firebaseId||!S.recipesSyncEnabled)return;
   try{
+    // Check tombstones first
+    const delRes=await fetch(fbDeletedUrl());
+    if(delRes.ok){
+      const deleted=await delRes.json();
+      if(deleted){
+        const before=S.recipes.length;
+        S.recipes=S.recipes.filter(r=>{
+          const tomb=deleted[r.id];
+          if(!tomb)return true; // not deleted
+          // Only delete locally if tombstone is newer than local recipe
+          return (r._updatedAt||0)>(tomb.deletedAt||0);
+        });
+        if(S.recipes.length!==before)saveR();
+      }
+    }
     const res=await fetch(fbRecipesUrl());
     if(res.status===404||res.status===204){
       if(showToast)toast(S.lang==='en'?'Cloud is empty – upload your recipes first':'Cloud ist leer – Rezepte erst hochladen');
@@ -950,10 +983,12 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.16';
-const APP_DATE = '2026-05-24';
+const APP_VERSION = '2.5.18';
+const APP_DATE = '2026-05-25';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
+  { version:'2.5.18', date:'2026-05-25', de:['Gelöschte Rezepte werden per Tombstone auch bei anderen entfernt'], en:['Deleted recipes propagate to other devices via tombstoning'] },
+  { version:'2.5.17', date:'2026-05-25', de:['_updatedAt wird bei jeder Rezeptänderung gesetzt (Bearbeiten, Bewerten, Erfahrungen)'], en:['_updatedAt set on every recipe change (edit, rating, experiences)'] },
   { version:'2.5.16', date:'2026-05-24', de:['Rezept-Sync: kein Re-Render beim Kochen (nur in Listenansicht)'], en:['Recipe sync: no re-render while cooking (list view only)'] },
   { version:'2.5.15', date:'2026-05-24', de:['Swipe-Fix: Alter doppelter Handler in renderDetail entfernt'], en:['Swipe fix: removed old duplicate handler in renderDetail'] },
   { version:'2.5.14', date:'2026-05-24', de:['Zutaten Promote/Demote: exakt wie Zubereitung implementiert'], en:['Ingredients promote/demote: implemented exactly like steps'] },
@@ -2002,7 +2037,7 @@ function renderDetail(app){
     const newRating=current.rating===star?0:star;
     // Auto-link: rating > 0 → zubereitet, rating = 0 → nicht zubereitet
     const newCooked=newRating>0;
-    S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,rating:newRating,cooked:newCooked}:x);
+    S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,rating:newRating,cooked:newCooked,_updatedAt:Date.now()}:x);
     saveR();
     document.querySelectorAll('#starRow button').forEach((b,i)=>{
       b.textContent=(i+1)<=newRating?'★':'☆';
@@ -2022,7 +2057,7 @@ function renderDetail(app){
   document.getElementById('cookedBtn')?.addEventListener('click',()=>{
     const current=S.recipes.find(x=>x.id===S.selId);if(!current)return;
     const newCooked=current.cooked!==true?true:false;
-    S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,cooked:newCooked}:x);
+    S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,cooked:newCooked,_updatedAt:Date.now()}:x);
     saveR();
     const btn=document.getElementById('cookedBtn');
     if(btn){
@@ -2043,9 +2078,7 @@ function renderDetail(app){
     const exp={date:Date.now(),text};
     const cur=S.recipes.find(x=>x.id===S.selId);if(!cur)return;
     const exps=[...(cur.experiences||[]),exp];
-    S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,experiences:exps}:x);
-    saveR();
-    inp.value='';
+    S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,experiences:exps,_updatedAt:Date.now()}:x);
     if(btn){btn.textContent='✓';btn.style.background='var(--ok)';setTimeout(()=>{btn.textContent='+ Hinzufügen';btn.style.background='';},1500);}
     if(msg){msg.style.display='block';setTimeout(()=>msg.style.display='none',2000);}
     renderDetail(document.getElementById('app'));
@@ -2075,7 +2108,7 @@ function renderDetail(app){
       const cur=S.recipes.find(x=>x.id===S.selId);if(!cur)return;
       const exps=[...(cur.experiences||[])];
       exps[i]={...exps[i],text:newText};
-      S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,experiences:exps}:x);
+      S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,experiences:exps,_updatedAt:Date.now()}:x);
       saveR();renderDetail(document.getElementById('app'));
     });
   });
@@ -2086,7 +2119,7 @@ function renderDetail(app){
       const i=Number(btn.dataset.expidx);
       const cur=S.recipes.find(x=>x.id===S.selId);if(!cur)return;
       const exps=[...(cur.experiences||[])];exps.splice(i,1);
-      S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,experiences:exps}:x);
+      S.recipes=S.recipes.map(x=>x.id===S.selId?{...x,experiences:exps,_updatedAt:Date.now()}:x);
       saveR();renderDetail(document.getElementById('app'));
     });
   });
@@ -3703,11 +3736,12 @@ function submitForm(){
       createdAt:r.createdAt,
       rating:r.rating||0,
       cooked:r.cooked,
-      experiences:r.experiences||[]
+      experiences:r.experiences||[],
+      _updatedAt:Date.now()
     }:r);
     S.selId=S.editId;S.view='detail';
   }
-  else{const id=uid();S.recipes.push({cooked:false,rating:0,experiences:[],...f,id,createdAt:Date.now()});S.selId=id;S.view='detail';}
+  else{const id=uid();S.recipes.push({cooked:false,rating:0,experiences:[],...f,id,createdAt:Date.now(),_updatedAt:Date.now()});S.selId=id;S.view='detail';}
   S.editId=null;saveR();render();scrollTo(0,0);
 }
 
@@ -4683,7 +4717,9 @@ document.getElementById('shopPickModal').addEventListener('click',function(e){if
 
 document.getElementById('delCancel').addEventListener('click',()=>document.getElementById('delModal').style.display='none');
 document.getElementById('delConfirm').addEventListener('click',()=>{
-  S.recipes=S.recipes.filter(r=>r.id!==S.delId);saveR();
+  const deletedId=S.delId;
+  S.recipes=S.recipes.filter(r=>r.id!==deletedId);saveR();
+  fbDeleteRecipe(deletedId);
   document.getElementById('delModal').style.display='none';goList();
 });
 document.getElementById('shareClose').addEventListener('click',()=>document.getElementById('shareModal').style.display='none');
