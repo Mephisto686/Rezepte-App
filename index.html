@@ -80,7 +80,7 @@ body{display:flex;flex-direction:column;min-height:100dvh;overscroll-behavior:no
 
 /* CARDS */
 .rlist{display:flex;flex-direction:column;gap:.55rem}
-.card{background:var(--surface);border-radius:var(--radius);border:none;cursor:pointer;
+.card{background:var(--surface);border-radius:var(--radius);border:none;cursor:pointer;-webkit-user-select:none;user-select:none;
   overflow:hidden;box-shadow:var(--shadow);transition:transform .18s,box-shadow .18s;position:relative;
   display:flex;align-items:stretch;min-height:80px;width:100%}
 .card:active{transform:scale(.982);box-shadow:0 2px 8px rgba(0,0,0,.06)}
@@ -194,8 +194,11 @@ body{display:flex;flex-direction:column;min-height:100dvh;overscroll-behavior:no
 .nbt2{color:var(--nbt);font-size:.88rem;line-height:1.75;font-style:italic}
 
 /* SCALE */
-.scale-row{display:flex;align-items:center;gap:.8rem;margin-bottom:.8rem;background:var(--surface2);border-radius:10px;padding:.6rem .9rem}
-.scale-lbl{font-family:var(--ui);font-size:.8rem;color:var(--muted);flex:1}
+.ing-ref{color:var(--accent);border-bottom:1px dotted var(--accent);cursor:pointer}
+.ing-bubble{position:fixed;background:var(--surface);border:1.5px solid var(--accent);border-radius:10px;padding:.4rem .75rem;font-size:.82rem;font-family:var(--font);color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:500;pointer-events:none;opacity:0;transition:opacity .15s;max-width:220px;text-align:center}
+.ing-bubble.show{opacity:1}
+.scale-row{display:flex;align-items:center;gap:.6rem;margin-bottom:.8rem;background:var(--surface2);border-radius:10px;padding:.6rem .9rem;flex-wrap:nowrap}
+.scale-lbl{font-family:var(--ui);font-size:.8rem;color:var(--muted);white-space:nowrap}
 .sctrl{display:flex;align-items:center;gap:.5rem}
 .sbtn{background:var(--accent);color:#fff;border:none;border-radius:6px;width:32px;height:32px;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .sval{font-size:.88rem;font-weight:bold;min-width:95px;text-align:center;color:var(--text);font-family:var(--ui)}
@@ -488,14 +491,14 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, firebaseId:'', firebaseEnabled:false, recipesSyncEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, sessions:[], activeSession:null, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, firebaseId:'', firebaseEnabled:false, recipesSyncEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
 };
 
 // ══════════════ PERSISTENCE ══════════════
 // ══════════════ INDEXEDDB LAYER ══════════════
 let _db = null;
 const DB_NAME = 'MeineRezepteDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 function openDB(){
   return new Promise((resolve, reject) => {
@@ -511,6 +514,10 @@ function openDB(){
         db.createObjectStore('shopping', {keyPath:'id'});
       if(!db.objectStoreNames.contains('mealplan'))
         db.createObjectStore('mealplan', {keyPath:'date'});
+      if(!db.objectStoreNames.contains('sessions'))
+        db.createObjectStore('sessions', {keyPath:'id'});
+      if(!db.objectStoreNames.contains('sessions'))
+        db.createObjectStore('sessions', {keyPath:'id'});
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
     req.onerror = () => reject(req.error);
@@ -616,12 +623,14 @@ async function load(){
   await migrateIfNeeded();
   // Load recipes + photos from IndexedDB
   try{
-    const [recipes, photos, shopping, mealplan] = await Promise.all([
+    const [recipes, photos, shopping, mealplan, sessions] = await Promise.all([
       dbGetAll('recipes'),
       dbGetAll('photos'),
       dbGetAll('shopping'),
-      dbGetAll('mealplan')
+      dbGetAll('mealplan'),
+      dbGetAll('sessions')
     ]);
+    S.sessions = sessions||[];
     const photoMap = {};
     photos.forEach(p => photoMap[p.id] = p.data);
     S.recipes = recipes.map(r => ({...r, photo: photoMap[r.id]||null}));
@@ -980,10 +989,11 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.5.20';
-const APP_DATE = '2026-05-25';
+const APP_VERSION = '2.7.4';
+const APP_DATE = '2026-05-30';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
+  { version:'2.6.0', date:'2026-05-29', de:['Portionen in beiden Tabs (sync)','↺ Button immer sichtbar (kein Layout-Shift)','Zutaten in Schritten antippbar → Menge als Bubble'], en:['Portions in both tabs (synced)','↺ always visible (no layout shift)','Ingredient refs in steps tappable → amount bubble'] },
   { version:'2.5.20', date:'2026-05-25', de:['Beispielrezept entfernt (kein SAMPLE-Fallback)','Alle löschen: schreibt Tombstones und leert Firebase'], en:['Removed sample recipe fallback','Delete all: writes tombstones and clears Firebase'] },
   { version:'2.5.19', date:'2026-05-25', de:['Lösch-Sync-Fix: kein Re-Push nach Tombstone/Poll – verhindert Wiederherstellung gelöschter Rezepte'], en:['Delete sync fix: no re-push after tombstone/poll – prevents restore of deleted recipes'] },
   { version:'2.5.18', date:'2026-05-25', de:['Gelöschte Rezepte werden per Tombstone auch bei anderen entfernt'], en:['Deleted recipes propagate to other devices via tombstoning'] },
@@ -1234,6 +1244,17 @@ function renderHdr(){
     tit.textContent=S.editId?t('hdr_edit'):t('hdr_new');sub.textContent='';
     acts.innerHTML=`<button class="btn bp" onclick="submitForm()">${t('btn_save')}</button>`;
   } else if(S.view==='shopping'){tit.textContent=t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
+  else if(S.view==='session'){
+    const sess=S.sessions.find(s=>s.id===S.activeSession);
+    tit.textContent='👨‍🍳 '+(sess?.name||'Kochsession');
+    sub.textContent='';
+    if(sess?.timeline){
+      const editing=sess.editMode||false;
+      acts.innerHTML=`<button onclick="toggleSessionEdit('${sess.id}')" style="background:${editing?'var(--accent)':'var(--surface2)'};border:none;border-radius:8px;padding:.35rem .7rem;font-size:.8rem;font-weight:600;color:${editing?'#fff':'var(--muted)'};cursor:pointer;font-family:var(--ui)">${editing?'✓ Fertig':'✏️ Bearbeiten'}</button>`;
+    } else {
+      acts.innerHTML='';
+    }
+  }
   else if(S.view==='planner'){
     tit.textContent=S.lang==='en'?'📅 Meal Plan':'📅 Speiseplan';sub.textContent='';
     acts.innerHTML='';
@@ -1266,7 +1287,7 @@ function renderApp(){
   else if(S.view==='detail')renderDetail(app);
   else if(S.view==='form')renderForm(app);
   else if(S.view==='shopping')renderShop(app);
-  else if(S.view==='planner')renderPlanner(app);
+  else if(S.view==='session')renderSession(app);
   else if(S.view==='aisearch')renderAISearch(app);
   else if(S.view==='import')renderImportPage(app);
   else if(S.view==='settings')renderSettings(app);
@@ -1564,6 +1585,7 @@ function renderList(app){
           <button id="selFavBtn"  class="sel-act-btn">❤️ ${S.lang==='en'?'Favorite':'Favorit'}</button>
           <button id="selExpBtn"  class="sel-act-btn">📤 ${S.lang==='en'?'Export':'Exportieren'}</button>
           <button id="selDelBtn"  class="sel-act-btn" style="background:rgba(239,68,68,.4)">🗑 ${t('btn_delete')}</button>
+          <button id="selSessionBtn" class="sel-act-btn" style="background:rgba(255,255,255,.25);font-weight:700">👨‍🍳 ${S.lang==='en'?'Cook session':'Kochsession'}</button>
         </div>`;
       grid.insertAdjacentElement('beforebegin',bar);
 
@@ -1616,10 +1638,43 @@ function renderList(app){
         S.recipes=S.recipes.filter(r=>!S.selected.has(r.id));
         saveR();exitSel();
       });
+
+      // 👨‍🍳 Kochsession
+      document.getElementById('selSessionBtn').addEventListener('click',()=>{
+        if(S.selected.size<2){toast(S.lang==='en'?'Select at least 2 recipes':'Mindestens 2 Rezepte auswählen','err');return;}
+        const recipeIds=[...S.selected];
+        exitSel();
+        createCookSession(recipeIds);
+      });
     }
     if(!S.selectMode&&document.getElementById('selBar'))document.getElementById('selBar').remove();
 
     grid.querySelectorAll('.card').forEach(card=>{
+      // Long press → activate select mode + select this card
+      let _lp=null;
+      card.addEventListener('touchstart',e=>{
+        if(e.target.closest('[data-fav]')||e.target.closest('[data-drag]'))return;
+        _lp=setTimeout(()=>{
+          _lp=null;
+          if(!S.selectMode){
+            S.selectMode=true;S.selected=new Set();S.sortMode=false;
+            renderApp(); // re-render to show select bar
+            // Select this card after render
+            setTimeout(()=>{
+              const id=card.dataset.id;
+              S.selected.add(id);
+              const sc=document.getElementById('selCount');
+              if(sc)sc.textContent=S.selected.size+' '+t('det_selected');
+              document.querySelector(`.card[data-id="${id}"]`)?.classList.add('sel');
+              const cb=document.querySelector(`.card[data-id="${id}"] .sel-cb`);
+              if(cb)cb.textContent='✓';
+            },50);
+          }
+        },500);
+      },{passive:true});
+      card.addEventListener('touchend',()=>{if(_lp){clearTimeout(_lp);_lp=null;}});
+      card.addEventListener('touchmove',()=>{if(_lp){clearTimeout(_lp);_lp=null;}});
+
       card.addEventListener('click',e=>{
         if(e.target.closest('[data-fav]'))return;
         if(e.target.closest('[data-drag]'))return;
@@ -1688,24 +1743,23 @@ function parseSteps(stepsText){
   return sections;
 }
 
-function renderStepSections(stepsText, stepsDone, sectionState){
+function renderStepSections(stepsText, stepsDone, sectionState, ingMap){
   const sections=parseSteps(stepsText);
   const flat=sections.length===1&&!sections[0].header;
   let globalIdx=0;
   if(flat){
     return sections[0].steps.map((line,i)=>{
       const done=!!stepsDone[globalIdx];const idx=globalIdx++;
-      return stepRow(line,idx,done);
+      return stepRow(line,idx,done,ingMap);
     }).join('');
   }
   return sections.map((sec,si)=>{
     const secKey='sec'+si;
     const collapsed=!!sectionState[secKey];
     if(!sec.header){
-      // Ungrouped steps at the top
-      return sec.steps.map(line=>{const done=!!stepsDone[globalIdx];return stepRow(line,globalIdx++,done);}).join('');
+      return sec.steps.map(line=>{const done=!!stepsDone[globalIdx];return stepRow(line,globalIdx++,done,ingMap);}).join('');
     }
-    const stepsHtml=sec.steps.map(line=>{const done=!!stepsDone[globalIdx];return stepRow(line,globalIdx++,done);}).join('');
+    const stepsHtml=sec.steps.map(line=>{const done=!!stepsDone[globalIdx];return stepRow(line,globalIdx++,done,ingMap);}).join('');
     return `<div class="step-section">
       <div class="step-sec-hdr" data-sec="${secKey}">
         <span class="step-sec-arr${collapsed?'':' open'}">▶</span>
@@ -1717,10 +1771,60 @@ function renderStepSections(stepsText, stepsDone, sectionState){
   }).join('');
 }
 
-function stepRow(line,idx,done){
+// Build ingredient name map for tooltip highlighting
+function buildIngMap(ingredientsText, scaleFactor, servings){
+  if(!ingredientsText)return {};
+  const base=servings||4;
+  const map={};
+  ingredientsText.split('\n').forEach(l=>{
+    const t2=l.trim();
+    if(!t2||/^\*\*/.test(t2)||t2.endsWith(':'))return;
+    // Extract name: strip leading quantity (numbers + units)
+    const m=t2.match(/^[\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher|Prisen)?\s*(.+)$/i);
+    const name=m?m[1].trim():t2;
+    // Store name → scaled line
+    if(name.length>2)map[name.toLowerCase()]=scaleI(t2,scaleFactor/base*(base));
+  });
+  return map;
+}
+
+function highlightIngRefs(text, ingMap){
+  if(!ingMap||!Object.keys(ingMap).length)return esc(text);
+  let result=esc(text);
+  // Sort by length desc so longer names match first
+  const names=Object.keys(ingMap).sort((a,b)=>b.length-a.length);
+  names.forEach(name=>{
+    const scaled=ingMap[name];
+    const re=new RegExp('(?<![\\w])'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![\\w])','gi');
+    result=result.replace(re,m=>`<span class="ing-ref" data-scaled="${esc(scaled)}" onclick="showIngBubble(event,'${esc(scaled)}')">${m}</span>`);
+  });
+  return result;
+}
+
+let _bubbleTimer=null;
+function showIngBubble(e, scaled){
+  e.stopPropagation();
+  // Remove existing bubble
+  document.querySelectorAll('.ing-bubble').forEach(b=>b.remove());
+  if(_bubbleTimer)clearTimeout(_bubbleTimer);
+  const bubble=document.createElement('div');
+  bubble.className='ing-bubble';
+  bubble.textContent=scaled;
+  document.body.appendChild(bubble);
+  // Position near tap
+  const x=Math.min(e.clientX, window.innerWidth-230);
+  const y=e.clientY-50;
+  bubble.style.left=Math.max(10,x)+'px';
+  bubble.style.top=Math.max(10,y)+'px';
+  requestAnimationFrame(()=>bubble.classList.add('show'));
+  _bubbleTimer=setTimeout(()=>{bubble.classList.remove('show');setTimeout(()=>bubble.remove(),200);},5000);
+}
+
+function stepRow(line,idx,done,ingMap){
+  const txt=ingMap?highlightIngRefs(line,ingMap):boldify(line);
   return `<div class="step-row${done?' step-done':''}" data-step="${idx}" style="display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid var(--border);cursor:pointer">
     <div class="step-circle" data-num="${idx+1}" style="width:26px;height:26px;border-radius:50%;border:2px solid ${done?'var(--accent)':'var(--border2)'};background:${done?'var(--accent)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:${done?'#fff':'var(--muted)'};font-size:.78rem;margin-top:.15rem;transition:all .2s">${done?'✓':String(idx+1)}</div>
-    <span class="step-txt" style="font-size:.9rem;line-height:1.75;color:${done?'var(--muted)':'var(--text2)'};${done?'text-decoration:line-through;':''}transition:all .2s;flex:1">${boldify(line)}</span>
+    <span class="step-txt" style="font-size:.9rem;line-height:1.75;color:${done?'var(--muted)':'var(--text2)'};${done?'text-decoration:line-through;':''}transition:all .2s;flex:1">${txt}</span>
     <button class="step-toggle-btn" data-action="promote" data-line="${esc(line)}" title="${t('step_promote')}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui);margin-top:.2rem;opacity:.5">${t('step_promote')}</button>
   </div>`;
 }
@@ -1783,10 +1887,10 @@ function renderDetail(app){
               <span class="scale-lbl">${t('det_portions')}</span>
               <div class="sctrl">
                 <button class="sbtn" onclick="chgSc(-1)">−</button>
-                <span class="sval">${(()=>{const rv=Math.round(sc*100)/100;return Number.isInteger(rv)?rv:rv.toFixed(1);})()} ${sc!==1?t('det_portions_pl'):t('det_portion')}</span>
+                <span class="sval" id="scaleVal">${(()=>{const rv=Math.round(sc*100)/100;return Number.isInteger(rv)?rv:rv.toFixed(1);})()} ${sc!==1?t('det_portions_pl'):t('det_portion')}</span>
                 <button class="sbtn" onclick="chgSc(1)">+</button>
               </div>
-              ${sf!==1?`<button onclick="resetSc()" style="background:none;border:none;font-size:.72rem;color:var(--muted);cursor:pointer;padding:.2rem .4rem;font-family:var(--ui)">↺ ${r.servings}</button>`:''}
+              <button onclick="resetSc()" style="background:none;border:none;font-size:.72rem;cursor:pointer;padding:.2rem .4rem;font-family:var(--ui);transition:opacity .2s;${sf===1?'opacity:.25;pointer-events:none':'color:var(--muted)'}">↺ ${r.servings}</button>
             </div>
             <div class="st">${t('det_ingredients')}</div>
             <div id="ingList">
@@ -1830,12 +1934,22 @@ function renderDetail(app){
         </div>
         <!-- TAB 1: ZUBEREITUNG + ERFAHRUNGEN + CHAT -->
         <div class="det-panel" style="padding:1rem 1.3rem 5rem">
+          <!-- Portions row duplicated here, stays in sync -->
+          <div class="scale-row" style="margin-bottom:1rem">
+            <span class="scale-lbl">${t('det_portions')}</span>
+            <div class="sctrl">
+              <button class="sbtn" onclick="chgSc(-1)">−</button>
+              <span class="sval" id="scaleVal2">${(()=>{const rv=Math.round(sc*100)/100;return Number.isInteger(rv)?rv:rv.toFixed(1);})()} ${sc!==1?t('det_portions_pl'):t('det_portion')}</span>
+              <button class="sbtn" onclick="chgSc(1)">+</button>
+            </div>
+            <button onclick="resetSc()" style="background:none;border:none;font-size:.72rem;cursor:pointer;padding:.2rem .4rem;font-family:var(--ui);transition:opacity .2s;${sf===1?'opacity:.25;pointer-events:none':'color:var(--muted)'}">↺ ${r.servings}</button>
+          </div>
           ${r.steps?`<div class="sec">
             <div class="st" style="display:flex;justify-content:space-between;align-items:center">
               <span>Zubereitung</span>
               ${Object.keys(S.stepsDone[r.id]||{}).length?`<button style="background:none;border:none;font-family:var(--ui);font-size:.72rem;color:var(--faint);cursor:pointer" id="resetSteps">${t('det_reset_steps')}</button>`:''}
             </div>
-            <div id="stepsList">${renderStepSections(r.steps, S.stepsDone[r.id]||{}, S.stepSections?.[r.id]||{})}</div>
+            <div id="stepsList">${renderStepSections(r.steps, S.stepsDone[r.id]||{}, S.stepSections?.[r.id]||{}, buildIngMap(r.ingredients,sf,r.servings))}</div>
           </div>`:'<div style="padding:1rem;color:var(--faint);font-size:.85rem">Keine Zubereitung eingetragen.</div>'}
           <!-- Erfahrungen -->
           <div style="margin-top:1.4rem;border-top:2px solid var(--border);padding-top:1rem;margin-bottom:.8rem">
@@ -2192,7 +2306,7 @@ function renderForm(app){
           <span>${t('det_steps')}</span>
           <button id="boldBtn" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:.15rem .5rem;font-family:var(--ui);font-size:.8rem;font-weight:bold;cursor:pointer;color:var(--text)">B Fett</button>
         </div>
-        <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin:.25rem 0 .35rem;font-style:italic">Tipp: **Text** = fett · **Überschrift** als ganze Zeile = Abschnitt</div>
+        <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin:.25rem 0 .35rem;font-style:italic">Tipp: **Text** = fett · **Überschrift** als ganze Zeile = Abschnitt · [5] am Anfang = 5 Minuten</div>
         <textarea class="ft" id="f-st" rows="9" placeholder="${t('form_steps_hint')}">${esc(f.steps)}</textarea>
       </div>
       <div class="cf"><div class="fl">${t('form_notes')}</div><textarea class="ft" id="f-n" rows="7" placeholder="${t('form_notes_hint')}" style="min-height:140px">${esc(f.notes)}</textarea></div>
@@ -2957,8 +3071,23 @@ function toggleIngSec(recipeId, secKey){
   if(arr)arr.classList.toggle('open');
 }
 
-function chgSc(d){const base=S.recipes.find(x=>x.id===S.selId)?.servings||4;S.scaleFactor=Math.max(1/base,S.scaleFactor+d/base);if(S.selId)S.scaleFactors[S.selId]=S.scaleFactor;saveSession();renderApp();}
-function resetSc(){S.scaleFactor=1;if(S.selId)delete S.scaleFactors[S.selId];saveSession();renderApp();}
+function updateScaleDisplays(){
+  const r=S.recipes.find(x=>x.id===S.selId);if(!r)return;
+  const base=r.servings||4;
+  const sc=Math.round(base*S.scaleFactor*100)/100;
+  const rv=Number.isInteger(sc)?sc:sc.toFixed(1);
+  const label=rv+' '+(S.scaleFactor!==1?t('det_portions_pl'):t('det_portion'));
+  ['scaleVal','scaleVal2'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.textContent=label;
+  });
+  // Update reset buttons
+  document.querySelectorAll('[onclick="resetSc()"]').forEach(btn=>{
+    btn.style.opacity=S.scaleFactor===1?'.25':'1';
+    btn.style.pointerEvents=S.scaleFactor===1?'none':'';
+  });
+}
+function chgSc(d){const base=S.recipes.find(x=>x.id===S.selId)?.servings||4;S.scaleFactor=Math.max(1/base,S.scaleFactor+d/base);if(S.selId)S.scaleFactors[S.selId]=S.scaleFactor;saveSession();updateScaleDisplays();renderApp();}
+function resetSc(){S.scaleFactor=1;if(S.selId)delete S.scaleFactors[S.selId];saveSession();updateScaleDisplays();renderApp();}
 function toggleFav(id){S.recipes=S.recipes.map(r=>r.id===id?{...r,favorite:!r.favorite}:r);saveR();renderApp();}
 function rmTag(t){S.formTags=S.formTags.filter(x=>x!==t);renderApp();}
 function askDel(id){S.delId=id;document.getElementById('delModal').style.display='flex';}
@@ -3689,6 +3818,444 @@ function renderPlannerKanban(app){
   </div>`;
 }
 // ══════════════ END PLANNER ══════════════
+
+// ════════════════════════════════════════════════════
+// KOCHSESSION
+// ════════════════════════════════════════════════════
+
+// Parse step time: "[15] Schritt text" → {mins:15, text:"Schritt text"} or {mins:null, text:line}
+function parseStepTime(line){
+  const m=line.match(/^\[(\d+)\]\s*(.*)/);
+  return m?{mins:parseInt(m[1]),text:m[2]}:{mins:null,text:line};
+}
+
+function saveSessions(){
+  openDB().then(db=>{
+    const tx=db.transaction('sessions','readwrite');
+    const store=tx.objectStore('sessions');
+    store.clear();
+    S.sessions.forEach(s=>store.put(s));
+  }).catch(()=>{});
+}
+
+function createCookSession(recipeIds){
+  const id='cs'+Date.now();
+  const recipes=recipeIds.map(rid=>S.recipes.find(r=>r.id===rid)).filter(Boolean);
+  const name=recipes.map(r=>r.title.split(' ')[0]).join(' + ');
+  const session={
+    id, name,
+    recipeIds,
+    createdAt:Date.now(),
+    mode:'manual', // 'manual' or 'ai'
+    timeline:null, // set after AI/manual planning
+    aiDone:false
+  };
+  S.sessions.push(session);
+  saveSessions();
+  S.activeSession=id;
+  S.view='session';
+  render();
+}
+
+function renderSession(app){
+  const session=S.sessions.find(s=>s.id===S.activeSession);
+  if(!session){app.innerHTML='<div style="padding:2rem;color:var(--faint)">Session nicht gefunden.</div>';return;}
+  const recipes=session.recipeIds.map(rid=>S.recipes.find(r=>r.id===rid)).filter(Boolean);
+
+  if(!session.timeline){
+    // Show session setup / choose mode
+    renderSessionSetup(app, session, recipes);
+  } else {
+    renderSessionTimeline(app, session, recipes);
+  }
+}
+
+function renderSessionSetup(app, session, recipes){
+  const totalMins=recipes.reduce((s,r)=>{
+    const prep=parseInt(r.prepTime)||0;
+    const cook=parseInt(r.cookTime)||0;
+    return s+prep+cook;
+  },0);
+
+  app.innerHTML=`<div style="padding:1rem 1.3rem 5rem">
+    <div style="margin-bottom:1.2rem">
+      <input id="sessionNameInp" value="${esc(session.name)}" style="width:100%;background:var(--surface2);border:1.5px solid var(--border2);border-radius:10px;padding:.6rem .9rem;font-family:var(--font);font-size:1rem;font-weight:700;color:var(--text);box-sizing:border-box">
+    </div>
+
+    <!-- Recipe overview -->
+    <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.4rem">
+      ${recipes.map(r=>`
+        <div style="display:flex;align-items:center;gap:.7rem;background:var(--surface2);border-radius:10px;padding:.6rem .8rem">
+          <div style="width:36px;height:36px;border-radius:8px;overflow:hidden;flex-shrink:0;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:.9rem">
+            ${r.photo?`<img src="${r.photo}" style="width:100%;height:100%;object-fit:cover">`:'🍽'}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.88rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.title)}</div>
+            <div style="font-size:.7rem;color:var(--muted)">⏱ ${(parseInt(r.prepTime)||0)+(parseInt(r.cookTime)||0)} Min. · ${(r.steps||'').split('\n').filter(l=>l.trim()&&!l.match(/^\*\*/)).length} Schritte</div>
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Mode selection -->
+    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:.7rem">Planungsmodus wählen</div>
+    <div style="display:flex;flex-direction:column;gap:.7rem;margin-bottom:1.4rem">
+      <div id="modeManual" onclick="setSessionMode('${session.id}','manual')" style="border-radius:12px;border:2px solid ${session.mode==='manual'?'var(--accent)':'var(--border)'};padding:.9rem 1rem;cursor:pointer;background:${session.mode==='manual'?'var(--accent-bg)':'var(--surface)'}">
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.25rem">🖐 Manuell</div>
+        <div style="font-size:.78rem;color:var(--muted)">Alle Schritte werden aufgelistet, du ziehst sie in deine gewünschte Reihenfolge.</div>
+      </div>
+      <div id="modeAI" onclick="setSessionMode('${session.id}','ai')" style="border-radius:12px;border:2px solid ${session.mode==='ai'?'var(--accent)':'var(--border)'};padding:.9rem 1rem;cursor:pointer;background:${session.mode==='ai'?'var(--accent-bg)':'var(--surface)'}">
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.25rem">✨ KI-optimiert</div>
+        <div style="font-size:.78rem;color:var(--muted)">Die KI analysiert aktive vs. passive Zeiten und erstellt einen optimierten Ablaufplan. Du kannst danach noch anpassen.</div>
+      </div>
+    </div>
+
+    <button onclick="startSession('${session.id}')" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:.8rem;font-family:var(--font);font-size:.95rem;font-weight:700;cursor:pointer">
+      ${session.mode==='ai'?'✨ KI-Plan erstellen':'🖐 Manuell planen'}
+    </button>
+
+    <!-- Existing sessions -->
+    ${S.sessions.length>1?`<div style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1rem">
+      <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:.6rem">Gespeicherte Sessions</div>
+      ${S.sessions.filter(s=>s.id!==session.id).map(s=>`
+        <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border)">
+          <div onclick="S.activeSession='${s.id}';renderApp()" style="flex:1;cursor:pointer">
+            <div style="font-size:.85rem;font-weight:600">${esc(s.name)}</div>
+            <div style="font-size:.7rem;color:var(--muted)">${new Date(s.createdAt).toLocaleDateString('de-DE')} · ${s.recipeIds.length} Rezepte</div>
+          </div>
+          <button onclick="deleteSession('${s.id}')" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.9rem;padding:.2rem .4rem">✕</button>
+        </div>`).join('')}
+    </div>`:''}
+  </div>`;
+
+  document.getElementById('sessionNameInp').addEventListener('change',e=>{
+    session.name=e.target.value;saveSessions();
+    renderHdr();
+  });
+}
+
+function setSessionMode(sessionId, mode){
+  const s=S.sessions.find(x=>x.id===sessionId);
+  if(s){s.mode=mode;saveSessions();renderApp();}
+}
+
+function deleteSession(sessionId){
+  S.sessions=S.sessions.filter(s=>s.id!==sessionId);
+  if(S.activeSession===sessionId){
+    S.activeSession=S.sessions[0]?.id||null;
+    if(!S.activeSession)S.view='list';
+  }
+  saveSessions();renderApp();
+}
+
+async function startSession(sessionId){
+  const session=S.sessions.find(s=>s.id===sessionId);
+  if(!session)return;
+  const recipes=session.recipeIds.map(rid=>S.recipes.find(r=>r.id===rid)).filter(Boolean);
+
+  if(session.mode==='manual'){
+    // Build flat step list from all recipes
+    const steps=[];
+    recipes.forEach(r=>{
+      (r.steps||'').split('\n').forEach((line,i)=>{
+        const t2=line.trim();
+        if(!t2||/^\*\*/.test(t2))return;
+        const {mins,text}=parseStepTime(t2);
+        steps.push({
+          id:r.id+'_s'+i,
+          recipeId:r.id,
+          recipeTitle:r.title,
+          text,
+          mins:mins||Math.round(((parseInt(r.prepTime)||0)+(parseInt(r.cookTime)||0))/Math.max(1,(r.steps||'').split('\n').filter(l=>l.trim()&&!l.match(/^\*\*/)).length)),
+          active:true,
+          done:false,
+          order:steps.length
+        });
+      });
+    });
+    session.timeline={steps,totalMins:steps.reduce((s,x)=>s+x.mins,0)};
+    session.aiDone=false;
+  } else {
+    // AI mode
+    await buildAITimeline(session, recipes);
+  }
+  saveSessions();
+  renderApp();
+}
+
+async function buildAITimeline(session, recipes){
+  const app=document.getElementById('app');
+  app.innerHTML=`<div style="padding:3rem 1.5rem;text-align:center">
+    <div style="font-size:2rem;margin-bottom:1rem">✨</div>
+    <div style="font-size:.95rem;font-weight:600;color:var(--text);margin-bottom:.5rem">KI analysiert Rezepte…</div>
+    <div style="font-size:.8rem;color:var(--muted)">Aktive und passive Zeiten werden erkannt</div>
+  </div>`;
+
+  const recipeSummaries=recipes.map(r=>{
+    const steps=(r.steps||'').split('\n').filter(l=>l.trim()&&!l.match(/^\*\*/));
+    return `Rezept: "${r.title}" (Vorbereitung: ${r.prepTime||0}min, Kochzeit: ${r.cookTime||0}min)
+Schritte:
+${steps.map((s,i)=>{const p=parseStepTime(s.trim());return `${i+1}. ${p.text}${p.mins?` [${p.mins}min]`:''}`;}).join('\n')}`;
+  }).join('\n\n---\n\n');
+
+  const prompt=`Du bist ein Profikoch-Assistent. Ich koche folgende Rezepte gleichzeitig und brauche einen optimierten Zeitplan.
+
+${recipeSummaries}
+
+Analysiere jeden Schritt und klassifiziere ihn als:
+- "active": Ich muss aktiv dabei sein (schneiden, anbraten, rühren etc.)
+- "passive": Läuft von selbst (kochen, backen, warten etc.) – in dieser Zeit kann ich parallel andere Schritte machen
+
+Erstelle einen optimierten Ablaufplan. Nutze passive Wartezeiten eines Rezepts für aktive Schritte anderer Rezepte.
+
+Antworte NUR mit validem JSON, kein weiterer Text:
+{
+  "totalMins": <geschätzte Gesamtzeit in Minuten>,
+  "steps": [
+    {
+      "id": "<rezeptname_schrittnummer>",
+      "recipeTitle": "<Rezeptname>",
+      "text": "<Schritttext ohne Zeitangabe>",
+      "mins": <geschätzte Dauer in Minuten>,
+      "type": "active" oder "passive",
+      "note": "<kurze Begründung warum jetzt>",
+      "order": <Reihenfolge 0,1,2...>
+    }
+  ]
+}`;
+
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:4000,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const data=await res.json();
+    const text=data.content?.find(c=>c.type==='text')?.text||'';
+    const clean=text.replace(/```json|```/g,'').trim();
+    const parsed=JSON.parse(clean);
+    // Add recipeId and done fields
+    session.timeline={
+      steps:parsed.steps.map((s,i)=>{
+        const r=recipes.find(x=>x.title===s.recipeTitle)||recipes[0];
+        return {...s,recipeId:r.id,done:false,order:i};
+      }),
+      totalMins:parsed.totalMins
+    };
+    session.aiDone=true;
+  }catch(e){
+    toast('KI-Fehler: '+e.message,'err');
+    // Fallback to manual
+    session.mode='manual';
+    await startSession(session.id);
+    return;
+  }
+}
+
+function renderSessionTimeline(app, session, recipes){
+  const steps=session.timeline.steps;
+  const done=steps.filter(s=>s.done).length;
+  const pct=Math.round(done/steps.length*100);
+  const editing=session.editMode||false;
+  const colors={'Fleisch':'#ef4444','Fisch':'#3b82f6','Pasta':'#f97316','Pizza & Flammkuchen':'#f59e0b','Vegetarisch':'#22c55e','Suppen':'#06b6d4','Desserts & Kuchen':'#ec4899'};
+  const recipeColor=(r)=>{
+    const cat=r?.category||'';
+    return colors[cat]||getCatColor(cat)||'#8b5cf6';
+  };
+
+  app.innerHTML=`<div style="padding:1rem 1.3rem 6rem">
+    <!-- Progress -->
+    <div style="margin-bottom:1.2rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+        <span style="font-size:.78rem;color:var(--muted);font-family:var(--ui)">${done}/${steps.length} Schritte · ~${session.timeline.totalMins} Min. gesamt</span>
+        <span style="font-size:.78rem;font-weight:700;color:var(--accent)">${pct}%</span>
+      </div>
+      <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:3px;transition:width .3s"></div>
+      </div>
+    </div>
+
+    <!-- Edit/Cook mode toggle banner -->
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:10px;padding:.55rem .9rem;margin-bottom:1rem">
+      <span style="font-size:.78rem;color:var(--muted);font-family:var(--ui)">${editing?'Sortier-Modus: ≡ Handle ziehen':'Koch-Modus: Schritt antippen = erledigt'}</span>
+      <button onclick="toggleSessionEdit('${session.id}')" style="background:${editing?'var(--accent)':'var(--surface)'};border:1px solid var(--border2);border-radius:8px;padding:.3rem .65rem;font-size:.78rem;font-weight:600;color:${editing?'#fff':'var(--text)'};cursor:pointer;font-family:var(--ui);flex-shrink:0">${editing?'✓ Fertig':'✏️ Sortieren'}</button>
+    </div>
+    <!-- Recipe color legend -->
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+      ${recipes.map(r=>`<div style="display:flex;align-items:center;gap:.3rem;font-size:.72rem;font-family:var(--ui);color:var(--text2)">
+        <div style="width:10px;height:10px;border-radius:50%;background:${recipeColor(r)};flex-shrink:0"></div>${esc(r.title)}
+      </div>`).join('')}
+    </div>
+
+    <!-- Timeline steps -->
+    <div id="timelineSteps" style="display:flex;flex-direction:column;gap:.5rem">
+      ${steps.map((step,idx)=>{
+        const r=recipes.find(x=>x.id===step.recipeId);
+        const col=recipeColor(r);
+        const isPassive=step.type==='passive';
+        return `<div class="tl-step${step.done?' tl-done':''}" data-stepid="${step.id}" data-idx="${idx}" style="
+          display:flex;align-items:flex-start;gap:.7rem;padding:.75rem .9rem;
+          border-radius:12px;
+          background:${step.done?'var(--surface)':'var(--surface2)'};
+          border-left:4px solid ${step.done?'var(--border)':col};
+          opacity:${step.done?'0.5':'1'};
+          transition:background .2s,opacity .2s;
+          user-select:none;-webkit-user-select:none;touch-action:none">
+          ${editing?`
+          <div class="tl-drag-handle" style="display:flex;flex-direction:column;gap:3px;padding:.3rem .1rem;cursor:grab;flex-shrink:0;opacity:.4;margin-top:.2rem">
+            <div style="width:16px;height:2px;background:var(--muted);border-radius:1px"></div>
+            <div style="width:16px;height:2px;background:var(--muted);border-radius:1px"></div>
+            <div style="width:16px;height:2px;background:var(--muted);border-radius:1px"></div>
+          </div>`:`
+          <div style="width:20px;flex-shrink:0"></div>`}
+          <div style="display:flex;flex-direction:column;align-items:center;gap:.2rem;flex-shrink:0;margin-top:.1rem">
+            <div style="width:22px;height:22px;border-radius:50%;border:2px solid ${step.done?'var(--border)':col};background:${step.done?col:'transparent'};display:flex;align-items:center;justify-content:center;font-size:.65rem;color:${step.done?'#fff':col};font-weight:700;transition:all .2s">
+              ${step.done?'✓':idx+1}
+            </div>
+            <div style="font-size:.6rem;color:${step.done?'var(--faint)':col};font-family:var(--ui);white-space:nowrap">${step.mins}m</div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.7rem;font-weight:700;color:${step.done?'var(--faint)':col};margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.5px">${esc(r?.title||'')}</div>
+            <div style="font-size:.88rem;color:${step.done?'var(--muted)':'var(--text)'};line-height:1.5;${step.done?'text-decoration:line-through':''}">${esc(step.text)}</div>
+            ${step.note?`<div style="font-size:.7rem;color:var(--muted);margin-top:.25rem;font-style:italic">${esc(step.note)}</div>`:''}
+            ${isPassive&&!step.done?`<div style="font-size:.68rem;color:#f59e0b;margin-top:.25rem">⏳ Passiv – parallel anderes erledigen</div>`:''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div style="display:flex;gap:.5rem;margin-top:1.2rem;flex-wrap:wrap">
+      ${session.mode==='manual'?`<button onclick="resetSessionTimeline('${session.id}')" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer">↺ Zurücksetzen</button>`:''}
+      ${session.aiDone?`<button onclick="rebuildAI('${session.id}')" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer">✨ Neu planen</button>`:''}
+      <button onclick="deleteSession('${session.id}')" style="flex:1;background:rgba(239,68,68,.15);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--danger);cursor:pointer">🗑 Session löschen</button>
+    </div>
+  </div>`;
+
+  // Tap on step body → toggle done; drag handle → reorder
+  initTimelineDnD(session);
+}
+
+function initTimelineDnD(session){
+  const container=document.getElementById('timelineSteps');
+  if(!container)return;
+  let dragEl=null, placeholder=null, startY=0, startIdx=0;
+
+  container.addEventListener('touchstart',e=>{
+    const handle=e.target.closest('.tl-drag-handle');
+    const stepEl=e.target.closest('.tl-step');
+    if(!stepEl)return;
+    const editing=session.editMode||false;
+
+    // In view mode: tap anywhere → toggle done
+    if(!editing){
+      const stepId=stepEl.dataset.stepid;
+      const step=session.timeline.steps.find(s=>s.id===stepId);
+      if(step){step.done=!step.done;saveSessions();renderApp();}
+      return;
+    }
+
+    // In edit mode: only drag handle triggers drag
+    if(!handle)return;
+    e.preventDefault();
+    dragEl=stepEl;
+    startY=e.touches[0].clientY;
+    startIdx=parseInt(stepEl.dataset.idx);
+
+    // Ghost style
+    const rect=dragEl.getBoundingClientRect();
+    dragEl.style.opacity='.4';
+    dragEl.style.transform='scale(1.02)';
+    dragEl.style.boxShadow='0 8px 24px rgba(0,0,0,.35)';
+    dragEl.style.zIndex='100';
+    dragEl.style.position='relative';
+
+    // Placeholder
+    placeholder=document.createElement('div');
+    placeholder.style.cssText=`height:${rect.height}px;border-radius:12px;background:var(--border);border:2px dashed var(--accent);margin-bottom:.5rem;transition:height .15s`;
+  },{passive:false});
+
+  container.addEventListener('touchmove',e=>{
+    if(!dragEl)return;
+    e.preventDefault();
+    const y=e.touches[0].clientY;
+    const dy=y-startY;
+    dragEl.style.transform=`translateY(${dy}px) scale(1.02)`;
+
+    // Find target position
+    const items=[...container.querySelectorAll('.tl-step')].filter(el=>el!==dragEl);
+    let targetIdx=startIdx;
+    for(let i=0;i<items.length;i++){
+      const rect=items[i].getBoundingClientRect();
+      if(y>rect.top+rect.height/2) targetIdx=parseInt(items[i].dataset.idx)+1;
+    }
+    // Move placeholder
+    if(placeholder.parentNode)placeholder.remove();
+    if(targetIdx>=items.length) container.appendChild(placeholder);
+    else{
+      const refEl=items.find(el=>parseInt(el.dataset.idx)>=targetIdx);
+      if(refEl)container.insertBefore(placeholder,refEl);
+    }
+  },{passive:false});
+
+  container.addEventListener('touchend',e=>{
+    if(!dragEl)return;
+    // Reset style
+    dragEl.style.opacity='';dragEl.style.transform='';
+    dragEl.style.boxShadow='';dragEl.style.zIndex='';dragEl.style.position='';
+    if(placeholder?.parentNode)placeholder.remove();
+
+    // Find drop target
+    const y=e.changedTouches[0].clientY;
+    const items=[...container.querySelectorAll('.tl-step')].filter(el=>el!==dragEl);
+    let targetIdx=startIdx;
+    for(let i=0;i<items.length;i++){
+      const rect=items[i].getBoundingClientRect();
+      if(y>rect.top+rect.height/2) targetIdx=parseInt(items[i].dataset.idx)+(parseInt(items[i].dataset.idx)>startIdx?0:1);
+    }
+    // Clamp
+    const steps=session.timeline.steps;
+    targetIdx=Math.max(0,Math.min(steps.length-1,targetIdx));
+    if(targetIdx!==startIdx){
+      const [moved]=steps.splice(startIdx,1);
+      steps.splice(targetIdx,0,moved);
+      saveSessions();
+    }
+    dragEl=null;placeholder=null;
+    renderApp();
+  },{passive:true});
+}
+
+function moveStepUp(sessionId, idx){
+  const session=S.sessions.find(s=>s.id===sessionId);
+  if(!session||!session.timeline||idx<1)return;
+  const steps=session.timeline.steps;
+  [steps[idx],steps[idx-1]]=[steps[idx-1],steps[idx]];
+  saveSessions();renderApp();
+}
+
+function toggleSessionEdit(sessionId){
+  const s=S.sessions.find(x=>x.id===sessionId);
+  if(s){s.editMode=!s.editMode;saveSessions();render();}
+}
+
+function resetSessionTimeline(sessionId){
+  const session=S.sessions.find(s=>s.id===sessionId);
+  if(!session?.timeline)return;
+  session.timeline.steps.forEach(s=>s.done=false);
+  saveSessions();renderApp();
+}
+
+async function rebuildAI(sessionId){
+  const session=S.sessions.find(s=>s.id===sessionId);
+  if(!session)return;
+  session.timeline=null;session.aiDone=false;
+  const recipes=session.recipeIds.map(rid=>S.recipes.find(r=>r.id===rid)).filter(Boolean);
+  await buildAITimeline(session,recipes);
+  saveSessions();renderApp();
+}
 
 function exportRecipeJSON(id){
   const r=S.recipes.find(x=>x.id===id);if(!r)return;
