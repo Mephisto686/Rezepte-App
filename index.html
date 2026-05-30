@@ -989,7 +989,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.7.11';
+const APP_VERSION = '2.7.12';
 const APP_DATE = '2026-05-30';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -1664,8 +1664,9 @@ function renderList(app){
           // Pre-save scroll so renderApp/restoreScroll won't jump
           S.scrollPositions['list']=savedScroll;
           S.selectMode=true;S.selected=new Set([cardId]);S.sortMode=false;
+          S._skipNextScrollRestore=true;
           renderApp();
-          // Belt-and-suspenders: also restore directly
+          // Restore immediately and in next frame
           if(page)page.scrollTop=savedScroll;
           requestAnimationFrame(()=>{
             if(page)page.scrollTop=savedScroll;
@@ -1832,13 +1833,13 @@ function stepRow(line,idx,done,ingMap){
   const {mins,text}=parseStepTime(line);
   const displayText=ingMap?highlightIngRefs(text,ingMap):boldify(text);
   const stepType=detectStepType(text);
-  const typeColor=stepType==='passive'?'#ef4444':'#22c55e';
+  const typeColor=stepType==='passive'?'#f87171':'#4ade80';
   return `<div class="step-row${done?' step-done':''}" data-step="${idx}" style="display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid var(--border);cursor:pointer">
     <div class="step-circle" data-num="${idx+1}" style="width:26px;height:26px;border-radius:50%;border:2px solid ${done?'var(--accent)':'var(--border2)'};background:${done?'var(--accent)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:${done?'#fff':'var(--muted)'};font-size:.78rem;margin-top:.15rem;transition:all .2s">${done?'✓':String(idx+1)}</div>
     <span class="step-txt" style="font-size:.9rem;line-height:1.75;color:${done?'var(--muted)':'var(--text2)'};${done?'text-decoration:line-through;':''}transition:all .2s;flex:1">${displayText}</span>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;flex-shrink:0;margin-top:.2rem">
       <button class="step-toggle-btn" data-action="promote" data-line="${esc(line)}" title="${t('step_promote')}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;font-family:var(--ui);opacity:.5">${t('step_promote')}</button>
-      ${mins?`<span style="font-size:.65rem;font-weight:600;color:#fff;background:${done?'var(--faint)':typeColor};border-radius:5px;padding:.1rem .35rem;white-space:nowrap">${mins} Min.</span>`:''}
+      ${mins?`<span style="font-size:.65rem;font-weight:600;color:#fff;background:${done?'rgba(128,128,128,.15)':stepType==='passive'?'rgba(248,113,113,.18)':'rgba(74,222,128,.18)'};color:${done?'var(--faint)':typeColor};border-radius:5px;padding:.1rem .35rem;white-space:nowrap">${mins} Min.</span>`:''}
     </div>
   </div>`;
 }
@@ -2983,9 +2984,9 @@ function saveScroll(){
   const page=document.querySelector('.page');
   if(key&&page)S.scrollPositions[key]=page.scrollTop;
 }
-function restoreScroll(key){
+function restoreScroll(key,skip=false){
+  if(skip||S._skipNextScrollRestore){S._skipNextScrollRestore=false;return;}
   const y=S.scrollPositions[key]||0;
-  // Use setTimeout to ensure DOM is painted before scrolling
   setTimeout(()=>{const page=document.querySelector('.page');if(page)page.scrollTop=y;},50);
 }
 const goList=()=>{saveScroll();S.view='list';S.selId=null;S.scaleFactor=1;S.lastSelId=null;saveSession();render();restoreScroll('list');};
@@ -4257,12 +4258,16 @@ function renderSessionTimeline(app, session, recipes){
 
   app.innerHTML=`<div style="padding:1rem 1.3rem 6rem">
     <!-- Compact start/end time row -->
-    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;background:var(--surface2);border-radius:10px;padding:.5rem .8rem">
-      <span style="font-size:.72rem;color:var(--muted);font-family:var(--ui);flex-shrink:0">🕐</span>
-      <input id="sessionStart" type="time" value="${startTime||derivedStart}" style="flex:1;background:transparent;border:none;outline:none;font-family:var(--ui);font-size:.85rem;color:var(--text);min-width:0">
-      <span style="font-size:.72rem;color:var(--faint);font-family:var(--ui);flex-shrink:0">~${totalMins} Min.</span>
-      <span style="font-size:.72rem;color:var(--muted);font-family:var(--ui);flex-shrink:0">🏁</span>
-      <input id="sessionEnd" type="time" value="${endTime||derivedEnd}" style="flex:1;background:transparent;border:none;outline:none;font-family:var(--ui);font-size:.85rem;color:var(--text);min-width:0;text-align:right">
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;gap:.35rem;flex:1;background:var(--surface2);border-radius:9px;padding:.45rem .7rem">
+        <span style="font-size:.7rem;color:var(--muted);font-family:var(--ui)">Start</span>
+        <input id="sessionStart" type="time" value="${startTime||derivedStart}" style="flex:1;background:transparent;border:none;outline:none;font-family:var(--ui);font-size:.82rem;font-weight:600;color:var(--text);min-width:0;-webkit-appearance:none">
+      </div>
+      <span style="font-size:.7rem;color:var(--faint);font-family:var(--ui);flex-shrink:0;white-space:nowrap">~${totalMins}'</span>
+      <div style="display:flex;align-items:center;gap:.35rem;flex:1;background:var(--surface2);border-radius:9px;padding:.45rem .7rem">
+        <span style="font-size:.7rem;color:var(--muted);font-family:var(--ui)">Ende</span>
+        <input id="sessionEnd" type="time" value="${endTime||derivedEnd}" style="flex:1;background:transparent;border:none;outline:none;font-family:var(--ui);font-size:.82rem;font-weight:600;color:var(--text);min-width:0;-webkit-appearance:none">
+      </div>
     </div>
 
     <!-- Progress -->
@@ -4310,7 +4315,7 @@ function renderSessionTimeline(app, session, recipes){
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem">
               <div style="font-size:.65rem;font-weight:700;color:${step.done?'var(--faint)':col};text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${esc(r?.title||'')}</div>
-              ${step.type?`<span style="font-size:.6rem;padding:.05rem .28rem;border-radius:4px;font-family:var(--ui);font-weight:600;flex-shrink:0;background:${step.type==='passive'?'rgba(245,158,11,.15)':'rgba(59,130,246,.15)'};color:${step.type==='passive'?'#f59e0b':'#60a5fa'}">${step.type==='passive'?'⏳':'⚡'}</span>`:''}
+              ${step.type?`<span style="font-size:.6rem;padding:.05rem .28rem;border-radius:4px;font-family:var(--ui);font-weight:600;flex-shrink:0;background:${step.type==='passive'?'rgba(248,113,113,.15)':'rgba(74,222,128,.15)'};color:${step.type==='passive'?'#f87171':'#4ade80'}">${step.type==='passive'?'⏳':'⚡'}</span>`:''}
             </div>
             <div style="font-size:.88rem;color:${step.done?'var(--muted)':'var(--text)'};line-height:1.5;${step.done?'text-decoration:line-through':''}">${esc(step.text)}</div>
             ${step.note?`<div style="font-size:.68rem;color:var(--muted);margin-top:.2rem;font-style:italic">${esc(step.note)}</div>`:''}
