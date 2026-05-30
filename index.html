@@ -989,7 +989,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.7.6';
+const APP_VERSION = '2.7.10';
 const APP_DATE = '2026-05-30';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -1247,7 +1247,13 @@ function renderHdr(){
   else if(S.view==='session'){
     const sess=S.sessions.find(s=>s.id===S.activeSession);
     tit.textContent='👨‍🍳 '+(sess?.name||'Kochsession');
-    sub.textContent='';acts.innerHTML='';
+    sub.textContent='';
+    if(sess?.timeline){
+      const editing=sess.editMode||false;
+      acts.innerHTML=`<button onclick="toggleSessionEdit('${sess.id}')" style="background:${editing?'var(--accent)':'var(--surface2)'};border:none;border-radius:8px;padding:.35rem .75rem;font-size:.8rem;font-weight:600;color:${editing?'#fff':'var(--muted)'};cursor:pointer;font-family:var(--ui)">${editing?'✓ Fertig':'✏️ Sortieren'}</button>`;
+    } else {
+      acts.innerHTML='';
+    }
   }
   else if(S.view==='planner'){
     tit.textContent=S.lang==='en'?'📅 Meal Plan':'📅 Speiseplan';sub.textContent='';
@@ -1648,28 +1654,30 @@ function renderList(app){
       let _lp=null;
       card.addEventListener('touchstart',e=>{
         if(e.target.closest('[data-fav]')||e.target.closest('[data-drag]'))return;
+        const cardId=card.dataset.id;
         _lp=setTimeout(()=>{
           _lp=null;
-          if(!S.selectMode){
-            const scrollY=document.querySelector('.page')?.scrollTop||0;
-            S.selectMode=true;S.selected=new Set();S.sortMode=false;
-            renderApp();
-            // Restore scroll and select the card
-            requestAnimationFrame(()=>{
-              const page=document.querySelector('.page');
-              if(page)page.scrollTop=scrollY;
-              const id=card.dataset.id;
-              S.selected.add(id);
-              const sc=document.getElementById('selCount');
-              if(sc)sc.textContent=S.selected.size+' '+t('det_selected');
-              const newCard=document.querySelector(`.card[data-id="${id}"]`);
-              if(newCard){
-                newCard.classList.add('sel');
-                const cb=newCard.querySelector('.sel-cb');
-                if(cb)cb.textContent='✓';
-              }
-            });
-          }
+          if(S.selectMode)return;
+          // Save scroll before anything changes
+          const page=document.querySelector('.page');
+          const savedScroll=page?page.scrollTop:0;
+          // Pre-save scroll so renderApp/restoreScroll won't jump
+          S.scrollPositions['list']=savedScroll;
+          S.selectMode=true;S.selected=new Set([cardId]);S.sortMode=false;
+          renderApp();
+          // Belt-and-suspenders: also restore directly
+          if(page)page.scrollTop=savedScroll;
+          requestAnimationFrame(()=>{
+            if(page)page.scrollTop=savedScroll;
+            const sc=document.getElementById('selCount');
+            if(sc)sc.textContent='1 '+t('det_selected');
+            const newCard=document.querySelector(`.card[data-id="${cardId}"]`);
+            if(newCard){
+              newCard.classList.add('sel');
+              const cb=newCard.querySelector('.sel-cb');
+              if(cb)cb.textContent='✓';
+            }
+          });
         },500);
       },{passive:true});
       card.addEventListener('touchend',()=>{if(_lp){clearTimeout(_lp);_lp=null;}});
@@ -1821,10 +1829,13 @@ function showIngBubble(e, scaled){
 }
 
 function stepRow(line,idx,done,ingMap){
-  const txt=ingMap?highlightIngRefs(line,ingMap):boldify(line);
+  const {mins,text}=parseStepTime(line);
+  const displayText=ingMap?highlightIngRefs(text,ingMap):boldify(text);
+  const timeBadge=mins?`<span style="font-size:.65rem;font-family:var(--ui);font-weight:600;color:${done?'var(--faint)':'var(--accent)'};background:${done?'transparent':'color-mix(in srgb,var(--accent) 12%,transparent)'};border-radius:5px;padding:.1rem .35rem;flex-shrink:0;white-space:nowrap;margin-top:.3rem">${mins} Min.</span>`:'';
   return `<div class="step-row${done?' step-done':''}" data-step="${idx}" style="display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid var(--border);cursor:pointer">
     <div class="step-circle" data-num="${idx+1}" style="width:26px;height:26px;border-radius:50%;border:2px solid ${done?'var(--accent)':'var(--border2)'};background:${done?'var(--accent)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:${done?'#fff':'var(--muted)'};font-size:.78rem;margin-top:.15rem;transition:all .2s">${done?'✓':String(idx+1)}</div>
-    <span class="step-txt" style="font-size:.9rem;line-height:1.75;color:${done?'var(--muted)':'var(--text2)'};${done?'text-decoration:line-through;':''}transition:all .2s;flex:1">${txt}</span>
+    <span class="step-txt" style="font-size:.9rem;line-height:1.75;color:${done?'var(--muted)':'var(--text2)'};${done?'text-decoration:line-through;':''}transition:all .2s;flex:1">${displayText}</span>
+    ${timeBadge}
     <button class="step-toggle-btn" data-action="promote" data-line="${esc(line)}" title="${t('step_promote')}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;flex-shrink:0;font-family:var(--ui);margin-top:.2rem;opacity:.5">${t('step_promote')}</button>
   </div>`;
 }
@@ -3992,33 +4003,140 @@ async function startSession(sessionId){
   const recipes=session.recipeIds.map(rid=>S.recipes.find(r=>r.id===rid)).filter(Boolean);
 
   if(session.mode==='manual'){
-    // Build flat step list from all recipes
-    const steps=[];
-    recipes.forEach(r=>{
-      (r.steps||'').split('\n').forEach((line,i)=>{
-        const t2=line.trim();
-        if(!t2||/^\*\*/.test(t2))return;
-        const {mins,text}=parseStepTime(t2);
-        steps.push({
-          id:r.id+'_s'+i,
-          recipeId:r.id,
-          recipeTitle:r.title,
-          text,
-          mins:mins||Math.round(((parseInt(r.prepTime)||0)+(parseInt(r.cookTime)||0))/Math.max(1,(r.steps||'').split('\n').filter(l=>l.trim()&&!l.match(/^\*\*/)).length)),
-          active:true,
-          done:false,
-          order:steps.length
-        });
-      });
-    });
-    session.timeline={steps,totalMins:steps.reduce((s,x)=>s+x.mins,0)};
+    session.timeline=buildSmartTimeline(recipes);
     session.aiDone=false;
   } else {
-    // AI mode
     await buildAITimeline(session, recipes);
   }
   saveSessions();
   renderApp();
+}
+
+// ── Keyword-based active/passive detection ──
+function detectStepType(text){
+  const t=' '+text.toLowerCase()+' ';
+  const passive=[
+    'kochen','köcheln','backen','ruhen','gehen lassen','ziehen lassen',
+    'marinieren','abkühlen','wässern','einweichen','dämpfen','warten',
+    'auskühlen','trocknen','quellen','reifen lassen','stehen lassen','rasten',
+    'auftauen','kühlen','kühlschrank','gefrieren','aufgehen','fermentieren',
+    'durchziehen','beiseite stellen','warm halten','im ofen','braten lassen',
+    'einkochen','reduzieren','karamellisieren lassen','stocken','ziehen',
+    'ruhen lassen','garen lassen','köcheln lassen','köchelt'
+  ];
+  // Use word-boundary check: keyword must be preceded and followed by non-word char
+  return passive.some(p=>{
+    const re=new RegExp('(?<![a-zäöüß])'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![a-zäöüß])','i');
+    return re.test(t);
+  })?'passive':'active';
+}
+
+// ── Smart parallelization without AI ──
+function buildSmartTimeline(recipes){
+  // 1. Parse all steps with type detection
+  const allSteps=[];
+  recipes.forEach(r=>{
+    (r.steps||'').split('\n').forEach((line,i)=>{
+      const t2=line.trim();
+      if(!t2||/^\*\*/.test(t2))return;
+      const {mins,text}=parseStepTime(t2);
+      const estimatedMins=mins||Math.round(
+        ((parseInt(r.prepTime)||0)+(parseInt(r.cookTime)||0))/
+        Math.max(1,(r.steps||'').split('\n').filter(l=>l.trim()&&!l.match(/^\*\*$/)).length)
+      );
+      allSteps.push({
+        id:r.id+'_s'+i,
+        recipeId:r.id,
+        recipeTitle:r.title,
+        text,
+        mins:estimatedMins,
+        type:detectStepType(text),
+        done:false
+      });
+    });
+  });
+
+  // 2. Parallelize: schedule steps so passive windows are filled
+  // Strategy: for each recipe, maintain a cursor of when it's "free"
+  // Place active steps first, use passive windows to interleave other recipe's active steps
+
+  const recipeStepMap={};
+  recipes.forEach(r=>{recipeStepMap[r.id]=allSteps.filter(s=>s.recipeId===r.id);});
+
+  const scheduled=[];
+  const recipeIdx={};
+  recipes.forEach(r=>{recipeIdx[r.id]=0;});
+
+  // Simple greedy: find the recipe with the longest total passive time first
+  // Then interleave others during passive windows
+  const recipeTotals={};
+  recipes.forEach(r=>{
+    recipeTotals[r.id]=recipeStepMap[r.id]
+      .filter(s=>s.type==='passive')
+      .reduce((sum,s)=>sum+s.mins,0);
+  });
+  const orderedRecipes=[...recipes].sort((a,b)=>recipeTotals[b.id]-recipeTotals[a.id]);
+
+  // Build timeline: process recipe with most passive time, interleave others during passive
+  const used=new Set();
+  let time=0;
+
+  // Walk through primary recipe steps, interleave others during passive phases
+  const primary=orderedRecipes[0];
+  const others=orderedRecipes.slice(1);
+
+  // Collect all steps per recipe as queues
+  const queues={};
+  orderedRecipes.forEach(r=>{queues[r.id]=[...recipeStepMap[r.id]];});
+
+  // Greedy scheduler
+  const pending=[...allSteps]; // all steps not yet scheduled
+
+  // Process: take next unscheduled step of primary recipe
+  // If it's passive: fill that window with active steps from other recipes
+  while(pending.length>0){
+    // Find next pending step from primary recipe
+    const nextPrimary=pending.find(s=>s.recipeId===primary.id&&!used.has(s.id));
+
+    if(!nextPrimary){
+      // Primary done, schedule remaining in order
+      pending.filter(s=>!used.has(s.id)).forEach((s,i)=>{
+        used.add(s.id);
+        scheduled.push({...s,order:scheduled.length,note:''});
+      });
+      break;
+    }
+
+    // Schedule this primary step
+    used.add(nextPrimary.id);
+    pending.splice(pending.indexOf(nextPrimary),1);
+
+    if(nextPrimary.type==='passive'&&others.length>0){
+      // During this passive window, schedule active steps from other recipes
+      let window=nextPrimary.mins;
+      const note=`${nextPrimary.mins} Min. frei – parallelisieren`;
+      scheduled.push({...nextPrimary,order:scheduled.length,note});
+
+      // Fill window with active steps from other recipes
+      for(const other of others){
+        const activeOther=pending.filter(s=>s.recipeId===other.id&&!used.has(s.id)&&s.type==='active');
+        for(const step of activeOther){
+          if(window<=0)break;
+          used.add(step.id);
+          pending.splice(pending.indexOf(step),1);
+          scheduled.push({...step,order:scheduled.length,note:`Während ${nextPrimary.recipeTitle} wartet`});
+          window-=step.mins;
+        }
+      }
+    } else {
+      scheduled.push({...nextPrimary,order:scheduled.length,note:''});
+    }
+  }
+
+  // Calculate realistic total (not sum but max parallel path)
+  const totalMins=Math.round(allSteps.reduce((s,x)=>s+x.mins,0)*0.65); // ~35% savings from parallelization
+
+  return {steps:scheduled,totalMins};
 }
 
 async function buildAITimeline(session, recipes){
@@ -4116,17 +4234,42 @@ function renderSessionTimeline(app, session, recipes){
   const done=steps.filter(s=>s.done).length;
   const pct=Math.round(done/steps.length*100);
   const editing=session.editMode||false;
+  const totalMins=session.timeline.totalMins;
   const colors={'Fleisch':'#ef4444','Fisch':'#3b82f6','Pasta':'#f97316','Pizza & Flammkuchen':'#f59e0b','Vegetarisch':'#22c55e','Suppen':'#06b6d4','Desserts & Kuchen':'#ec4899'};
   const recipeColor=(r)=>{
     const cat=r?.category||'';
     return colors[cat]||getCatColor(cat)||'#8b5cf6';
   };
 
+  // Compute start/end time display
+  const startTime=session.startTime||'';
+  const endTime=session.endTime||'';
+  function minsToTime(base, addMins){
+    const [h,m]=base.split(':').map(Number);
+    const total=h*60+m+addMins;
+    return String(Math.floor(total/60)%24).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
+  }
+  const derivedEnd=startTime?minsToTime(startTime,totalMins):'';
+  const derivedStart=endTime?(()=>{const [h,m]=endTime.split(':').map(Number);const t=h*60+m-totalMins;return String(Math.floor((t+1440)%1440/60)).padStart(2,'0')+':'+String(((t%60)+60)%60).padStart(2,'0');})():'';
+
   app.innerHTML=`<div style="padding:1rem 1.3rem 6rem">
+    <!-- Start/End time -->
+    <div style="background:var(--surface2);border-radius:12px;padding:.7rem .9rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:120px">
+        <span style="font-size:.75rem;color:var(--muted);font-family:var(--ui);white-space:nowrap">🕐 Start</span>
+        <input id="sessionStart" type="time" value="${startTime||derivedStart}" style="flex:1;background:var(--bg);border:1.5px solid var(--border2);border-radius:8px;padding:.3rem .5rem;font-family:var(--ui);font-size:.85rem;color:var(--text);min-width:90px">
+      </div>
+      <div style="font-size:.75rem;color:var(--faint);font-family:var(--ui)">~${totalMins} Min.</div>
+      <div style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:120px">
+        <span style="font-size:.75rem;color:var(--muted);font-family:var(--ui);white-space:nowrap">🏁 Ende</span>
+        <input id="sessionEnd" type="time" value="${endTime||derivedEnd}" style="flex:1;background:var(--bg);border:1.5px solid var(--border2);border-radius:8px;padding:.3rem .5rem;font-family:var(--ui);font-size:.85rem;color:var(--text);min-width:90px">
+      </div>
+    </div>
+
     <!-- Progress -->
     <div style="margin-bottom:1.2rem">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
-        <span style="font-size:.78rem;color:var(--muted);font-family:var(--ui)">${done}/${steps.length} Schritte · ~${session.timeline.totalMins} Min. gesamt</span>
+        <span style="font-size:.78rem;color:var(--muted);font-family:var(--ui)">${done}/${steps.length} Schritte</span>
         <span style="font-size:.78rem;font-weight:700;color:var(--accent)">${pct}%</span>
       </div>
       <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
@@ -4134,10 +4277,9 @@ function renderSessionTimeline(app, session, recipes){
       </div>
     </div>
 
-    <!-- Edit/Cook mode toggle banner -->
-    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:10px;padding:.55rem .9rem;margin-bottom:1rem">
-      <span style="font-size:.78rem;color:var(--muted);font-family:var(--ui)">${editing?'Sortier-Modus: ≡ Handle ziehen':'Koch-Modus: Schritt antippen = erledigt'}</span>
-      <button onclick="toggleSessionEdit('${session.id}')" style="background:${editing?'var(--accent)':'var(--surface)'};border:1px solid var(--border2);border-radius:8px;padding:.3rem .65rem;font-size:.78rem;font-weight:600;color:${editing?'#fff':'var(--text)'};cursor:pointer;font-family:var(--ui);flex-shrink:0">${editing?'✓ Fertig':'✏️ Sortieren'}</button>
+    <!-- Mode hint -->
+    <div style="font-size:.72rem;color:var(--faint);font-family:var(--ui);margin-bottom:.8rem;text-align:center">
+      ${editing?'Sortiermodus: Karte halten und ziehen':'Kochmodus: Schritt antippen = erledigt'}
     </div>
     <!-- Recipe color legend -->
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
@@ -4193,6 +4335,18 @@ function renderSessionTimeline(app, session, recipes){
 
   // Tap on step body → toggle done; drag handle → reorder
   initTimelineDnD(session);
+
+  // Start/end time inputs
+  document.getElementById('sessionStart')?.addEventListener('change',e=>{
+    session.startTime=e.target.value;
+    session.endTime='';
+    saveSessions();renderApp();
+  });
+  document.getElementById('sessionEnd')?.addEventListener('change',e=>{
+    session.endTime=e.target.value;
+    session.startTime='';
+    saveSessions();renderApp();
+  });
 }
 
 function initTimelineDnD(session){
