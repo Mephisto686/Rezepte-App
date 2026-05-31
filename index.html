@@ -989,8 +989,8 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.7.12';
-const APP_DATE = '2026-05-30';
+const APP_VERSION = '2.7.13';
+const APP_DATE = '2026-05-31';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
   { version:'2.6.0', date:'2026-05-29', de:['Portionen in beiden Tabs (sync)','↺ Button immer sichtbar (kein Layout-Shift)','Zutaten in Schritten antippbar → Menge als Bubble'], en:['Portions in both tabs (synced)','↺ always visible (no layout shift)','Ingredient refs in steps tappable → amount bubble'] },
@@ -1783,16 +1783,17 @@ function renderStepSections(stepsText, stepsDone, sectionState, ingMap){
 // Build ingredient name map for tooltip highlighting
 function buildIngMap(ingredientsText, scaleFactor, servings){
   if(!ingredientsText)return {};
-  const base=servings||4;
   const map={};
   ingredientsText.split('\n').forEach(l=>{
     const t2=l.trim();
     if(!t2||/^\*\*/.test(t2)||t2.endsWith(':'))return;
-    // Extract name: strip leading quantity (numbers + units)
-    const m=t2.match(/^[\d.,½¼¾⅓⅔\s]+(?:g|kg|ml|l|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise|Becher|Prisen)?\s*(.+)$/i);
+    // Extract ingredient name by stripping leading quantity + unit
+    const m=t2.match(/^(?:[\d.,/½¼¾⅓⅔]+\s*(?:g|kg|ml|l|cl|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise[n]?|Becher|Pck\.?|Würfel|Zweig[e]?|Blatt|Blätter|Handvoll|Spritzer|Schuss|cm|mm)\s+)(.+)$/i);
     const name=m?m[1].trim():t2;
-    // Store name → scaled line
-    if(name.length>2)map[name.toLowerCase()]=scaleI(t2,scaleFactor/base*(base));
+    if(name.length>2){
+      // Store both the full name and the scaled version
+      map[name.toLowerCase()]=scaleI(t2,scaleFactor);
+    }
   });
   return map;
 }
@@ -1804,7 +1805,9 @@ function highlightIngRefs(text, ingMap){
   const names=Object.keys(ingMap).sort((a,b)=>b.length-a.length);
   names.forEach(name=>{
     const scaled=ingMap[name];
-    const re=new RegExp('(?<![\\w])'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![\\w])','gi');
+    // Use Unicode-aware word boundaries (handles German umlauts)
+    const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const re=new RegExp('(?<![\\wäöüÄÖÜß])'+escaped+'(?![\\wäöüÄÖÜß])','gi');
     result=result.replace(re,m=>`<span class="ing-ref" data-scaled="${esc(scaled)}" onclick="showIngBubble(event,'${esc(scaled)}')">${m}</span>`);
   });
   return result;
@@ -1813,20 +1816,18 @@ function highlightIngRefs(text, ingMap){
 let _bubbleTimer=null;
 function showIngBubble(e, scaled){
   e.stopPropagation();
-  // Remove existing bubble
   document.querySelectorAll('.ing-bubble').forEach(b=>b.remove());
   if(_bubbleTimer)clearTimeout(_bubbleTimer);
   const bubble=document.createElement('div');
   bubble.className='ing-bubble';
   bubble.textContent=scaled;
   document.body.appendChild(bubble);
-  // Position near tap
   const x=Math.min(e.clientX, window.innerWidth-230);
   const y=e.clientY-50;
   bubble.style.left=Math.max(10,x)+'px';
   bubble.style.top=Math.max(10,y)+'px';
   requestAnimationFrame(()=>bubble.classList.add('show'));
-  _bubbleTimer=setTimeout(()=>{bubble.classList.remove('show');setTimeout(()=>bubble.remove(),200);},5000);
+  _bubbleTimer=setTimeout(()=>{bubble.classList.remove('show');setTimeout(()=>bubble.remove(),200);},2000);
 }
 
 function stepRow(line,idx,done,ingMap){
