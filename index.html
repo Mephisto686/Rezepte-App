@@ -989,7 +989,7 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.7.13';
+const APP_VERSION = '2.7.14';
 const APP_DATE = '2026-05-31';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -1784,15 +1784,28 @@ function renderStepSections(stepsText, stepsDone, sectionState, ingMap){
 function buildIngMap(ingredientsText, scaleFactor, servings){
   if(!ingredientsText)return {};
   const map={};
+  const stopwords=new Set(['und','oder','mit','nach','ohne','etwas','nach','belieben','bedarf','ggf','optional','je','ca','zum','zur','für','sehr','gut','klein','groß','fein','frisch','heiß','kalt','warm','ganz']);
   ingredientsText.split('\n').forEach(l=>{
     const t2=l.trim();
     if(!t2||/^\*\*/.test(t2)||t2.endsWith(':'))return;
-    // Extract ingredient name by stripping leading quantity + unit
-    const m=t2.match(/^(?:[\d.,/½¼¾⅓⅔]+\s*(?:g|kg|ml|l|cl|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Zehe[n]?|Msp\.?|Prise[n]?|Becher|Pck\.?|Würfel|Zweig[e]?|Blatt|Blätter|Handvoll|Spritzer|Schuss|cm|mm)\s+)(.+)$/i);
-    const name=m?m[1].trim():t2;
-    if(name.length>2){
-      // Store both the full name and the scaled version
-      map[name.toLowerCase()]=scaleI(t2,scaleFactor);
+    const scaled=scaleI(t2,scaleFactor);
+    // Extract name by stripping leading quantity + unit
+    const mUnit=t2.match(/^(?:[\d.,/½¼¾⅓⅔–-]+\s*(?:g|kg|ml|l|cl|EL|TL|Stk\.?|Stück|Scheibe[n]?|Dose[n]?|Glas|Bund|Pkg\.?|Pck\.?|Zehe[n]?|Msp\.?|Prise[n]?|Becher|Würfel|Zweig[e]?|Blatt|Blätter|Handvoll|Spritzer|Schuss|cm|mm)\s+)(.+)$/i);
+    let name=mUnit?mUnit[1].trim():t2;
+    // Strip parenthetical content: "(ca. 40ml)" "(je nach Mehlsorte...)"
+    name=name.replace(/\s*\([^)]*\)/g,'').trim();
+    if(name.length<2)return;
+    // Register the full extracted name
+    map[name.toLowerCase()]=scaled;
+    // Also register each meaningful word individually (for "lauwarmes Wasser" → also "Wasser")
+    const words=name.split(/\s+/);
+    if(words.length>1){
+      words.forEach(w=>{
+        const wl=w.toLowerCase().replace(/[,;.]/g,'');
+        if(wl.length>=4&&!stopwords.has(wl)&&!map[wl]){
+          map[wl]=scaled;
+        }
+      });
     }
   });
   return map;
