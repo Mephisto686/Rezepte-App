@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Meine Rezepte">
 <meta name="theme-color" content="#1e1b2e" id="themeColor">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Meine Rezepte</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -989,8 +992,8 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.7.14';
-const APP_DATE = '2026-05-31';
+const APP_VERSION = '2.7.16';
+const APP_DATE = '2026-06-06';
 const VERSION_HISTORY = [
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
   { version:'2.6.0', date:'2026-05-29', de:['Portionen in beiden Tabs (sync)','↺ Button immer sichtbar (kein Layout-Shift)','Zutaten in Schritten antippbar → Menge als Bubble'], en:['Portions in both tabs (synced)','↺ always visible (no layout shift)','Ingredient refs in steps tappable → amount bubble'] },
@@ -1813,16 +1816,34 @@ function buildIngMap(ingredientsText, scaleFactor, servings){
 
 function highlightIngRefs(text, ingMap){
   if(!ingMap||!Object.keys(ingMap).length)return esc(text);
-  let result=esc(text);
-  // Sort by length desc so longer names match first
   const names=Object.keys(ingMap).sort((a,b)=>b.length-a.length);
+  const matches=[];
+
+  // Find all matches in PLAIN text (before escaping) to avoid HTML attribute contamination
   names.forEach(name=>{
-    const scaled=ingMap[name];
-    // Use Unicode-aware word boundaries (handles German umlauts)
     const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const re=new RegExp('(?<![\\wäöüÄÖÜß])'+escaped+'(?![\\wäöüÄÖÜß])','gi');
-    result=result.replace(re,m=>`<span class="ing-ref" data-scaled="${esc(scaled)}" onclick="showIngBubble(event,'${esc(scaled)}')">${m}</span>`);
+    let m;
+    while((m=re.exec(text))!==null){
+      const start=m.index, end=m.index+m[0].length;
+      // Skip if overlaps with already found match
+      if(!matches.some(x=>x.start<end&&x.end>start)){
+        matches.push({start,end,orig:m[0],scaled:ingMap[name]});
+      }
+    }
   });
+
+  if(!matches.length)return esc(text);
+
+  // Build HTML in one pass – escape each segment separately
+  matches.sort((a,b)=>a.start-b.start);
+  let result='',pos=0;
+  matches.forEach(({start,end,orig,scaled})=>{
+    result+=esc(text.slice(pos,start));
+    result+=`<span class="ing-ref" onclick="showIngBubble(event,${JSON.stringify(scaled)})">${esc(orig)}</span>`;
+    pos=end;
+  });
+  result+=esc(text.slice(pos));
   return result;
 }
 

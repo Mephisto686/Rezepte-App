@@ -1,13 +1,13 @@
-// Service Worker – Meine Rezepte App v2.1.1
-const CACHE = 'rezepte-v2.3.7';
-const FILES = ['./', './index.html'];
+// Service Worker – Meine Rezepte App v2.7.16
+const CACHE = 'rezepte-v2.7.16';
+const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
       .then(c => c.addAll(FILES))
       .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting()) // Don't block install on cache failure
+      .catch(() => self.skipWaiting())
   );
 });
 
@@ -24,7 +24,6 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if(e.request.method !== 'GET') return;
-  // Network first for navigation, cache first for assets
   if(e.request.mode === 'navigate'){
     e.respondWith(
       fetch(e.request)
