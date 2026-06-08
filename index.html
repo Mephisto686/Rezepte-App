@@ -1857,7 +1857,7 @@ function highlightIngRefs(text, ingMap){
   let result='',pos=0;
   matches.forEach(({start,end,orig,scaled})=>{
     result+=esc(text.slice(pos,start));
-    result+=`<span class="ing-ref" onclick="showIngBubble(event,${JSON.stringify(scaled)})">${esc(orig)}</span>`;
+    result+=`<span class="ing-ref" data-scaled="${esc(scaled)}" onclick="showIngBubble(event,this.dataset.scaled)">${esc(orig)}</span>`;
     pos=end;
   });
   result+=esc(text.slice(pos));
