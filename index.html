@@ -1810,6 +1810,22 @@ function buildIngMap(ingredientsText, scaleFactor, servings){
         }
       });
     }
+    // Stem matching: register word without common suffixes
+    // e.g. "Zwiebel" → matches "Zwiebeln", "Knoblauchzehen" → matches "Knoblauch"
+    const allWords=[name, ...words];
+    allWords.forEach(w=>{
+      const wl=w.toLowerCase().replace(/[,;.]/g,'');
+      if(wl.length<4)return;
+      // Strip common German suffixes to get stem
+      const suffixes=['zehen','chen','lein','ling','heit','keit','ung','nen','eln','ern','ern','en','er','es','em','el','n','s','e'];
+      for(const suf of suffixes){
+        if(wl.endsWith(suf)&&wl.length-suf.length>=5){
+          const stem=wl.slice(0,-suf.length);
+          if(!map[stem])map[stem]=scaled;
+          break;
+        }
+      }
+    });
   });
   return map;
 }
@@ -1822,7 +1838,8 @@ function highlightIngRefs(text, ingMap){
   // Find all matches in PLAIN text (before escaping) to avoid HTML attribute contamination
   names.forEach(name=>{
     const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    const re=new RegExp('(?<![\\wäöüÄÖÜß])'+escaped+'(?![\\wäöüÄÖÜß])','gi');
+    // Match whole word OR compound (e.g. 'knoblauch' matches 'Knoblauchzehen')
+    const re=new RegExp('(?<![\\wäöüÄÖÜß])'+escaped+'[äöüÄÖÜßa-zA-Z]*(?![\\wäöüÄÖÜß])','gi');
     let m;
     while((m=re.exec(text))!==null){
       const start=m.index, end=m.index+m[0].length;
@@ -2160,6 +2177,7 @@ function renderDetail(app){
       return;
     }
     const row=e.target.closest('.step-row');if(!row)return;
+    if(e.target.closest('.ing-ref'))return; // ingredient bubble tap – don't toggle step
     const i=Number(row.dataset.step);
     if(!S.stepsDone[r.id])S.stepsDone[r.id]={};
     S.stepsDone[r.id][i]=!S.stepsDone[r.id][i];
