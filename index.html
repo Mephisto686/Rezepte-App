@@ -686,9 +686,7 @@ function saveMealPlan(){
   }).catch(()=>{});
   try{localStorage.setItem('mrpv',S.plannerView);}catch{}
 }
-function saveSh(){
-  // Also sync to Firebase if enabled
-  if(S.firebaseEnabled&&S.firebaseId)fbPush();
+function saveSh_local(){
   openDB().then(db => {
     const tx = db.transaction('shopping','readwrite');
     const store = tx.objectStore('shopping');
@@ -696,11 +694,17 @@ function saveSh(){
     S.shopping.forEach(item => store.put(item));
   }).catch(()=>{});
 }
+function saveSh(){
+  // Push to Firebase, then save locally
+  if(S.firebaseEnabled&&S.firebaseId)fbPush();
+  saveSh_local();
+}
 function saveKey(){try{localStorage.setItem('mrak',S.apiKey);}catch{}}
 
 // ══════════════ FIREBASE REAL-TIME SYNC ══════════════
 let _fbPollTimer=null;
 let _fbEtag=null;
+let _fbLastPush=0; // timestamp of our last push, to avoid accepting older remote data
 
 function fbUrl(){
   // S.firebaseId stores the full database URL
@@ -766,8 +770,8 @@ function saveFirebase(){
 async function fbPush(){
   if(!S.firebaseEnabled||!S.firebaseId)return;
   try{
-    // Firebase stores null for empty arrays - send explicit null when empty
-    const data=S.shopping.length?S.shopping:null;
+    _fbLastPush=Date.now();
+    const data=S.shopping.length?{items:S.shopping,_updatedAt:_fbLastPush}:null;
     await fetch(fbUrl(),{
       method:'PUT',
       headers:{'Content-Type':'application/json'},
@@ -782,20 +786,26 @@ async function fbPoll(){
     const headers={};
     if(_fbEtag)headers['If-None-Match']=_fbEtag;
     const res=await fetch(fbUrl(),{headers});
-    if(res.status===304)return; // no change
+    if(res.status===304)return;
     _fbEtag=res.headers.get('ETag')||null;
     const data=await res.json();
-    // null means empty list (Firebase converts [] to null)
-    const incoming=Array.isArray(data)?data:(data===null?[]:null);
-    if(incoming!==null){
-      const remoteStr=JSON.stringify(incoming);
-      const localStr=JSON.stringify(S.shopping);
-      if(remoteStr!==localStr){
-        S.shopping=incoming;
-        saveSh();
-        if(S.view==='shopping')renderApp();
-        renderNav();
-      }
+    if(data===null){
+      // Remote is empty - only overwrite local if local was also empty or remote timestamp logic
+      return;
+    }
+    // Support both old format (array) and new format ({items, _updatedAt})
+    const incoming=Array.isArray(data)?data:(data&&data.items?data.items:null);
+    const remoteTs=data&&data._updatedAt?data._updatedAt:0;
+    if(incoming===null)return;
+    const remoteStr=JSON.stringify(incoming);
+    const localStr=JSON.stringify(S.shopping);
+    if(remoteStr===localStr)return; // no change
+    // Only accept remote if it's newer than our last push
+    if(remoteTs>=(_fbLastPush||0)){
+      S.shopping=incoming;
+      saveSh_local(); // save locally only, don't push back
+      if(S.view==='shopping')renderApp();
+      renderNav();
     }
   }catch(e){console.warn('Firebase poll failed:',e);}
 }
