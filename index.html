@@ -803,12 +803,10 @@ async function fbPoll(){
 function initFirebase(){
   stopFirebase();
   if(!S.firebaseId||!S.firebaseEnabled)return;
-  // Initial push of current list
-  fbPush();
+  // Poll immediately on init (read-only, don't overwrite remote with local)
+  setTimeout(fbPoll,500);
   // Poll every 5 seconds
   _fbPollTimer=setInterval(fbPoll,5000);
-  // Also poll immediately
-  setTimeout(fbPoll,500);
 }
 
 function stopFirebase(){
@@ -993,9 +991,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.7.17';
-const APP_DATE = '2026-06-09';
+const APP_VERSION = '2.7.18';
+const APP_DATE = '2026-06-15';
 const VERSION_HISTORY = [
+  { version:'2.7.18', date:'2026-06-15', de:['Fix: Einkaufsliste-Sync – initFirebase pusht nicht mehr beim Start und überschreibt remote Daten'], en:['Fix: Shopping list sync – initFirebase no longer pushes on startup overwriting remote data'] },
   { version:'2.7.17', date:'2026-06-09', de:['UI: Kategorie-Label auf Karte als gedimmtes Label (Caps, kleiner)','UI: Zutat Mengenangabe typografisch hervorgehoben','UI: Hero-Foto mit Farbverlauf-Überblendung zum Header','UI: Favorit-Button mit Frosted-Glass-Kreis-Hintergrund','UI: App-Icon im Header (Listenansicht)','UI: ↑ Titel-Button als Icon-Button neu gestaltet'], en:['UI: Category label on card as dimmed label (caps, smaller)','UI: Ingredient quantity highlighted typographically','UI: Hero photo with gradient blend into header','UI: Fav button with frosted glass circle','UI: App icon in header (list view)','UI: ↑ Title button redesigned as icon button'] },
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
   { version:'2.6.0', date:'2026-05-29', de:['Portionen in beiden Tabs (sync)','↺ Button immer sichtbar (kein Layout-Shift)','Zutaten in Schritten antippbar → Menge als Bubble'], en:['Portions in both tabs (synced)','↺ always visible (no layout shift)','Ingredient refs in steps tappable → amount bubble'] },
