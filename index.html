@@ -1077,12 +1077,12 @@ async function fsInitialSync(){
       }
     }
     S.recipes=merged;
-    // Fotos für Rezepte ohne lokales Foto nachladen
-    for(const r of S.recipes){
-      if(!r.photo){
-        try{ r.photo=await fsPhotoRef(r.id).getDownloadURL(); }catch{}
-      }
-    }
+    saveR(true);
+    render(); // Rezeptliste sofort anzeigen, Fotos folgen im Hintergrund
+    // Fotos für Rezepte ohne lokales Foto parallel nachladen (statt nacheinander – deutlich schneller, v.a. mobil)
+    await Promise.all(S.recipes.filter(r=>!r.photo).map(async r=>{
+      try{ r.photo=await fsPhotoRef(r.id).getDownloadURL(); }catch{}
+    }));
     saveR(true);
     // Fehlende Rezepte (nur lokal vorhanden) hochladen
     for(const id of Object.keys(localMap)){
@@ -1203,9 +1203,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.1.1';
 const APP_DATE = '2026-07-16';
 const VERSION_HISTORY = [
+  { version:'3.1.1', date:'2026-07-16', de:['Fix: Erstsync zeigt Rezepte sofort an, Fotos laden jetzt parallel statt nacheinander im Hintergrund nach (deutlich schneller, v.a. mobil)'], en:['Fix: Initial sync shows recipes immediately, photos now load in parallel instead of sequentially (much faster, especially on mobile)'] },
   { version:'3.1.0', date:'2026-07-16', de:['Getrennte Freigabe: Rezepte und Einkaufsliste können unabhängig voneinander geteilt werden','Einladungscodes zum Teilen mit anderen Nutzern','Freigabe jederzeit verlassbar (eigene Kopie der Daten bleibt erhalten)'], en:['Granular sharing: recipes and shopping list can be shared independently','Invite codes for sharing with other users','Leave a share anytime (keeps your own copy of the data)'] },
   { version:'3.0.0', date:'2026-07-16', de:['Großes Update: Login mit E-Mail/Passwort (Firebase Auth)','Rezepte, Kategorien & Einkaufsliste jetzt pro Nutzer isoliert in Firestore','Echtzeit-Sync über Live-Listener statt Polling (kein unnötiger Read-Verbrauch mehr)','Fotos werden über Firebase Storage statt als Base64 gespeichert'], en:['Major update: Email/password login (Firebase Auth)','Recipes, categories & shopping list now per-user isolated in Firestore','Real-time sync via live listeners instead of polling (no more unnecessary reads)','Photos now stored via Firebase Storage instead of Base64'] },
   { version:'2.7.19', date:'2026-07-16', de:['Fix: Eigene Kategorien (inkl. Farben & Icons) werden jetzt über Firebase synchronisiert'], en:['Fix: Custom categories (incl. colors & icons) now sync via Firebase'] },
