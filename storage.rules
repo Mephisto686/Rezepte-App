@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// ══════════════════════════════════════════════════════════
+// Storage Rules für Rezeptfotos – Gruppen-Modell
+// Pfad im Code: groups/{recipeGroupId}/photos/{recipeId}.jpg
+// Zugriff nur für Mitglieder der jeweiligen Rezept-Gruppe (Cross-Service-Check auf Firestore)
+// ══════════════════════════════════════════════════════════
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /groups/{groupId}/photos/{photoId} {
+      allow read, write: if request.auth != null
+                          && request.auth.uid in firestore.get(/databases/(default)/documents/groups/$(groupId)).data.members
+                          && request.resource.size < 8 * 1024 * 1024; // 8MB Limit pro Foto
+      allow delete: if request.auth != null
+                    && request.auth.uid in firestore.get(/databases/(default)/documents/groups/$(groupId)).data.members;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

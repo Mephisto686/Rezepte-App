@@ -321,6 +321,24 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       }).catch(()=>{});
     }
   </script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyA90Ht5dzexXe4qZt2Jbn-sieMxieDnvJo",
+      authDomain: "rezepte-multi-user.firebaseapp.com",
+      projectId: "rezepte-multi-user",
+      storageBucket: "rezepte-multi-user.firebasestorage.app",
+      messagingSenderId: "1043300904780",
+      appId: "1:1043300904780:web:9359d32c98a8736fb5a9e9"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const fbAuth = firebase.auth();
+    const fbDb = firebase.firestore();
+    const fbStorage = firebase.storage();
+  </script>
 </head>
 <body>
 
@@ -486,7 +504,7 @@ const ICON_COLLECTION=[
   "🍽","🫕","🪺","🫙","🍣","🥟","🫔"
 ];
 function getCatIcon(cat){return S.customCatIcons[cat]||DEFAULT_CAT_ICONS[cat]||'🍽';}
-function saveCatIcons(){try{localStorage.setItem('mrcatico',JSON.stringify(S.customCatIcons));}catch{}}
+function saveCatIcons(){try{localStorage.setItem('mrcatico',JSON.stringify(S.customCatIcons));}catch{}touchCats();}
 function getCats(){return S.customCats&&S.customCats.length?S.customCats:DEFAULT_CATS;}
 function getCatColor(cat){return CLR[cat]||(S.customCatColors&&S.customCatColors[cat])||COLOR_POOL[Math.abs(cat.split('').reduce((a,c)=>a+c.charCodeAt(0),0))%COLOR_POOL.length];}
 const SAMPLE=[{"cooked":false,"rating":0,"experiences":[],"title":"Spaghetti Bolognese","category":"Pasta","servings":4,"prepTime":"20","cookTime":"40","ingredients":"500 g Hackfleisch\n400 g Spaghetti\n1 Zwiebel\n2 Knoblauchzehen\n400 g gehackte Tomaten\n2 EL Tomatenmark\n2 EL Olivenöl\nSalz und Pfeffer\nfrisches Basilikum","steps":"1. Zwiebel und Knoblauch fein hacken, in Olivenöl bei mittlerer Hitze andünsten.\n2. Hackfleisch dazugeben und krümelig anbraten.\n3. Tomatenmark einrühren und kurz mitrösten.\n4. Mit gehackten Tomaten ablöschen, mit Salz und Pfeffer würzen und 30 Minuten köcheln lassen.\n5. Spaghetti nach Packungsanweisung al dente kochen.\n6. Sauce über die Nudeln geben, mit frischem Basilikum garnieren.","notes":"Schmeckt am nächsten Tag noch besser! Mit Parmesan servieren.","favorite":false,"tags":["Klassiker"],"nutrition":{"kcal":"620","protein":"36","carbs":"72","fat":"19","fiber":"5","salt":"1.8"},"id":"sample001","createdAt":1000000000000}];
@@ -495,7 +513,11 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, sessions:[], activeSession:null, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false, firebaseId:'', firebaseEnabled:false, recipesSyncEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, sessions:[], activeSession:null, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  user:null, authReady:false, authError:'', authMode:'signin', authBusy:false,
+  recipeGroupId:null, shoppingGroupId:null, groupsReady:false,
+  shareBusy:false, shareError:{recipes:'',shopping:''}, lastInviteCode:{recipes:'',shopping:''},
+  groupMemberCount:{recipes:1,shopping:1}, joinCodeInput:{recipes:'',shopping:''},
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -611,15 +633,14 @@ async function load(){
   try{S.lang=localStorage.getItem('mrlang')||'de';}catch{}
   try{S.edamamAppKey=localStorage.getItem('mredk')||'';}catch{}
   try{S.edamamEnabled=localStorage.getItem('mredamen')==='1';}catch{}
-  try{S.firebaseId=localStorage.getItem('mrfbid')||'';}catch{}
-  try{S.firebaseEnabled=localStorage.getItem('mrfben')==='1';}catch{}
-  try{S.recipesSyncEnabled=localStorage.getItem('mrrsyn')==='1';}catch{}
+  // (Firebase RTDB settings removed – replaced by Firebase Auth + Firestore)
   
   try{S.plannerView=localStorage.getItem('mrpv')||'today';}catch{}
   try{S.dark=localStorage.getItem('mrdm')==='1';}catch{}
   try{const cc=localStorage.getItem('mrcats');if(cc)S.customCats=JSON.parse(cc);}catch{}
   try{const ccol=localStorage.getItem('mrcatcol');if(ccol)S.customCatColors=JSON.parse(ccol);}catch{}
   try{const cico=localStorage.getItem('mrcatico');if(cico)S.customCatIcons=JSON.parse(cico);}catch{}
+  try{S._catUpdatedAt=+localStorage.getItem('mrcatts')||0;}catch{S._catUpdatedAt=0;}
   try{const wl=localStorage.getItem('mrwl');S.wakeLock=wl===null?true:wl==='1';}catch{}
   try{const csc=localStorage.getItem('mrshcats');if(csc)S.customShopCats=JSON.parse(csc);}catch{}
   applyTheme();
@@ -666,7 +687,7 @@ function saveR(skipFbPush=false){
     });
     tx.oncomplete = () => {
       setTimeout(()=>{S.saving=false;renderHdr();},400);
-      if(!skipFbPush&&S.recipesSyncEnabled&&S.firebaseEnabled&&S.firebaseId) fbPushAllRecipes();
+      if(!skipFbPush&&fsReady()) fsPushAllRecipes();
     };
     tx.onerror = () => { toast('Speicherfehler','err'); S.saving=false; renderHdr(); };
   }).catch(e => {
@@ -695,256 +716,432 @@ function saveSh_local(){
   }).catch(()=>{});
 }
 function saveSh(){
-  // Push to Firebase, then save locally
-  if(S.firebaseEnabled&&S.firebaseId)fbPush();
+  // Push to Firestore, then save locally
+  if(fsReady())fsPushShopping();
   saveSh_local();
 }
 function saveKey(){try{localStorage.setItem('mrak',S.apiKey);}catch{}}
 
-// ══════════════ FIREBASE REAL-TIME SYNC ══════════════
-let _fbPollTimer=null;
-let _fbEtag=null;
-let _fbLastPush=0; // timestamp of our last push, to avoid accepting older remote data
+// ══════════════ FIRESTORE MULTI-USER SYNC ══════════════
+// Alle Daten liegen unter /users/{uid}/... – abgesichert durch firestore.rules.
+let _unsubRecipes=null, _unsubCats=null, _unsubShopping=null;
+let _fsPushingRecipeIds=new Set(); // verhindert Echo: eigene Writes nicht erneut als "remote change" verarbeiten
 
-function fbUrl(){
-  // S.firebaseId stores the full database URL
-  const base=S.firebaseId.replace(/\/+$/,'');
-  return base+'/shopping.json';
+function fsUid(){return S.user&&S.user.uid;}
+function fsReady(){return !!(fsUid()&&S.groupsReady&&S.recipeGroupId&&S.shoppingGroupId);}
+function fsUserRef(){return fbDb.collection('users').doc(fsUid());}
+function fsGroupRef(groupId){return fbDb.collection('groups').doc(groupId);}
+function fsRecipesCol(){return fsGroupRef(S.recipeGroupId).collection('recipes');}
+function fsMetaDoc(name){
+  // 'categories' lebt in der Rezept-Gruppe, 'shopping' in der Einkaufslisten-Gruppe
+  const gid = name==='shopping' ? S.shoppingGroupId : S.recipeGroupId;
+  return fsGroupRef(gid).collection('meta').doc(name);
 }
 
-
-function showFirebaseHelp(){
-  const ov=document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;z-index:400;padding:0';
-  const md=document.createElement('div');
-  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.4rem 1.2rem 2.5rem;width:100%;max-height:90dvh;overflow-y:auto;font-family:var(--font)';
-  md.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem">
-      <div style="font-size:1rem;font-weight:700">🔄 Firebase einrichten</div>
-      <button id="fbhClose" style="background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:pointer">✕</button>
-    </div>
-    <div style="font-size:.83rem;line-height:1.75;color:var(--text2)">
-
-      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Was ist Firebase?</div>
-      <p style="margin-bottom:1rem">Ein kostenloser Google-Dienst der deine Einkaufsliste und Rezepte in Echtzeit mit anderen synchronisiert. Alle sehen Änderungen sofort.</p>
-
-      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 1 – Konto & Projekt</div>
-      <p style="margin-bottom:.4rem">Öffne <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a> und melde dich mit einem Google-Konto an.</p>
-      <p style="margin-bottom:1rem">Klicke auf <strong>„Projekt erstellen"</strong> → Namen vergeben → Google Analytics deaktivieren → <strong>„Projekt erstellen"</strong>.</p>
-
-      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 2 – Realtime Database aktivieren</div>
-      <p style="margin-bottom:.4rem">Im linken Menü: <strong>„Erstellen" → „Realtime Database"</strong> klicken.</p>
-      <p style="margin-bottom:.4rem"><strong>„Datenbank erstellen"</strong> → Region <strong>Europe-west1</strong> wählen → <strong>„Im Testmodus starten"</strong> → <strong>„Aktivieren"</strong>.</p>
-      <p style="margin-bottom:1rem">⚠️ Testmodus ist 30 Tage offen. Danach Regeln anpassen (→ Schritt 4).</p>
-
-      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 3 – Database URL kopieren</div>
-      <p style="margin-bottom:.4rem">Klicke auf den <strong>„Data"</strong>-Tab. Ganz oben steht die URL:</p>
-      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.72rem;color:var(--ok);margin-bottom:.5rem;word-break:break-all">https://mein-projekt-default-rtdb.<wbr>europe-west1.firebasedatabase.app</div>
-      <p style="margin-bottom:1rem">Diese <strong>vollständige URL</strong> in der App unter <strong>Mehr → Einstellungen → Synchronisation</strong> eintragen und auf <strong>„Speichern"</strong> tippen.</p>
-
-      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 4 – Regeln nach 30 Tagen</div>
-      <p style="margin-bottom:.4rem">Gehe zu <strong>Realtime Database → Regeln</strong> und ersetze alles durch:</p>
-      <div style="background:var(--surface2);border-radius:8px;padding:.6rem .8rem;font-family:monospace;font-size:.68rem;color:var(--ok);margin-bottom:1rem;word-break:break-all">{"rules":{"shopping":{".read":true,".write":true},"recipes":{".read":true,".write":true},"photos":{".read":true,".write":true},"deleted":{".read":true,".write":true}}}</div>
-
-      <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem">Schritt 5 – Sync-Optionen wählen & teilen</div>
-      <p style="margin-bottom:.5rem">Alle anderen (Partner, Freunde, Familie) tragen dieselbe URL ein und aktivieren die gewünschten Optionen:</p>
-      <div style="background:var(--surface2);border-radius:10px;padding:.8rem;margin-bottom:1rem;display:flex;flex-direction:column;gap:.6rem">
-        <div><span style="font-size:.9rem">🛒</span> <strong>Einkaufsliste</strong><br><span style="color:var(--muted)">Echtzeit-Sync alle 5 Sek. – ideal fürs gemeinsame Einkaufen.</span></div>
-        <div style="border-top:1px solid var(--border);padding-top:.6rem"><span style="font-size:.9rem">📖</span> <strong>Rezepte (inkl. Fotos)</strong><br><span style="color:var(--muted)">Beim ersten Mal: Person A tippt <strong>⬆ Hochladen</strong>, Person B tippt <strong>⬇ Herunterladen</strong>. Danach automatisch alle 60 Sek.</span></div>
-      </div>
-
-      <div style="background:var(--surface2);border-radius:8px;padding:.7rem;font-size:.78rem;color:var(--muted)">💡 <strong>Kostenlos:</strong> Bis 1 GB – reicht für hunderte Rezepte inkl. Fotos. Keine versteckten Kosten.</div>
-    </div>`;
-  ov.appendChild(md);document.body.appendChild(ov);
-  md.querySelector('#fbhClose').onclick=()=>document.body.removeChild(ov);
-  ov.addEventListener('click',e=>{if(e.target===ov)document.body.removeChild(ov);});
-}
-function saveFirebase(){
-  S.firebaseId=(document.getElementById('firebaseIdInp')?.value||'').trim();
-  try{localStorage.setItem('mrfbid',S.firebaseId);}catch{}
-  if(S.firebaseId&&S.firebaseEnabled)initFirebase();
-  toast(S.lang==='en'?'Firebase saved ✓':'Firebase gespeichert ✓');
-  renderApp();
-}
-
-async function fbPush(){
-  if(!S.firebaseEnabled||!S.firebaseId)return;
+// ── Rezepte ──
+async function fsPushRecipe(r){
+  if(!fsReady())return;
   try{
-    _fbLastPush=Date.now();
-    const data=S.shopping.length?{items:S.shopping,_updatedAt:_fbLastPush}:null;
-    await fetch(fbUrl(),{
-      method:'PUT',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(data)
-    });
-  }catch(e){console.warn('Firebase push failed:',e);}
+    const {photo,...rest}=r;
+    _fsPushingRecipeIds.add(r.id);
+    await fsRecipesCol().doc(r.id).set({...rest,_updatedAt:r._updatedAt||Date.now()});
+    if(photo&&photo.startsWith('data:')) await fsUploadPhoto(r.id,photo);
+  }catch(e){console.warn('Firestore recipe push failed:',e);}
 }
-
-async function fbPoll(){
-  if(!S.firebaseEnabled||!S.firebaseId)return;
+async function fsDeleteRecipe(id){
+  if(!fsReady())return;
   try{
-    const headers={};
-    if(_fbEtag)headers['If-None-Match']=_fbEtag;
-    const res=await fetch(fbUrl(),{headers});
-    if(res.status===304)return;
-    _fbEtag=res.headers.get('ETag')||null;
-    const data=await res.json();
-    if(data===null){
-      // Remote is empty - only overwrite local if local was also empty or remote timestamp logic
-      return;
-    }
-    // Support both old format (array) and new format ({items, _updatedAt})
-    const incoming=Array.isArray(data)?data:(data&&data.items?data.items:null);
-    const remoteTs=data&&data._updatedAt?data._updatedAt:0;
-    if(incoming===null)return;
-    const remoteStr=JSON.stringify(incoming);
-    const localStr=JSON.stringify(S.shopping);
-    if(remoteStr===localStr)return; // no change
-    // Only accept remote if it's newer than our last push
-    if(remoteTs>=(_fbLastPush||0)){
-      S.shopping=incoming;
-      saveSh_local(); // save locally only, don't push back
-      if(S.view==='shopping')renderApp();
-      renderNav();
-    }
-  }catch(e){console.warn('Firebase poll failed:',e);}
+    _fsPushingRecipeIds.add(id);
+    await fsRecipesCol().doc(id).delete();
+    await fsDeletePhoto(id);
+  }catch(e){console.warn('Firestore recipe delete failed:',e);}
 }
-
-function initFirebase(){
-  stopFirebase();
-  if(!S.firebaseId||!S.firebaseEnabled)return;
-  // Poll immediately on init (read-only, don't overwrite remote with local)
-  setTimeout(fbPoll,500);
-  // Poll every 5 seconds
-  _fbPollTimer=setInterval(fbPoll,5000);
-}
-
-function stopFirebase(){
-  if(_fbPollTimer){clearInterval(_fbPollTimer);_fbPollTimer=null;}
-}
-
-// ══════════════ FIREBASE RECIPE SYNC ══════════════
-let _fbRecipeTimer=null;
-
-function fbRecipesUrl(){return S.firebaseId.replace(/\/+$/,'')+'/recipes.json';}
-function fbPhotosUrl(id){return S.firebaseId.replace(/\/+$/,'')+'/photos/'+id+'.json';}
-function fbDeletedUrl(){return S.firebaseId.replace(/\/+$/,'')+'/deleted.json';}
-function fbDeletedItemUrl(id){return S.firebaseId.replace(/\/+$/,'')+'/deleted/'+id+'.json';}
-
-async function fbDeleteRecipe(id){
-  if(!S.firebaseEnabled||!S.firebaseId||!S.recipesSyncEnabled)return;
+async function fsPushAllRecipes(showToast=false){
+  if(!fsReady())return;
   try{
-    const now=Date.now();
-    // Write tombstone
-    await fetch(fbDeletedItemUrl(id),{
-      method:'PUT',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({deletedAt:now})
-    });
-    // Remove from recipes and photos
-    await fetch(S.firebaseId.replace(/\/+$/,'')+'/recipes/'+id+'.json',{method:'DELETE'});
-    await fetch(fbPhotosUrl(id),{method:'DELETE'});
-  }catch(e){console.warn('Firebase delete failed:',e);}
-}
-
-async function fbPushAllRecipes(showToast=false){
-  if(!S.firebaseEnabled||!S.firebaseId||!S.recipesSyncEnabled)return;
-  try{
-    // Push recipe metadata (without photo – stored separately)
-    const recipesData={};
+    const batch=fbDb.batch();
     S.recipes.forEach(r=>{
       const {photo,...rest}=r;
-      recipesData[r.id]={...rest,_updatedAt:Date.now()};
+      _fsPushingRecipeIds.add(r.id);
+      batch.set(fsRecipesCol().doc(r.id),{...rest,_updatedAt:Date.now()});
     });
-    await fetch(fbRecipesUrl(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(recipesData)});
-    // Push photos separately
-    for(const r of S.recipes){
-      if(r.photo){
-        await fetch(fbPhotosUrl(r.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(r.photo)});
-      }
-    }
+    await batch.commit();
+    // Fotos separat hochladen (Storage statt Base64-Dokument)
+    for(const r of S.recipes){ if(r.photo&&r.photo.startsWith('data:')) await fsUploadPhoto(r.id,r.photo); }
     if(showToast)toast(S.lang==='en'?`✓ ${S.recipes.length} recipes uploaded`:`✓ ${S.recipes.length} Rezepte hochgeladen`);
   }catch(e){if(showToast)toast('⚠ Upload: '+e.message,'err');}
 }
 
-async function fbPullAllRecipes(showToast=false){
-  if(!S.firebaseEnabled||!S.firebaseId||!S.recipesSyncEnabled)return;
+// ── Fotos über Storage ──
+function fsPhotoRef(id){return fbStorage.ref().child('groups/'+S.recipeGroupId+'/photos/'+id+'.jpg');}
+async function fsUploadPhoto(id,dataUrl){
+  if(!fsReady()||!dataUrl)return null;
   try{
-    // Check tombstones first
-    const delRes=await fetch(fbDeletedUrl());
-    if(delRes.ok){
-      const deleted=await delRes.json();
-      if(deleted){
-        const before=S.recipes.length;
-        S.recipes=S.recipes.filter(r=>{
-          const tomb=deleted[r.id];
-          if(!tomb)return true; // not deleted
-          // Only delete locally if tombstone is newer than local recipe
-          return (r._updatedAt||0)>(tomb.deletedAt||0);
-        });
-        if(S.recipes.length!==before)saveR(true); // skipFbPush – deletion already reflected in Firebase
-      }
-    }
-    const res=await fetch(fbRecipesUrl());
-    if(res.status===404||res.status===204){
-      if(showToast)toast(S.lang==='en'?'Cloud is empty – upload your recipes first':'Cloud ist leer – Rezepte erst hochladen');
-      return;
-    }
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const data=await res.json();
-    if(!data){if(showToast)toast(S.lang==='en'?'Cloud is empty – upload your recipes first':'Cloud ist leer – Rezepte erst hochladen');return;}
-    const remoteRecipes=Object.values(data);
-    // Build map from local recipes
-    const localMap={};
-    S.recipes.forEach(r=>{localMap[r.id]=r;});
+    const snap=await fsPhotoRef(id).putString(dataUrl,'data_url');
+    return await snap.ref.getDownloadURL();
+  }catch(e){console.warn('Storage upload failed:',e);return null;}
+}
+async function fsDeletePhoto(id){
+  try{await fsPhotoRef(id).delete();}catch{} // ok wenn nicht vorhanden
+}
+
+// ── Kategorien ──
+async function fsPushCats(){
+  if(!fsReady())return;
+  try{
+    await fsMetaDoc('categories').set({cats:S.customCats,colors:S.customCatColors,icons:S.customCatIcons,_updatedAt:S._catUpdatedAt||Date.now()});
+  }catch(e){console.warn('Firestore category push failed:',e);}
+}
+
+// ── Einkaufsliste ──
+async function fsPushShopping(){
+  if(!fsReady())return;
+  try{
+    _fsPushingShopping=true;
+    await fsMetaDoc('shopping').set({items:S.shopping,_updatedAt:Date.now()});
+  }catch(e){console.warn('Firestore shopping push failed:',e);}
+}
+let _fsPushingShopping=false;
+
+// ── Echtzeit-Listener (ersetzt Polling komplett) ──
+function startFsSync(){
+  stopFsSync();
+  if(!fsReady())return;
+
+  // Rezepte: Änderungen einzeln verarbeiten (add/modify/remove)
+  _unsubRecipes=fsRecipesCol().onSnapshot(async snap=>{
     let changed=false;
-    for(const remote of remoteRecipes){
-      const local=localMap[remote.id];
-      // Manual download (showToast=true): remote always wins
-      // Auto-poll: only update if remote is newer
-      const remoteWins=showToast||(remote._updatedAt||0)>=(local?._updatedAt||0);
-      if(!local||remoteWins){
-        localMap[remote.id]=remote;
+    for(const change of snap.docChanges()){
+      const id=change.doc.id;
+      if(_fsPushingRecipeIds.has(id)){ _fsPushingRecipeIds.delete(id); continue; } // Echo unseres eigenen Writes
+      if(change.type==='removed'){
+        const before=S.recipes.length;
+        S.recipes=S.recipes.filter(r=>r.id!==id);
+        if(S.recipes.length!==before)changed=true;
+        continue;
+      }
+      const remote=change.doc.data();
+      const local=S.recipes.find(r=>r.id===id);
+      if(!local||(remote._updatedAt||0)>=(local._updatedAt||0)){
+        let photo=local?local.photo:null;
+        try{
+          const url=await fsPhotoRef(id).getDownloadURL();
+          photo=url;
+        }catch{ /* kein Foto vorhanden */ }
+        const merged={...remote,id,photo};
+        const idx=S.recipes.findIndex(r=>r.id===id);
+        if(idx===-1)S.recipes.push(merged);else S.recipes[idx]=merged;
         changed=true;
       }
     }
-    // Remove local recipes that don't exist in remote (only on manual download)
-    if(showToast){
-      const remoteIds=new Set(remoteRecipes.map(r=>r.id));
-      Object.keys(localMap).forEach(id=>{
-        if(!remoteIds.has(id))delete localMap[id];
-      });
-      changed=true;
-    }
     if(changed){
-      S.recipes=Object.values(localMap);
-      // Pull photos for updated recipes
-      for(const r of S.recipes){
-        if(!r.photo){
-          try{
-            const pr=await fetch(fbPhotosUrl(r.id));
-            if(pr.ok){const p=await pr.json();if(p)r.photo=p;}
-          }catch{}
-        }
-      }
-      await saveR(true); // skipFbPush – remote already has the correct state
-      // Only re-render list view – never interrupt the user while cooking/reading a recipe
-      if(S.view==='list')renderApp();
+      saveR(true); // lokal speichern, nicht erneut pushen
+      if(S.view==='list'||S.view==='favorites')renderApp();
       renderNav();
     }
-    if(showToast)toast(S.lang==='en'?`✓ ${remoteRecipes.length} recipes downloaded`:`✓ ${remoteRecipes.length} Rezepte heruntergeladen`);
-  }catch(e){if(showToast)toast('⚠ Download: '+e.message,'err');}
+  },err=>console.warn('Firestore recipes listener error:',err));
+
+  // Kategorien
+  _unsubCats=fsMetaDoc('categories').onSnapshot(doc=>{
+    if(!doc.exists)return;
+    const data=doc.data();
+    const remoteTs=data._updatedAt||0;
+    if(remoteTs<=(S._catUpdatedAt||0))return; // eigener Change, schon lokal
+    S.customCats=data.cats||null;
+    S.customCatColors=data.colors||{};
+    S.customCatIcons=data.icons||{};
+    S._catUpdatedAt=remoteTs;
+    try{
+      localStorage.setItem('mrcats',JSON.stringify(S.customCats));
+      localStorage.setItem('mrcatcol',JSON.stringify(S.customCatColors));
+      localStorage.setItem('mrcatico',JSON.stringify(S.customCatIcons));
+      localStorage.setItem('mrcatts',String(S._catUpdatedAt));
+    }catch{}
+    renderApp();renderNav();
+  },err=>console.warn('Firestore categories listener error:',err));
+
+  // Einkaufsliste
+  _unsubShopping=fsMetaDoc('shopping').onSnapshot(doc=>{
+    if(_fsPushingShopping){_fsPushingShopping=false;return;} // Echo unseres eigenen Writes
+    if(!doc.exists)return;
+    const data=doc.data();
+    const incoming=data.items||[];
+    if(JSON.stringify(incoming)===JSON.stringify(S.shopping))return;
+    S.shopping=incoming;
+    saveSh_local();
+    if(S.view==='shopping')renderApp();
+    renderNav();
+  },err=>console.warn('Firestore shopping listener error:',err));
 }
 
-function initRecipeSync(){
-  stopRecipeSync();
-  if(!S.firebaseId||!S.recipesSyncEnabled)return;
-  fbPullAllRecipes();
-  _fbRecipeTimer=setInterval(fbPullAllRecipes,60000);
+function stopFsSync(){
+  if(_unsubRecipes){_unsubRecipes();_unsubRecipes=null;}
+  if(_unsubCats){_unsubCats();_unsubCats=null;}
+  if(_unsubShopping){_unsubShopping();_unsubShopping=null;}
 }
 
-function stopRecipeSync(){
-  if(_fbRecipeTimer){clearInterval(_fbRecipeTimer);_fbRecipeTimer=null;}
+// ══════════════ GRUPPEN & FREIGABEN ══════════════
+// Jeder Nutzer hat eine Rezept-Gruppe und eine Einkaufslisten-Gruppe.
+// Neu registrierte Nutzer bekommen zwei eigene (private) Gruppen mit nur sich selbst als Mitglied.
+// Über einen Einladungscode kann man einer bestehenden Gruppe beitreten (teilt dann mit den Mitgliedern).
+
+function genInviteCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // ohne verwechselbare Zeichen (I,O,0,1)
+  let code='';
+  for(let i=0;i<6;i++) code+=chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+
+async function ensureUserGroups(){
+  if(!fsUid())return;
+  try{
+    const userDoc=await fsUserRef().get();
+    if(userDoc.exists){
+      const data=userDoc.data();
+      S.recipeGroupId=data.recipeGroupId;
+      S.shoppingGroupId=data.shoppingGroupId;
+    } else {
+      // Neuer Nutzer: zwei private Gruppen anlegen
+      const recipeGroupId=fbDb.collection('groups').doc().id;
+      const shoppingGroupId=fbDb.collection('groups').doc().id;
+      await fsGroupRef(recipeGroupId).set({type:'recipes',members:[fsUid()],ownerId:fsUid(),createdAt:Date.now()});
+      await fsGroupRef(shoppingGroupId).set({type:'shopping',members:[fsUid()],ownerId:fsUid(),createdAt:Date.now()});
+      await fsUserRef().set({email:S.user.email,recipeGroupId,shoppingGroupId,createdAt:Date.now()});
+      S.recipeGroupId=recipeGroupId;
+      S.shoppingGroupId=shoppingGroupId;
+    }
+    S.groupsReady=true;
+  }catch(e){console.warn('ensureUserGroups failed:',e);}
+}
+
+function groupIdField(type){return type==='shopping'?'shoppingGroupId':'recipeGroupId';}
+
+async function createInvite(type){
+  if(!fsReady())return;
+  S.shareBusy=true;renderApp();
+  try{
+    const groupId=type==='shopping'?S.shoppingGroupId:S.recipeGroupId;
+    const code=genInviteCode();
+    await fbDb.collection('invites').doc(code).set({groupId,type,createdBy:fsUid(),createdAt:Date.now()});
+    S.lastInviteCode[type]=code;
+  }catch(e){
+    S.shareError[type]=e.message;
+  }
+  S.shareBusy=false;renderApp();
+}
+
+async function redeemInvite(type,code){
+  code=(code||'').trim().toUpperCase();
+  if(!code||!fsReady())return;
+  S.shareBusy=true;S.shareError[type]='';renderApp();
+  try{
+    const inviteDoc=await fbDb.collection('invites').doc(code).get();
+    if(!inviteDoc.exists)throw new Error(S.lang==='en'?'Invalid code':'Ungültiger Code');
+    const invite=inviteDoc.data();
+    if(invite.type!==type)throw new Error(S.lang==='en'?'This code is for a different data type':'Dieser Code gehört zu einem anderen Datentyp');
+    const targetGroupId=invite.groupId;
+    const currentGroupId=type==='shopping'?S.shoppingGroupId:S.recipeGroupId;
+    if(targetGroupId===currentGroupId)throw new Error(S.lang==='en'?'You are already in this group':'Du bist bereits in dieser Gruppe');
+
+    if(type==='recipes'){
+      // Eigene Rezepte + Kategorien in die Zielgruppe mitnehmen (mergen)
+      const oldRecipesSnap=await fsGroupRef(currentGroupId).collection('recipes').get();
+      const batch=fbDb.batch();
+      oldRecipesSnap.forEach(doc=>{
+        batch.set(fsGroupRef(targetGroupId).collection('recipes').doc(doc.id),doc.data());
+      });
+      await batch.commit();
+      // Fotos kopieren
+      for(const doc of oldRecipesSnap.docs){
+        try{
+          const url=await fbStorage.ref().child('groups/'+currentGroupId+'/photos/'+doc.id+'.jpg').getDownloadURL();
+          const resp=await fetch(url);const blob=await resp.blob();
+          await fbStorage.ref().child('groups/'+targetGroupId+'/photos/'+doc.id+'.jpg').put(blob);
+        }catch{} // kein Foto vorhanden
+      }
+      // Kategorien mergen, falls in Zielgruppe noch keine eigenen existieren
+      const oldCatDoc=await fsGroupRef(currentGroupId).collection('meta').doc('categories').get();
+      const newCatDoc=await fsGroupRef(targetGroupId).collection('meta').doc('categories').get();
+      if(oldCatDoc.exists&&!newCatDoc.exists){
+        await fsGroupRef(targetGroupId).collection('meta').doc('categories').set(oldCatDoc.data());
+      }
+    } else {
+      // Einkaufsliste mergen
+      const oldShopDoc=await fsGroupRef(currentGroupId).collection('meta').doc('shopping').get();
+      if(oldShopDoc.exists&&oldShopDoc.data().items?.length){
+        const newShopDoc=await fsGroupRef(targetGroupId).collection('meta').doc('shopping').get();
+        const existingItems=newShopDoc.exists?(newShopDoc.data().items||[]):[];
+        await fsGroupRef(targetGroupId).collection('meta').doc('shopping').set({items:[...existingItems,...oldShopDoc.data().items],_updatedAt:Date.now()});
+      }
+    }
+
+    // Sich selbst der Zielgruppe hinzufügen
+    await fsGroupRef(targetGroupId).update({members:firebase.firestore.FieldValue.arrayUnion(fsUid())});
+    // Eigenen Nutzer-Datensatz umbiegen
+    await fsUserRef().update({[groupIdField(type)]:targetGroupId});
+    if(type==='shopping')S.shoppingGroupId=targetGroupId;else S.recipeGroupId=targetGroupId;
+
+    stopFsSync();
+    if(type==='recipes'){
+      S.recipes=[];await saveR(true);
+    } else {
+      // Lokale Einkaufsliste durch den bereits gemergten Stand der Zielgruppe ersetzen
+      const mergedShopDoc=await fsGroupRef(targetGroupId).collection('meta').doc('shopping').get();
+      S.shopping=mergedShopDoc.exists?(mergedShopDoc.data().items||[]):[];
+      saveSh_local();
+    }
+    await fsInitialSync();
+    toast(S.lang==='en'?'✓ Joined – now shared':'✓ Beigetreten – jetzt geteilt');
+    refreshMemberCounts();
+  }catch(e){
+    S.shareError[type]=e.message;
+  }
+  S.shareBusy=false;renderApp();
+}
+
+async function leaveShare(type){
+  if(!fsReady())return;
+  if(!confirm(S.lang==='en'?'Leave this share? You keep your own copy of the data, but stop seeing the others’.':'Freigabe verlassen? Du behältst eine eigene Kopie der Daten, siehst aber die der anderen nicht mehr.'))return;
+  S.shareBusy=true;renderApp();
+  try{
+    const oldGroupId=type==='shopping'?S.shoppingGroupId:S.recipeGroupId;
+    const newGroupId=fbDb.collection('groups').doc().id;
+    await fsGroupRef(newGroupId).set({type,members:[fsUid()],ownerId:fsUid(),createdAt:Date.now()});
+
+    if(type==='recipes'){
+      const snap=await fsGroupRef(oldGroupId).collection('recipes').get();
+      const batch=fbDb.batch();
+      snap.forEach(doc=>batch.set(fsGroupRef(newGroupId).collection('recipes').doc(doc.id),doc.data()));
+      await batch.commit();
+      for(const doc of snap.docs){
+        try{
+          const url=await fbStorage.ref().child('groups/'+oldGroupId+'/photos/'+doc.id+'.jpg').getDownloadURL();
+          const resp=await fetch(url);const blob=await resp.blob();
+          await fbStorage.ref().child('groups/'+newGroupId+'/photos/'+doc.id+'.jpg').put(blob);
+        }catch{}
+      }
+      const catDoc=await fsGroupRef(oldGroupId).collection('meta').doc('categories').get();
+      if(catDoc.exists)await fsGroupRef(newGroupId).collection('meta').doc('categories').set(catDoc.data());
+    } else {
+      const shopDoc=await fsGroupRef(oldGroupId).collection('meta').doc('shopping').get();
+      if(shopDoc.exists)await fsGroupRef(newGroupId).collection('meta').doc('shopping').set(shopDoc.data());
+    }
+
+    await fsGroupRef(oldGroupId).update({members:firebase.firestore.FieldValue.arrayRemove(fsUid())});
+    await fsUserRef().update({[groupIdField(type)]:newGroupId});
+    if(type==='shopping')S.shoppingGroupId=newGroupId;else S.recipeGroupId=newGroupId;
+
+    stopFsSync();
+    await fsInitialSync();
+    toast(S.lang==='en'?'✓ Now private again':'✓ Wieder privat');
+    refreshMemberCounts();
+  }catch(e){
+    S.shareError[type]=e.message;
+  }
+  S.shareBusy=false;renderApp();
+}
+
+async function fetchGroupMemberCount(type){
+  try{
+    const groupId=type==='shopping'?S.shoppingGroupId:S.recipeGroupId;
+    if(!groupId)return 1;
+    const doc=await fsGroupRef(groupId).get();
+    return doc.exists?(doc.data().members||[]).length:1;
+  }catch{return 1;}
+}
+async function refreshMemberCounts(){
+  S.groupMemberCount.recipes=await fetchGroupMemberCount('recipes');
+  S.groupMemberCount.shopping=await fetchGroupMemberCount('shopping');
+  if(S.view==='settings')renderApp();
+}
+
+// ── Erstmaliger Abgleich beim Login (merged lokale + Cloud-Daten, neueste gewinnt) ──
+async function fsInitialSync(){
+  if(!fsReady())return;
+  try{
+    const snap=await fsRecipesCol().get();
+    const remoteMap={};
+    snap.forEach(doc=>remoteMap[doc.id]=doc.data());
+    const localMap={};
+    S.recipes.forEach(r=>localMap[r.id]=r);
+    const mergedIds=new Set([...Object.keys(remoteMap),...Object.keys(localMap)]);
+    const merged=[];
+    for(const id of mergedIds){
+      const remote=remoteMap[id],local=localMap[id];
+      if(remote&&local){
+        merged.push((remote._updatedAt||0)>=(local._updatedAt||0)?{...remote,id,photo:local.photo}:local);
+      } else if(remote){
+        merged.push({...remote,id,photo:null});
+      } else {
+        merged.push(local);
+      }
+    }
+    S.recipes=merged;
+    // Fotos für Rezepte ohne lokales Foto nachladen
+    for(const r of S.recipes){
+      if(!r.photo){
+        try{ r.photo=await fsPhotoRef(r.id).getDownloadURL(); }catch{}
+      }
+    }
+    saveR(true);
+    // Fehlende Rezepte (nur lokal vorhanden) hochladen
+    for(const id of Object.keys(localMap)){
+      if(!remoteMap[id]) await fsPushRecipe(localMap[id]);
+    }
+    // Kategorien mergen
+    const catDoc=await fsMetaDoc('categories').get();
+    if(catDoc.exists){
+      const data=catDoc.data();
+      if((data._updatedAt||0)>=(S._catUpdatedAt||0)){
+        S.customCats=data.cats||null;S.customCatColors=data.colors||{};S.customCatIcons=data.icons||{};
+        S._catUpdatedAt=data._updatedAt||0;
+        try{
+          localStorage.setItem('mrcats',JSON.stringify(S.customCats));
+          localStorage.setItem('mrcatcol',JSON.stringify(S.customCatColors));
+          localStorage.setItem('mrcatico',JSON.stringify(S.customCatIcons));
+          localStorage.setItem('mrcatts',String(S._catUpdatedAt));
+        }catch{}
+      } else { await fsPushCats(); }
+    } else if(S.customCats){ await fsPushCats(); }
+    // Einkaufsliste mergen (neueste gewinnt)
+    const shopDoc=await fsMetaDoc('shopping').get();
+    if(shopDoc.exists){
+      const data=shopDoc.data();
+      if(data.items&&data.items.length&&!S.shopping.length){
+        S.shopping=data.items;saveSh_local();
+      } else if(S.shopping.length){ await fsPushShopping(); }
+    } else if(S.shopping.length){ await fsPushShopping(); }
+    render();
+  }catch(e){console.warn('Firestore initial sync failed:',e);}
+  startFsSync();
+}
+
+function renderShareSection(type,icon,label){
+  const count=S.groupMemberCount[type]||1;
+  const isShared=count>1;
+  const code=S.lastInviteCode[type];
+  const err=S.shareError[type];
+  return `
+    <div class="ss"><div class="st2">${icon} ${label}</div>
+      <div class="ss2" style="margin-bottom:.6rem">
+        ${isShared
+          ? (S.lang==='en'?`Shared with ${count} people`:`Geteilt mit ${count} Personen`)
+          : (S.lang==='en'?'Private – only you':'Privat – nur du')}
+      </div>
+      ${err?`<div style="color:var(--danger);font-size:.78rem;margin-bottom:.5rem;font-family:var(--ui)">⚠ ${esc(err)}</div>`:''}
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.7rem">
+        <button class="btn bg sm" ${S.shareBusy?'disabled':''} onclick="createInvite('${type}')">${S.lang==='en'?'Generate invite code':'Einladungscode erzeugen'}</button>
+        ${isShared?`<button class="btn bdo sm" ${S.shareBusy?'disabled':''} onclick="leaveShare('${type}')">${S.lang==='en'?'Leave share':'Freigabe verlassen'}</button>`:''}
+      </div>
+      ${code?`<div style="background:var(--surface2);border-radius:10px;padding:.6rem .9rem;margin-bottom:.7rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem">
+        <span style="font-family:monospace;font-size:1.1rem;font-weight:700;letter-spacing:2px">${code}</span>
+        <button class="btn bo sm" onclick="navigator.clipboard.writeText('${code}');toast('✓ ${S.lang==='en'?'Copied':'Kopiert'}')">${S.lang==='en'?'Copy':'Kopieren'}</button>
+      </div>`:''}
+      <div style="display:flex;gap:.4rem;align-items:center">
+        <input class="aki" type="text" id="joinCode_${type}" placeholder="${S.lang==='en'?'Enter invite code':'Einladungscode eingeben'}" style="flex:1;min-width:0;text-transform:uppercase" value="${esc(S.joinCodeInput[type]||'')}">
+        <button class="btn bg sm" ${S.shareBusy?'disabled':''} onclick="redeemInvite('${type}',document.getElementById('joinCode_${type}').value)" style="flex-shrink:0">${S.lang==='en'?'Join':'Beitreten'}</button>
+      </div>
+    </div>`;
 }
 
 function saveEdamam(){
@@ -954,7 +1151,12 @@ function saveEdamam(){
   toast(t('toast_keys_saved'));
 }
 function saveDark(){try{localStorage.setItem('mrdm',S.dark?'1':'0');}catch{}}
-function saveCats(){try{localStorage.setItem('mrcats',JSON.stringify(S.customCats));localStorage.setItem('mrcatcol',JSON.stringify(S.customCatColors));}catch{}}
+function saveCats(){try{localStorage.setItem('mrcats',JSON.stringify(S.customCats));localStorage.setItem('mrcatcol',JSON.stringify(S.customCatColors));}catch{}touchCats();}
+function touchCats(){
+  S._catUpdatedAt=Date.now();
+  try{localStorage.setItem('mrcatts',String(S._catUpdatedAt));}catch{}
+  if(fsReady())fsPushCats();
+}
 
 // ══════════════ UTILS ══════════════
 const uid=()=>'r'+Date.now()+Math.random().toString(36).slice(2,5);
@@ -1001,9 +1203,12 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '2.7.18';
-const APP_DATE = '2026-06-15';
+const APP_VERSION = '3.1.0';
+const APP_DATE = '2026-07-16';
 const VERSION_HISTORY = [
+  { version:'3.1.0', date:'2026-07-16', de:['Getrennte Freigabe: Rezepte und Einkaufsliste können unabhängig voneinander geteilt werden','Einladungscodes zum Teilen mit anderen Nutzern','Freigabe jederzeit verlassbar (eigene Kopie der Daten bleibt erhalten)'], en:['Granular sharing: recipes and shopping list can be shared independently','Invite codes for sharing with other users','Leave a share anytime (keeps your own copy of the data)'] },
+  { version:'3.0.0', date:'2026-07-16', de:['Großes Update: Login mit E-Mail/Passwort (Firebase Auth)','Rezepte, Kategorien & Einkaufsliste jetzt pro Nutzer isoliert in Firestore','Echtzeit-Sync über Live-Listener statt Polling (kein unnötiger Read-Verbrauch mehr)','Fotos werden über Firebase Storage statt als Base64 gespeichert'], en:['Major update: Email/password login (Firebase Auth)','Recipes, categories & shopping list now per-user isolated in Firestore','Real-time sync via live listeners instead of polling (no more unnecessary reads)','Photos now stored via Firebase Storage instead of Base64'] },
+  { version:'2.7.19', date:'2026-07-16', de:['Fix: Eigene Kategorien (inkl. Farben & Icons) werden jetzt über Firebase synchronisiert'], en:['Fix: Custom categories (incl. colors & icons) now sync via Firebase'] },
   { version:'2.7.18', date:'2026-06-15', de:['Fix: Einkaufsliste-Sync – initFirebase pusht nicht mehr beim Start und überschreibt remote Daten'], en:['Fix: Shopping list sync – initFirebase no longer pushes on startup overwriting remote data'] },
   { version:'2.7.17', date:'2026-06-09', de:['UI: Kategorie-Label auf Karte als gedimmtes Label (Caps, kleiner)','UI: Zutat Mengenangabe typografisch hervorgehoben','UI: Hero-Foto mit Farbverlauf-Überblendung zum Header','UI: Favorit-Button mit Frosted-Glass-Kreis-Hintergrund','UI: App-Icon im Header (Listenansicht)','UI: ↑ Titel-Button als Icon-Button neu gestaltet'], en:['UI: Category label on card as dimmed label (caps, smaller)','UI: Ingredient quantity highlighted typographically','UI: Hero photo with gradient blend into header','UI: Fav button with frosted glass circle','UI: App icon in header (list view)','UI: ↑ Title button redesigned as icon button'] },
   { version:'2.5.1', date:'2026-05-24', de:['Tab-Panels: CSS-Fix, Zubereitung und Notizen sichtbar'], en:['Tab panels: CSS fix, steps and notes now visible'] },
@@ -1248,7 +1453,79 @@ function defForm(){return{title:'',category:getCats()[getCats().length-1]||'Sons
 
 // ══════════════ RENDER ══════════════
 function render(){
+  if(!S.authReady){renderAuthLoading();return;}
+  if(!S.user){renderAuthScreen();return;}
+  document.getElementById('hdr').style.display='';
+  document.getElementById('bnav').style.display='flex';
   renderHdr();renderApp();renderNav();
+}
+
+function renderAuthLoading(){
+  document.getElementById('hdr').style.display='none';
+  document.getElementById('bnav').style.display='none';
+  document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:80dvh;flex-direction:column;gap:1rem"><div style="font-size:2rem">🍳</div><div style="font-size:.9rem;color:var(--muted);font-family:var(--ui)">Laden…</div></div>';
+}
+
+function renderAuthScreen(){
+  document.getElementById('hdr').style.display='none';
+  document.getElementById('bnav').style.display='none';
+  const isSignup=S.authMode==='signup';
+  document.getElementById('app').innerHTML=`
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:85dvh;padding:1.5rem">
+    <div style="font-size:3rem;margin-bottom:.5rem">🍳</div>
+    <div style="font-size:1.3rem;font-weight:700;margin-bottom:1.5rem;font-family:var(--font)">Meine Rezepte</div>
+    <div style="width:100%;max-width:340px;background:var(--surface);border-radius:16px;padding:1.5rem;box-shadow:0 4px 20px rgba(0,0,0,.08)">
+      <div style="display:flex;gap:.5rem;margin-bottom:1.2rem;background:var(--surface2);border-radius:10px;padding:.25rem">
+        <button id="authTabSignin" style="flex:1;padding:.5rem;border:none;border-radius:8px;font-family:var(--ui);font-weight:700;cursor:pointer;background:${!isSignup?'var(--accent)':'transparent'};color:${!isSignup?'#fff':'var(--muted)'}">Anmelden</button>
+        <button id="authTabSignup" style="flex:1;padding:.5rem;border:none;border-radius:8px;font-family:var(--ui);font-weight:700;cursor:pointer;background:${isSignup?'var(--accent)':'transparent'};color:${isSignup?'#fff':'var(--muted)'}">Registrieren</button>
+      </div>
+      <input type="email" id="authEmail" placeholder="E-Mail" autocomplete="email" style="width:100%;padding:.7rem .9rem;margin-bottom:.6rem;border:1px solid var(--border2);border-radius:10px;background:var(--surface);color:var(--text);font-family:var(--ui);font-size:.95rem;outline:none">
+      <input type="password" id="authPw" placeholder="Passwort (min. 6 Zeichen)" autocomplete="${isSignup?'new-password':'current-password'}" style="width:100%;padding:.7rem .9rem;margin-bottom:.9rem;border:1px solid var(--border2);border-radius:10px;background:var(--surface);color:var(--text);font-family:var(--ui);font-size:.95rem;outline:none">
+      ${S.authError?`<div style="color:var(--danger);font-size:.8rem;margin-bottom:.7rem;font-family:var(--ui)">⚠ ${esc(S.authError)}</div>`:''}
+      <button id="authSubmit" ${S.authBusy?'disabled':''} style="width:100%;padding:.75rem;border:none;border-radius:10px;background:var(--accent);color:#fff;font-family:var(--ui);font-weight:700;font-size:.95rem;cursor:pointer;opacity:${S.authBusy?.6:1}">${S.authBusy?'…':(isSignup?'Konto erstellen':'Anmelden')}</button>
+    </div>
+  </div>`;
+  document.getElementById('authTabSignin').onclick=()=>{S.authMode='signin';S.authError='';render();};
+  document.getElementById('authTabSignup').onclick=()=>{S.authMode='signup';S.authError='';render();};
+  document.getElementById('authSubmit').onclick=submitAuth;
+  document.getElementById('authPw').addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth();});
+}
+
+async function submitAuth(){
+  const email=(document.getElementById('authEmail')?.value||'').trim();
+  const pw=document.getElementById('authPw')?.value||'';
+  if(!email||!pw){S.authError='Bitte E-Mail und Passwort eingeben';render();return;}
+  S.authBusy=true;S.authError='';render();
+  try{
+    if(S.authMode==='signup'){
+      await fbAuth.createUserWithEmailAndPassword(email,pw);
+    } else {
+      await fbAuth.signInWithEmailAndPassword(email,pw);
+    }
+    // onAuthStateChanged handles the rest (loading data, render)
+  }catch(e){
+    S.authBusy=false;
+    S.authError=authErrorMsg(e);
+    render();
+  }
+}
+
+function authErrorMsg(e){
+  const map={
+    'auth/email-already-in-use':'Diese E-Mail ist schon registriert – oben auf "Anmelden" wechseln.',
+    'auth/invalid-email':'Ungültige E-Mail-Adresse.',
+    'auth/weak-password':'Passwort zu schwach (min. 6 Zeichen).',
+    'auth/user-not-found':'Kein Konto mit dieser E-Mail gefunden.',
+    'auth/wrong-password':'Falsches Passwort.',
+    'auth/invalid-credential':'E-Mail oder Passwort falsch.',
+    'auth/too-many-requests':'Zu viele Versuche – bitte kurz warten.',
+  };
+  return map[e.code]||e.message||'Fehler bei der Anmeldung.';
+}
+
+async function doSignOut(){
+  stopFsSync();
+  await fbAuth.signOut();
 }
 
 function renderHdr(){
@@ -2776,44 +3053,22 @@ function renderSettings(app){
         <button class="btn bg sm" style="margin-top:.5rem" onclick="saveEdamam()">${t('btn_save_keys')}</button>
       </div>`:''}
     </div>
-    <div class="ss"><div class="st2" style="display:flex;align-items:center;gap:.5rem">🔄 Synchronisation <button onclick="showFirebaseHelp()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:50%;width:18px;height:18px;font-size:.65rem;cursor:pointer;color:var(--muted);line-height:1;flex-shrink:0;padding:0">?</button></div>
-      <!-- URL input – always visible -->
-      <div style="margin-bottom:.9rem">
-        <div class="sl">${S.lang==='en'?'Firebase Database URL':'Firebase Datenbank-URL'}</div>
-        <div class="ss2" style="margin:.3rem 0 .5rem">${S.lang==='en'?'Free setup at':'Kostenlos einrichten auf'} <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a> → Realtime Database → Data-Tab</div>
-        <div style="display:flex;gap:.4rem;align-items:center">
-          <input class="aki" type="text" id="firebaseIdInp" value="${esc(S.firebaseId)}" placeholder="https://projekt-default-rtdb.europe-west1.firebasedatabase.app" style="flex:1;min-width:0">
-          <button class="btn bg sm" onclick="saveFirebase()" style="flex-shrink:0">${S.lang==='en'?'Save':'Speichern'}</button>
+    <div class="ss"><div class="st2">🔄 ${S.lang==='en'?'Account & Sync':'Konto & Synchronisation'}</div>
+      <div class="sr2" style="margin-bottom:.3rem">
+        <div>
+          <div class="sl">${S.lang==='en'?'Logged in as':'Angemeldet als'}</div>
+          <div class="ss2">${esc(S.user?.email||'')}</div>
         </div>
-        ${S.firebaseId?`<div style="font-size:.7rem;color:var(--ok);margin-top:.3rem;font-family:var(--ui)">✓ ${S.lang==='en'?'Connected':'Verbunden'}</div>`:''}
+        <button class="btn bo sm" onclick="doSignOut()">${S.lang==='en'?'Log out':'Abmelden'}</button>
       </div>
-      <!-- Option 1: Shopping list -->
-      <div style="border-top:1px solid var(--border);padding-top:.8rem;margin-bottom:.8rem">
-        <div class="sr2" style="margin-bottom:.3rem">
-          <div>
-            <div class="sl">🛒 ${S.lang==='en'?'Shopping list live sync':'Einkaufsliste live synchronisieren'}</div>
-            <div class="ss2">${S.lang==='en'?'Real-time – changes appear instantly on all devices. Ideal for shopping together.':'Echtzeit – Änderungen erscheinen sofort auf allen Geräten. Ideal fürs gemeinsame Einkaufen.'}</div>
-          </div>
-          <button class="tgl${S.firebaseEnabled?' on':''}" id="firebasetgl"></button>
-        </div>
-        ${!S.firebaseId?`<div style="font-size:.72rem;color:var(--danger);font-family:var(--ui)">⚠ ${S.lang==='en'?'Enter Database URL first':'Zuerst Datenbank-URL eintragen'}</div>`:''}
-      </div>
-      <!-- Option 2: Recipe sync -->
-      <div style="border-top:1px solid var(--border);padding-top:.8rem">
-        <div class="sr2" style="margin-bottom:.3rem">
-          <div>
-            <div class="sl">📖 ${S.lang==='en'?'Recipe sync (incl. photos)':'Rezepte synchronisieren (inkl. Fotos)'}</div>
-            <div class="ss2">${S.lang==='en'?'Syncs every 60s + on save. First time: tap ⬆ Upload, others tap ⬇ Download. Careful – overwrites older recipes.':'Sync alle 60 Sek. + beim Speichern. Beim ersten Mal: ⬆ Hochladen tippen, andere tippen ⬇ Herunterladen. Vorsicht – überschreibt ältere Rezepte.'}</div>
-          </div>
-          <button class="tgl${S.recipesSyncEnabled?' on':''}" id="recipeSynctgl"></button>
-        </div>
-        ${S.recipesSyncEnabled?`<div style="display:flex;gap:.5rem;margin-top:.4rem;flex-wrap:wrap">
-          <button class="btn bg sm" onclick="fbPushAllRecipes(true)">⬆ ${S.lang==='en'?'Upload my recipes':'Meine Rezepte hochladen'}</button>
-          <button class="btn bg sm" onclick="fbPullAllRecipes(true)">⬇ ${S.lang==='en'?'Download from cloud':'Aus Cloud herunterladen'}</button>
-        </div>`:''}
-        ${!S.firebaseId?`<div style="font-size:.72rem;color:var(--danger);font-family:var(--ui)">⚠ ${S.lang==='en'?'Enter Database URL first':'Zuerst Datenbank-URL eintragen'}</div>`:''}
+      <div class="ss2" style="margin:.5rem 0">${S.lang==='en'?'Recipes, categories, and the shopping list sync automatically and in real time across all your devices.':'Rezepte, Kategorien und Einkaufsliste synchronisieren automatisch in Echtzeit auf all deinen Geräten.'}</div>
+      <div style="display:flex;gap:.5rem;margin-top:.4rem;flex-wrap:wrap">
+        <button class="btn bg sm" onclick="fsPushAllRecipes(true)">⬆ ${S.lang==='en'?'Force upload':'Erzwinge Upload'}</button>
+        <button class="btn bg sm" onclick="fsInitialSync().then(()=>toast(S.lang==='en'?'✓ Synced':'✓ Synchronisiert'))">⬇ ${S.lang==='en'?'Force sync':'Erzwinge Sync'}</button>
       </div>
     </div>
+    ${renderShareSection('recipes','📖',S.lang==='en'?'Share recipes':'Rezepte teilen')}
+    ${renderShareSection('shopping','🛒',S.lang==='en'?'Share shopping list':'Einkaufsliste teilen')}
     <div class="ss"><div class="st2">${t('set_data')}</div>
       <div class="sr2"><div><div class="sl">${t('set_compress')}</div><div class="ss2">${t('set_compress_hint')}</div></div><button class="btn bg sm" onclick="recompressAllPhotos()">${t('btn_compress')}</button></div>
       <div class="sr2"><div><div class="sl">${t('set_backup')}</div><div class="ss2">${t('set_backup_hint')}</div></div>
@@ -2979,20 +3234,6 @@ function renderSettings(app){
 
   document.getElementById('dtgl').addEventListener('click',()=>{S.dark=!S.dark;saveDark();applyTheme();renderApp();});
   document.getElementById('wltgl')?.addEventListener('click',()=>toggleWakeLock());
-  document.getElementById('recipeSynctgl')?.addEventListener('click',()=>{
-    S.recipesSyncEnabled=!S.recipesSyncEnabled;
-    try{localStorage.setItem('mrrsyn',S.recipesSyncEnabled?'1':'0');}catch{}
-    if(S.recipesSyncEnabled)initRecipeSync();
-    else stopRecipeSync();
-    renderApp();
-  });
-  document.getElementById('firebasetgl')?.addEventListener('click',()=>{
-    S.firebaseEnabled=!S.firebaseEnabled;
-    try{localStorage.setItem('mrfben',S.firebaseEnabled?'1':'0');}catch{}
-    if(S.firebaseEnabled&&S.firebaseId) initFirebase();
-    else stopFirebase();
-    renderApp();
-  });
   document.getElementById('edamamtgl')?.addEventListener('click',()=>{
     S.edamamEnabled=!S.edamamEnabled;
     try{localStorage.setItem('mredamen',S.edamamEnabled?'1':'0');}catch{}
@@ -4579,18 +4820,14 @@ function doExport(){
 function delAll(){if(confirm('Wirklich ALLE Rezepte löschen?')){
   const ids=S.recipes.map(r=>r.id);
   S.recipes=[];
-  saveR(true); // skipFbPush - we handle Firebase manually
-  // Write tombstones and clear Firebase
-  if(S.recipesSyncEnabled&&S.firebaseEnabled&&S.firebaseId){
-    const now=Date.now();
-    const base=S.firebaseId.replace(/\/+$/,'');
-    const tombObj={};
-    ids.forEach(id=>{tombObj[id]={deletedAt:now};});
-    // Write all tombstones at once
-    fetch(base+'/deleted.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(tombObj)}).catch(()=>{});
-    // Clear all recipes and photos
-    fetch(base+'/recipes.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:'null'}).catch(()=>{});
-    fetch(base+'/photos.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:'null'}).catch(()=>{});
+  saveR(true); // skipFbPush - wir löschen die Cloud-Rezepte hier gezielt
+  if(fsReady()){
+    (async()=>{
+      const batch=fbDb.batch();
+      ids.forEach(id=>{_fsPushingRecipeIds.add(id);batch.delete(fsRecipesCol().doc(id));});
+      try{await batch.commit();}catch(e){console.warn('Firestore delAll failed:',e);}
+      for(const id of ids){ await fsDeletePhoto(id); }
+    })();
   }
   S.view='list';render();
 }}
@@ -5625,7 +5862,7 @@ document.getElementById('delCancel').addEventListener('click',()=>document.getEl
 document.getElementById('delConfirm').addEventListener('click',()=>{
   const deletedId=S.delId;
   S.recipes=S.recipes.filter(r=>r.id!==deletedId);saveR();
-  fbDeleteRecipe(deletedId);
+  fsDeleteRecipe(deletedId);
   document.getElementById('delModal').style.display='none';goList();
 });
 document.getElementById('shareClose').addEventListener('click',()=>document.getElementById('shareModal').style.display='none');
@@ -5687,8 +5924,20 @@ function loadSession(){
     document.addEventListener('touchstart',_wlInit,{once:true,passive:true});
     document.addEventListener('click',_wlInit,{once:true});
   }
-  if(S.firebaseEnabled&&S.firebaseId)initFirebase();
-  if(S.recipesSyncEnabled&&S.firebaseEnabled&&S.firebaseId)initRecipeSync();
+  fbAuth.onAuthStateChanged(async user=>{
+    S.user=user?{uid:user.uid,email:user.email}:null;
+    S.authReady=true;
+    S.authBusy=false;
+    render();
+    if(user){
+      await ensureUserGroups();
+      fsInitialSync();
+      refreshMemberCounts();
+    } else {
+      S.groupsReady=false;S.recipeGroupId=null;S.shoppingGroupId=null;
+      stopFsSync();
+    }
+  });
   initDetSwipe(); // Detail tab swipe – runs once for entire app lifetime
   // ══ Swipe navigation ══
   (()=>{
