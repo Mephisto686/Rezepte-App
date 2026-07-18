@@ -3333,9 +3333,13 @@ function removePantryItem(id){
 }
 
 function renderShop(app){
+  const pExpired=S.pantry.filter(x=>pantryStatus(x)==='expired').length;
+  const pSoon=S.pantry.filter(x=>pantryStatus(x)==='soon').length;
+  const pTotal=S.pantry.length;
+  const pantryBadge=pTotal?`<span style="font-size:.7rem;font-weight:700;opacity:.85;margin-left:.3rem">${pExpired?'⚠️ ':''}${pTotal}${pSoon?` · ${pSoon}⏳`:''}${pExpired?` · ${pExpired}❗`:''}</span>`:'';
   app.innerHTML=`<div class="itabs" style="margin-bottom:1rem">
     <button class="itab${S.shopTab!=='pantry'?' on':''}" data-shoptab="shopping">🛒 ${t('tab_shopping')}</button>
-    <button class="itab${S.shopTab==='pantry'?' on':''}" data-shoptab="pantry">📦 ${t('tab_pantry')}</button>
+    <button class="itab${S.shopTab==='pantry'?' on':''}" data-shoptab="pantry">📦 ${t('tab_pantry')}${pantryBadge}</button>
   </div><div id="shopTabBody"></div>`;
   app.querySelectorAll('[data-shoptab]').forEach(btn=>btn.addEventListener('click',()=>{
     S.shopTab=btn.dataset.shoptab;renderHdr();renderApp();
@@ -3559,7 +3563,7 @@ function openPantryScan(){
     const files=[...e.target.files];if(!files.length)return;
     const pw=document.getElementById('pantryScanPreview');pw.style.display='flex';pw.innerHTML='';
     const images=[];
-    for(const f of files){const d=await compressImg(f,1200,.85);if(d){images.push({data:d,mime:f.type||'image/jpeg'});const img=document.createElement('img');img.src=d;img.style.cssText='height:70px;border-radius:6px;object-fit:cover;flex:1;min-width:50px;max-width:100px';pw.appendChild(img);}}
+    for(const f of files){const d=await compressImg(f,1800,.92);if(d){images.push({data:d,mime:f.type||'image/jpeg'});const img=document.createElement('img');img.src=d;img.style.cssText='height:70px;border-radius:6px;object-fit:cover;flex:1;min-width:50px;max-width:100px';pw.appendChild(img);}}
     document.getElementById('pantryScanLbl').innerHTML='✓ '+files.length+' '+(files.length!==1?t('pantry_scan_images_pl'):t('pantry_scan_images_sg'));
     const btn=document.getElementById('pantryScanAnalyze');btn.style.display='inline-flex';btn._images=images;
     document.getElementById('pantryScanRes').innerHTML='';
@@ -3586,11 +3590,11 @@ async function pantryScanAI(contentParts){
 
 WICHTIGSTE REGEL: Erfasse NUR Produkte, die auf dem Bild eindeutig lesbar sind. Erfinde niemals zusätzliche Produkte. Wenn eine Zeile unleserlich oder unsicher ist, lasse sie lieber ganz weg statt zu raten.
 
-Bei einem Kassenbon (Spalten meist: Bezeichnung, Menge, MwSt., Einzelpreis, Summe):
-- "qty" ist IMMER die Zahl aus der Spalte "Menge" (Anzahl gekaufter Einheiten), niemals eine Zahl aus dem Produktnamen. Zahlen, die Teil der Produktbezeichnung sind (z.B. "4 Stück" bei Limetten, "2,5kg" bei Kartoffeln, "750g" beim Sandwich), beschreiben nur die Packungsgröße und gehören NICHT in "qty" – dort steht dann meist 1.
-- Jede Produktzeile des Bons ergibt genau einen Eintrag. Überspringe Preis-/MwSt-Spalten, Rabattzeilen, Pfand-Sammelzeilen (außer Pfand ist explizit gewünscht) und die Summenzeile.
+VOLLSTÄNDIGKEIT: Gehe bei einem Kassenbon Zeile für Zeile von oben nach unten durch und erfasse WIRKLICH JEDE Produktzeile, auch wenn dir das Ergebnis dadurch lang vorkommt. Überspringe keine Zeile, nur weil schon ähnliche Produkte erfasst wurden. Zähle am Ende gedanklich nach: Anzahl der Einträge im JSON muss der Anzahl der Produktzeilen auf dem Bon entsprechen (Preis-/MwSt-Spalten, Rabattzeilen, Pfand-Sammelzeile und die Summenzeile zählen nicht als Produktzeile und werden übersprungen). Bei mehreren Fotos (z.B. Seite 1 und Seite 2 eines Bons): jedes Foto vollständig einzeln durchgehen, dann alle Ergebnisse zusammenführen.
 
-Produktname ("name"): kurz und generisch, OHNE Handelsmarken- oder Eigenmarken-Präfixe wie "REWE Beste Wahl", "REWE Bio", "ja!", "Bio" oder Herstellernamen (z.B. "Wilhelm Brandenburg"). Behalte nur die Kernbezeichnung plus relevante Sorte/Variante, z.B. "Erdnüsse" statt "REWE Beste Wahl Erdnüsse grosse Kerne", "Rindfleischsalami" statt "Wilhelm Brandenburg Rindfleischsalami", "Apfelsaft naturtrüb" statt "REWE Beste Wahl Apfelsaft naturtrüb".
+MENGEN: Lies "qty" ausschließlich aus der Spalte "Menge" DERSELBEN Zeile – verwechsle sie nicht mit der Menge einer benachbarten Zeile. Zahlen, die Teil der Produktbezeichnung sind (z.B. "4 Stück" bei Limetten, "2,5kg" bei Kartoffeln, "750g" beim Sandwich), beschreiben nur die Packungsgröße und gehören NICHT in "qty" – dort steht dann meist 1. Prüfe bei jedem Produkt einzeln und unabhängig von den Nachbarzeilen, welche Zahl in der Menge-Spalte auf gleicher Höhe steht.
+
+Produktname ("name"): kurz und generisch, OHNE Handelsmarken- oder Eigenmarken-Präfixe wie "REWE Beste Wahl", "REWE Bio", "ja!", "Bio" oder Herstellernamen (z.B. "Wilhelm Brandenburg"). Behalte nur die Kernbezeichnung plus relevante Sorte/Variante, z.B. "Erdnüsse" statt "REWE Beste Wahl Erdnüsse grosse Kerne", "Rindfleischsalami" statt "Wilhelm Brandenburg Rindfleischsalami", "Apfelsaft naturtrüb" statt "REWE Beste Wahl Apfelsaft naturtrüb". Wenn du dir bei einem Wort im Namen unsicher bist, nimm die naheliegendste sinnvolle Lesart (z.B. ein Fisch-/Fleischprodukt in Tomatensauce statt eines Fantasieworts) – aber erfinde keine neuen Produkte.
 
 Antworte NUR mit einem JSON-Array. Jedes Element: {"name":"string","qty":"Zahl als String, z.B. 1 oder 500","unit":"Stück|g|kg|ml|l|Packung|Dose|Glas|Bund oder leer","expiry":"YYYY-MM-DD falls auf dem Bild ein MHD/Verfallsdatum erkennbar ist, sonst leerer String"}.
 Bei einem Kassenbon steht meist kein MHD drauf – dann "expiry":"" lassen.`,
@@ -3612,15 +3616,17 @@ function showPantryScanResults(products,closeModal){
     <button class="btn bp" id="pantryScanConfirm" style="width:100%;margin-top:.9rem">+ ${t('pantry_scan_add_all')}</button>`;
   const rowsEl=document.getElementById('pantryScanRows');
   rowsEl.innerHTML=rows.map((p,i)=>`
-    <div style="background:var(--surface2);border-radius:10px;padding:.6rem .7rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap" data-psrow="${i}">
-      <input class="fi" style="flex:2;min-width:110px;padding:.35rem .5rem;font-size:.85rem" value="${esc(p.name||'')}" data-psfield="name">
-      <input class="fi" style="width:60px;padding:.35rem .5rem;font-size:.85rem" value="${esc(p.qty??'')}" data-psfield="qty" placeholder="${t('pantry_qty')}">
-      <select class="fi" style="width:90px;padding:.35rem .5rem;font-size:.85rem" data-psfield="unit">
-        <option value="">–</option>
-        ${PANTRY_UNITS.map(u=>`<option value="${u}" ${p.unit===u?'selected':''}>${u}</option>`).join('')}
-      </select>
-      <input class="fi" type="date" style="width:135px;padding:.35rem .5rem;font-size:.85rem" value="${esc(p.expiry||'')}" data-psfield="expiry">
-      <button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.9rem" data-psremove="${i}">✕</button>
+    <div style="background:var(--surface2);border-radius:10px;padding:.55rem .65rem;display:flex;flex-direction:column;gap:.4rem" data-psrow="${i}">
+      <input class="fi" style="width:100%;padding:.4rem .55rem;font-size:.92rem;font-weight:600" value="${esc(p.name||'')}" data-psfield="name" placeholder="${t('pantry_name')}">
+      <div style="display:flex;gap:.35rem;align-items:center">
+        <input class="fi" style="width:46px;flex-shrink:0;padding:.35rem .3rem;font-size:.85rem;text-align:center" value="${esc(p.qty??'')}" data-psfield="qty" placeholder="${t('pantry_qty')}">
+        <select class="fi" style="width:76px;flex-shrink:0;padding:.35rem .25rem;font-size:.8rem" data-psfield="unit">
+          <option value="">–</option>
+          ${PANTRY_UNITS.map(u=>`<option value="${u}" ${p.unit===u?'selected':''}>${u}</option>`).join('')}
+        </select>
+        <input class="fi" type="date" style="flex:1;min-width:0;padding:.35rem .35rem;font-size:.78rem" value="${esc(p.expiry||'')}" data-psfield="expiry">
+        <button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1rem;padding:.15rem .3rem;flex-shrink:0" data-psremove="${i}" title="${t('btn_delete')}">✕</button>
+      </div>
     </div>`).join('');
   rowsEl.querySelectorAll('[data-psremove]').forEach(btn=>btn.addEventListener('click',()=>{
     btn.closest('[data-psrow]').remove();
