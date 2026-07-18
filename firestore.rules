@@ -94,6 +94,17 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Registrierungs-Mails: nur exakt an die Admin-Adresse, mit den erwarteten Feldern.
+    // Verhindert Missbrauch als offener Mail-Versand. Die "Trigger Email"-Extension liest/verarbeitet
+    // dieses Dokument serverseitig (Admin SDK, umgeht Rules) und löscht/aktualisiert es selbst.
+    match /mail/{mailId} {
+      allow create: if request.auth != null
+                    && request.resource.data.to == ['andre.ohlendorf@gmail.com']
+                    && request.resource.data.message.subject is string
+                    && request.resource.data.message.text is string;
+      allow read, update, delete: if false;
+    }
+
     // Alles andere gesperrt
     match /{document=**} {
       allow read, write: if false;

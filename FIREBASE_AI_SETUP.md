@@ -69,6 +69,23 @@ Nach Deploy: Rezept-Foto importieren, Nährwerte schätzen lassen und
 prüfen – App-Check-Fehler zeigen sich dort deutlich (401/403 mit
 "App Check token" im Fehlertext).
 
+## 7. E-Mail-Benachrichtigung bei Neuregistrierung einrichten
+
+Nutzt die offizielle Firebase **"Trigger Email"**-Extension – kein eigener Code nötig.
+
+1. Firebase Console → **Extensions** (linkes Menü, ggf. unter "Build" zu finden)
+2. **"Explore extensions"** / Marktplatz durchsuchen → nach **"Trigger Email"** suchen (Anbieter: Firebase)
+3. **Install** klicken
+4. Bei der Konfiguration:
+   - **SMTP connection URI**: braucht einen SMTP-Zugang. Optionen:
+     - **Gmail SMTP**: `smtps://DEINE-ADRESSE@gmail.com:APP-PASSWORT@smtp.gmail.com:465` – dafür in deinem Google-Konto unter Sicherheit → 2-Faktor-Auth aktivieren → "App-Passwörter" ein eigenes Passwort für diesen Zweck erzeugen (NICHT dein normales Passwort verwenden)
+     - **Alternative**: ein kostenloser Transactional-E-Mail-Dienst wie Brevo (ehem. Sendinblue, 300 Mails/Tag gratis) – meist unkomplizierter einzurichten als Gmail-App-Passwörter
+   - **Mail collection**: `mail` (exakt so eintragen, muss zum Code passen)
+   - Restliche Felder können auf Standard bleiben
+5. **Install extension** klicken, kurz warten bis aktiv
+
+**Test:** Mit einem zweiten (Test-)Account registrieren → E-Mail sollte innerhalb weniger Sekunden bei `andre.ohlendorf@gmail.com` ankommen. Falls nicht: Extension-Logs in der Firebase Console prüfen (Extensions → Trigger Email → Logs), meist liegt's an falschen SMTP-Zugangsdaten.
+
 ## Was sich geändert hat
 
 - Kein Anthropic-API-Key mehr im Einstellungen-Screen
