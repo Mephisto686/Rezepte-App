@@ -647,7 +647,7 @@ function isAdmin(){return S.user&&S.user.uid===ADMIN_UID;}
 const SAMPLE=[{"cooked":false,"rating":0,"experiences":[],"title":"Spaghetti Bolognese","category":"Pasta","servings":4,"prepTime":"20","cookTime":"40","ingredients":"500 g Hackfleisch\n400 g Spaghetti\n1 Zwiebel\n2 Knoblauchzehen\n400 g gehackte Tomaten\n2 EL Tomatenmark\n2 EL Olivenöl\nSalz und Pfeffer\nfrisches Basilikum","steps":"1. Zwiebel und Knoblauch fein hacken, in Olivenöl bei mittlerer Hitze andünsten.\n2. Hackfleisch dazugeben und krümelig anbraten.\n3. Tomatenmark einrühren und kurz mitrösten.\n4. Mit gehackten Tomaten ablöschen, mit Salz und Pfeffer würzen und 30 Minuten köcheln lassen.\n5. Spaghetti nach Packungsanweisung al dente kochen.\n6. Sauce über die Nudeln geben, mit frischem Basilikum garnieren.","notes":"Schmeckt am nächsten Tag noch besser! Mit Parmesan servieren.","favorite":false,"tags":["Klassiker"],"nutrition":{"kcal":"620","protein":"36","carbs":"72","fat":"19","fiber":"5","salt":"1.8"},"id":"sample001","createdAt":1000000000000}];
 
 const S={
-  view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
+  view:'list', recipes:[], shopping:[], pantry:[], shopTab:'shopping', pantryScanPending:null, pantryEditIdx:null, selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
   scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, sessions:[], activeSession:null, lang:'de', apiKey:'',  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
@@ -662,7 +662,7 @@ const S={
 // ══════════════ INDEXEDDB LAYER ══════════════
 let _db = null;
 const DB_NAME = 'MeineRezepteDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 function openDB(){
   return new Promise((resolve, reject) => {
@@ -680,8 +680,8 @@ function openDB(){
         db.createObjectStore('mealplan', {keyPath:'date'});
       if(!db.objectStoreNames.contains('sessions'))
         db.createObjectStore('sessions', {keyPath:'id'});
-      if(!db.objectStoreNames.contains('sessions'))
-        db.createObjectStore('sessions', {keyPath:'id'});
+      if(!db.objectStoreNames.contains('pantry'))
+        db.createObjectStore('pantry', {keyPath:'id'});
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
     req.onerror = () => reject(req.error);
@@ -783,12 +783,13 @@ async function load(){
   await migrateIfNeeded();
   // Load recipes + photos from IndexedDB
   try{
-    const [recipes, photos, shopping, mealplan, sessions] = await Promise.all([
+    const [recipes, photos, shopping, mealplan, sessions, pantry] = await Promise.all([
       dbGetAll('recipes'),
       dbGetAll('photos'),
       dbGetAll('shopping'),
       dbGetAll('mealplan'),
-      dbGetAll('sessions')
+      dbGetAll('sessions'),
+      dbGetAll('pantry')
     ]);
     S.sessions = sessions||[];
     const photoMap = {};
@@ -796,6 +797,7 @@ async function load(){
     S.recipes = recipes.map(r => ({...r, photo: photoMap[r.id]||null}));
     // No sample fallback – empty list is fine
     S.shopping = shopping || [];
+    S.pantry = pantry || [];
     // mealPlan: {date: {date:'2026-05-12', meals:[{id,recipeId}]}}
     S.mealPlan = {};
     (mealplan||[]).forEach(row => { S.mealPlan[row.date] = row.meals||[]; });
@@ -855,11 +857,23 @@ function saveSh(){
   if(fsReady())fsPushShopping();
   saveSh_local();
 }
+function savePantry_local(){
+  openDB().then(db => {
+    const tx = db.transaction('pantry','readwrite');
+    const store = tx.objectStore('pantry');
+    store.clear();
+    S.pantry.forEach(item => store.put(item));
+  }).catch(()=>{});
+}
+function savePantry(){
+  if(fsReady())fsPushPantry();
+  savePantry_local();
+}
 function saveKey(){try{localStorage.setItem('mrak',S.apiKey);}catch{}}
 
 // ══════════════ FIRESTORE MULTI-USER SYNC ══════════════
 // Alle Daten liegen unter /users/{uid}/... – abgesichert durch firestore.rules.
-let _unsubRecipes=null, _unsubCats=null, _unsubShopping=null;
+let _unsubRecipes=null, _unsubCats=null, _unsubShopping=null, _unsubPantry=null;
 let _fsPushingRecipeIds=new Set(); // verhindert Echo: eigene Writes nicht erneut als "remote change" verarbeiten
 
 function fsUid(){return S.user&&S.user.uid;}
@@ -868,8 +882,8 @@ function fsUserRef(){return fbDb.collection('users').doc(fsUid());}
 function fsGroupRef(groupId){return fbDb.collection('groups').doc(groupId);}
 function fsRecipesCol(){return fsGroupRef(S.recipeGroupId).collection('recipes');}
 function fsMetaDoc(name){
-  // 'categories' lebt in der Rezept-Gruppe, 'shopping' in der Einkaufslisten-Gruppe
-  const gid = name==='shopping' ? S.shoppingGroupId : S.recipeGroupId;
+  // 'categories' lebt in der Rezept-Gruppe, 'shopping' & 'pantry' in der Einkaufslisten-Gruppe
+  const gid = (name==='shopping'||name==='pantry') ? S.shoppingGroupId : S.recipeGroupId;
   return fsGroupRef(gid).collection('meta').doc(name);
 }
 
@@ -944,6 +958,16 @@ async function fsPushShopping(){
 }
 let _fsPushingShopping=false;
 
+// ── Vorratskammer ──
+async function fsPushPantry(){
+  if(!fsReady())return;
+  try{
+    _fsPushingPantry=true;
+    await fsMetaDoc('pantry').set({items:S.pantry,_updatedAt:Date.now()});
+  }catch(e){console.warn('Firestore pantry push failed:',e);}
+}
+let _fsPushingPantry=false;
+
 // ── Echtzeit-Listener (ersetzt Polling komplett) ──
 function startFsSync(){
   stopFsSync();
@@ -1013,12 +1037,26 @@ function startFsSync(){
     if(S.view==='shopping')renderApp();
     renderNav();
   },err=>console.warn('Firestore shopping listener error:',err));
+
+  // Vorratskammer
+  _unsubPantry=fsMetaDoc('pantry').onSnapshot(doc=>{
+    if(_fsPushingPantry){_fsPushingPantry=false;return;} // Echo unseres eigenen Writes
+    if(!doc.exists)return;
+    const data=doc.data();
+    const incoming=data.items||[];
+    if(JSON.stringify(incoming)===JSON.stringify(S.pantry))return;
+    S.pantry=incoming;
+    savePantry_local();
+    if(S.view==='shopping')renderApp();
+    renderNav();
+  },err=>console.warn('Firestore pantry listener error:',err));
 }
 
 function stopFsSync(){
   if(_unsubRecipes){_unsubRecipes();_unsubRecipes=null;}
   if(_unsubCats){_unsubCats();_unsubCats=null;}
   if(_unsubShopping){_unsubShopping();_unsubShopping=null;}
+  if(_unsubPantry){_unsubPantry();_unsubPantry=null;}
 }
 
 // ══════════════ GRUPPEN & FREIGABEN ══════════════
@@ -1354,13 +1392,80 @@ const LANG={
     flt_title:'Filter',flt_reset:'Zurücksetzen',flt_close:'Schließen',flt_favs:'❤️ Favoriten',flt_favs_only:'Nur Favoriten',flt_rating:'★ Mindestbewertung',flt_all:'Alle',flt_status:'🍽 Status',flt_not_cooked:'Noch nicht zubereitet',flt_cooked:'Schon zubereitet',flt_time:'⏱ Gesamtzeit',flt_cats:'📂 Kategorien',flt_tags:'🏷 Tags',flt_tag_search:'Tag suchen…',
     sh_empty:'Einkaufsliste ist leer.',sh_add_ph:'Produkt hinzufügen…',sh_copy:'📋 Kopieren',sh_clear_done:'Erledigte löschen',sh_clear_all:'Alle löschen',sh_from:'aus:',sh_open:'offen',sh_done_lbl:'Erledigt',sh_pick_title:'Zutaten zur Einkaufsliste',sh_pick_confirm:'Hinzufügen',sh_edit_title:'Eintrag bearbeiten',sh_auto_detect:'↺ Automatisch erkennen',
     set_tags:'🏷 Tags',set_tags_hint:'Tippe einen Tag um ihn umzubenennen. ✕ zum Löschen.',set_no_tags:'Noch keine Tags vorhanden.',set_cats:'📂 Kategorien',set_cats_hint:'Ziehen zum Sortieren · Farbe tippen · ✕ zum Löschen',set_display:'Darstellung',set_dark:'🌙 Dark Mode',set_wakelock:'💡 Bildschirm aktiv halten',set_wakelock_hint:'Verhindert das Ausschalten beim Kochen',set_lang:'🌐 Sprache / Language',set_ai:'KI-Import (Foto & Link)',set_api_key:'Anthropic API Key',set_api_hint:'Benötigt für Foto- und Link-Import',set_api_local:'Key wird nur lokal auf diesem Gerät gespeichert.',set_data:'Daten',set_compress:'🗜 Fotos komprimieren',set_compress_hint:'Spart Speicherplatz – Qualität bleibt gut',set_backup:'📦 Vollständiges Backup',set_backup_hint:'Rezepte + Einstellungen + Kategorien',set_shop_cats:'🏷 Einkaufskategorien',set_shop_cats_hint:'Alle Zuweisungen exportieren / importieren',set_delete_all:'🗑 Alle Rezepte löschen',set_delete_hint:'Nicht rückgängig zu machen',set_footer:'Meine Rezepte · Alle Daten lokal gespeichert',
-    list_search:'Titel oder Zutat…',list_filter:'🔽 Filter',list_sort:'⠿ Sortieren',list_sort_done:'⠿ Fertig',list_select:'☑ Auswählen',list_select_done:'✕ Fertig',list_empty:'Noch keine Rezepte. Tippe + um zu starten!',list_no_results:'Keine Rezepte gefunden.',
+    list_search:'Titel oder Zutat…',list_filter:'🔽 Filter',list_sort:'⠿ Sortieren',list_sort_done:'⠿ Fertig',list_select:'☑ Auswählen',list_select_done:'✕ Fertig',list_empty:'Noch keine Rezepte. Tippe + um zu starten!',list_no_results:'Keine Rezepte gefunden.',list_empty_fav:'Noch keine Favoriten.',list_add_first:'Erstes Rezept hinzufügen',
     ai_placeholder:'Was möchtest du kochen?',ai_search:'Suchen',ai_searching:'Suche läuft…',
+    ai_photo_hint:'📷 Oder: Zutaten fotografieren',ai_photo_choose:'📷 Foto(s) auswählen',ai_photo_none:'Kein Foto ausgewählt',
+    ai_web_search:'🔍 Im Internet suchen',ai_generate:'✨ Rezept generieren',
+    ai_footer_hint:'„Suchen" findet echte Rezepte · „Generieren" erfindet ein neues · Fotos werden von der KI analysiert',
+    ai_ph_text:'z.B. „Etwas mit Halloumi, vegetarisch, unter 30 Min." oder „Was kann ich mit Hackfleisch und Kartoffeln machen?"',
+    ai_searching_web:'Suche im Internet…',ai_generating:'Rezept wird generiert…',
+    ai_none_found:'Keine Rezepte gefunden. Versuch eine andere Beschreibung.',
+    ai_already_saved:'✓ Bereits gespeichert',ai_saved:'✓ Gespeichert',
+    ai_followup_title:'💬 Rückfragen zu den Vorschlägen',ai_followup_ph:'z.B. „Welches davon ist am schnellsten?" oder „Gibt es eine vegane Variante?"',
+    recipe_chat_title:'💬 Rückfragen zum Rezept',
+    imp_photo_hint:'Mehrere Fotos oder Screenshots auf einmal hochladen – z.B. Zutaten + Zubereitung auf verschiedenen Seiten.',
+    imp_photo_choose:'Ein oder mehrere Bilder auswählen',imp_photo_selected:'ausgewählt',
+    imp_url_hint:'Link zu einer Rezeptseite (Chefkoch, Kitchen Stories…)',imp_url_load:'🔗 Rezept laden',
+    imp_pdf_hint:'PDF-Rezept (gescannte Kochbuchseite oder exportierte Rezept-PDF)',imp_pdf_choose:'PDF-Datei auswählen',
+    imp_json_hint:'Mehrere JSON-Dateien oder ganzen Ordner auf einmal importieren.',
+    imp_json_choose:'📄 Dateien auswählen',imp_json_multi:'(mehrere möglich)',imp_json_folder:'📁 Ordner auswählen',
+    imp_ai_analyze:'✨ KI analysieren',imp_add:'+ Hinzufügen',imp_page_missing:'Seite konnte nicht geladen werden.',
+    imp_none_found:'Kein Rezept erkannt.',imp_none_found_url:'Kein Rezept gefunden.',imp_no_json:'kein JSON',
+    imp_invalid_json:'Ungültiges JSON – ',imp_imported:'importiert',imp_duplicates_skipped:'Duplikat(e) übersprungen',
+    imp_none_found2:'Keine Rezepte gefunden.',
+    shopcat_for:'Kategorie für „{name}"',
+    session_mode_title:'Planungsmodus wählen',
+    session_mode_manual:'🖐 Manuell',session_mode_manual_hint:'Alle Schritte werden aufgelistet, du ziehst sie in deine gewünschte Reihenfolge.',
+    session_mode_ai:'✨ KI-optimiert',
+    session_mode_ai_hint:'Die KI analysiert aktive vs. passive Zeiten und erstellt einen optimierten Ablaufplan. Du kannst danach noch anpassen.',
+    session_start_ai:'✨ KI-Plan erstellen',session_start_manual:'🖐 Manuell planen',
+    session_steps:'Schritte',
+    session_reset:'↺ Zurücksetzen',session_replan:'✨ Neu planen',session_delete:'🗑 Session löschen',
+    tag_add_to_sel:'Tag zu Auswahl hinzufügen',
+    form_selected:'Ausgewählt:',form_photo_tap_change:'Tippen zum Ändern',
+    form_cluster_hint:'Tipp: **Text** = fett · **Überschrift** als ganze Zeile = Abschnitt · [5] am Anfang = 5 Minuten',
+    loading_generic:'⏳ Lädt…',
+    overwrite_btn:'➡ Überschreiben: ',
+    cat_assignments_title:'🏷 Kategorie-Zuweisungen',
+    choose_category:'Kategorie auswählen:',choose_category2:'Kategorie wählen',
+    plan_title:'📅 Speiseplan',plan_copy_text:'📋 Als Text kopieren',plan_all_to_list:'🛒 Alle Zutaten zur Liste',
+    exp_add:'+ Hinzufügen',exp_saved:'✓ Gespeichert',tag_new_add:'+ Hinzufügen',
     confirm_del:'Rezept wirklich löschen?',confirm_del_all:'Alle Rezepte wirklich löschen?',confirm_reset_cats:'Kategorien auf Standard zurücksetzen?',
     toast_saved:'Gespeichert ✓',toast_deleted:'Gelöscht',toast_copied:'Kopiert ✓',toast_tags_saved:'Tags gespeichert ✓',toast_cats_saved:'Kategorien gespeichert ✓',toast_backup_ok:'Backup wiederhergestellt ✓',
     step_promote:'↑ Titel',step_demote:'↓ Schritt',
+    pdf_save:'🖨 Als PDF speichern',pdf_print:'🖨 Drucken',pdf_html_hint:'⬇ HTML → in Chrome öffnen → Drucken',
     no_photos:'Keine Fotos vorhanden.',photos_compressed:'Fotos komprimiert ✓',
     recipe_count_single:'Rezept',recipe_count_plural:'Rezepte',
+    hdr_pantry:'📦 Vorratskammer',tab_shopping:'Einkaufsliste',tab_pantry:'Vorratskammer',
+    pantry_items:'Artikel',pantry_expired:'abgelaufen',pantry_soon:'bald fällig',
+    pantry_scan:'Smart-Scan',pantry_add:'Hinzufügen',pantry_empty:'Vorratskammer ist leer.',
+    pantry_confirm_del:'Diesen Vorrats-Eintrag wirklich löschen?',
+    pantry_edit_title:'Eintrag bearbeiten',pantry_add_title:'Neuer Vorrats-Eintrag',
+    pantry_name:'Produkt',pantry_name_ph:'z.B. Milch',pantry_qty:'Menge',pantry_unit:'Einheit',
+    pantry_expiry:'MHD / Verfallsdatum',pantry_note:'Notiz (optional)',pantry_note_ph:'z.B. angebrochen',
+    pantry_expired_since:'seit {n} Tag(en) abgelaufen',pantry_today:'läuft heute ab',pantry_in_days:'noch {n} Tag(e)',
+    pantry_scan_title:'📷 Smart-Scan',pantry_scan_hint:'Foto vom Einkauf oder Kassenbon hochladen – die KI erkennt automatisch die Produkte. MHDs stehen selten auf Bons, ergänze sie bei Bedarf danach.',
+    pantry_scan_choose:'Ein oder mehrere Bilder auswählen',pantry_scan_images_sg:'Bild ausgewählt',pantry_scan_images_pl:'Bilder ausgewählt',
+    pantry_scan_analyze:'KI analysieren',pantry_scan_analyzing:'KI analysiert…',pantry_scan_none:'Keine Produkte erkannt.',
+    pantry_scan_found:'{n} Produkte erkannt – prüfe und ergänze bei Bedarf:',pantry_scan_add_all:'Alle hinzufügen',
+    auth_appname:'Meine Rezepte',auth_signin:'Anmelden',auth_signup:'Registrieren',
+    auth_email_ph:'E-Mail',auth_pw_ph:'Passwort (min. 6 Zeichen)',
+    auth_submit_signup:'Konto erstellen',auth_forgot:'Passwort vergessen?',
+    auth_reset_sent:'✓ E-Mail zum Zurücksetzen wurde verschickt (falls das Konto existiert).',
+    auth_err_email_first:'Bitte zuerst deine E-Mail-Adresse oben eintragen.',
+    auth_err_fill:'Bitte E-Mail und Passwort eingeben',
+    auth_err_in_use:'Diese E-Mail ist schon registriert – oben auf "Anmelden" wechseln.',
+    auth_err_invalid_email:'Ungültige E-Mail-Adresse.',
+    auth_err_weak_pw:'Passwort zu schwach (min. 6 Zeichen).',
+    auth_err_no_account:'Kein Konto mit dieser E-Mail gefunden.',
+    auth_err_wrong_pw:'Falsches Passwort.',
+    auth_err_invalid_cred:'E-Mail oder Passwort falsch.',
+    auth_err_too_many:'Zu viele Versuche – bitte kurz warten.',
+    auth_err_generic:'Fehler bei der Anmeldung.',
+    pending_title:'Warte auf Freischaltung',
+    pending_body:'Dein Konto ({email}) wurde erstellt, muss aber erst von einem Admin freigeschaltet werden. Schau später nochmal vorbei.',
+    pending_signout:'Abmelden',
+    auth_loading:'Laden…',
   },
   en:{
     nav_recipes:'Recipes',nav_favorites:'Favorites',nav_ai:'AI Search',nav_import:'Import',nav_newrecipe:'New Recipe',nav_list:'List',nav_more:'Settings',
@@ -1372,21 +1477,89 @@ const LANG={
     flt_title:'Filter',flt_reset:'Reset',flt_close:'Close',flt_favs:'❤️ Favorites',flt_favs_only:'Favorites only',flt_rating:'★ Min. rating',flt_all:'All',flt_status:'🍽 Status',flt_not_cooked:'Not yet cooked',flt_cooked:'Already cooked',flt_time:'⏱ Total time',flt_cats:'📂 Categories',flt_tags:'🏷 Tags',flt_tag_search:'Search tags…',
     sh_empty:'Shopping list is empty.',sh_add_ph:'Add product…',sh_copy:'📋 Copy',sh_clear_done:'Remove done',sh_clear_all:'Clear all',sh_from:'from:',sh_open:'open',sh_done_lbl:'Done',sh_pick_title:'Add Ingredients to List',sh_pick_confirm:'Add',sh_edit_title:'Edit item',sh_auto_detect:'↺ Auto detect',
     set_tags:'🏷 Tags',set_tags_hint:'Tap a tag to rename it. ✕ to delete.',set_no_tags:'No tags yet.',set_cats:'📂 Categories',set_cats_hint:'Drag to sort · Tap color · ✕ to delete',set_display:'Display',set_dark:'🌙 Dark Mode',set_wakelock:'💡 Keep screen awake',set_wakelock_hint:'Prevents screen off while cooking',set_lang:'🌐 Language / Sprache',set_ai:'AI Import (Photo & Link)',set_api_key:'Anthropic API Key',set_api_hint:'Required for photo and link import',set_api_local:'Key is stored locally on this device only.',set_data:'Data',set_compress:'🗜 Compress photos',set_compress_hint:'Saves storage – quality stays good',set_backup:'📦 Full Backup',set_backup_hint:'Recipes + Settings + Categories',set_shop_cats:'🏷 Shopping Categories',set_shop_cats_hint:'Export / import all assignments',set_delete_all:'🗑 Delete all recipes',set_delete_hint:'Cannot be undone',set_footer:'My Recipes · All data stored locally',
-    list_search:'Title or ingredient…',list_filter:'🔽 Filter',list_sort:'⠿ Sort',list_sort_done:'⠿ Done',list_select:'☑ Select',list_select_done:'✕ Done',list_empty:'No recipes yet. Tap + to get started!',list_no_results:'No recipes found.',
+    list_search:'Title or ingredient…',list_filter:'🔽 Filter',list_sort:'⠿ Sort',list_sort_done:'⠿ Done',list_select:'☑ Select',list_select_done:'✕ Done',list_empty:'No recipes yet. Tap + to get started!',list_no_results:'No recipes found.',list_empty_fav:'No favorites yet.',list_add_first:'Add first recipe',
     ai_placeholder:'What do you want to cook?',ai_search:'Search',ai_searching:'Searching…',
+    ai_photo_hint:'📷 Or: photograph your ingredients',ai_photo_choose:'📷 Select image(s)',ai_photo_none:'No photo selected',
+    ai_web_search:'🔍 Search the web',ai_generate:'✨ Generate recipe',
+    ai_footer_hint:'"Search" finds real recipes · "Generate" invents a new one · Photos are analyzed by AI',
+    ai_ph_text:'e.g. "Something with halloumi, vegetarian, under 30 min." or "What can I make with ground beef and potatoes?"',
+    ai_searching_web:'Searching the web…',ai_generating:'Generating recipe…',
+    ai_none_found:'No recipes found. Try a different description.',
+    ai_already_saved:'✓ Already saved',ai_saved:'✓ Saved',
+    ai_followup_title:'💬 Questions about the suggestions',ai_followup_ph:'e.g. "Which one is fastest?" or "Is there a vegan version?"',
+    recipe_chat_title:'💬 Questions about the recipe',
+    imp_photo_hint:'Upload multiple photos or screenshots of a recipe at once – e.g. ingredients on page 1, instructions on page 2.',
+    imp_photo_choose:'Select one or more images',imp_photo_selected:'selected',
+    imp_url_hint:'Link to a recipe page (Chefkoch, Kitchen Stories…)',imp_url_load:'🔗 Load recipe',
+    imp_pdf_hint:'PDF recipe (scanned cookbook page or exported recipe PDF)',imp_pdf_choose:'Select PDF file',
+    imp_json_hint:'Import multiple JSON files or an entire folder at once.',
+    imp_json_choose:'📄 Select files',imp_json_multi:'(multiple possible)',imp_json_folder:'📁 Select folder',
+    imp_ai_analyze:'✨ Analyze with AI',imp_add:'+ Add',imp_page_missing:'Page could not be loaded.',
+    imp_none_found:'No recipe recognized.',imp_none_found_url:'No recipe found.',imp_no_json:'not JSON',
+    imp_invalid_json:'Invalid JSON – ',imp_imported:'imported',imp_duplicates_skipped:'duplicate(s) skipped',
+    imp_none_found2:'No recipes found.',
+    shopcat_for:'Category for "{name}"',
+    session_mode_title:'Choose planning mode',
+    session_mode_manual:'🖐 Manual',session_mode_manual_hint:'All steps are listed, drag them into your preferred order.',
+    session_mode_ai:'✨ AI-optimized',
+    session_mode_ai_hint:'AI analyzes active vs. passive times and creates an optimized timeline. You can still adjust it afterwards.',
+    session_start_ai:'✨ Create AI plan',session_start_manual:'🖐 Plan manually',
+    session_steps:'steps',
+    session_reset:'↺ Reset',session_replan:'✨ Re-plan',session_delete:'🗑 Delete session',
+    tag_add_to_sel:'Add tag to selection',
+    form_selected:'Selected:',form_photo_tap_change:'Tap to change',
+    form_cluster_hint:'Tip: **Text** = bold · **Header** as a whole line = section · [5] at the start = 5 minutes',
+    loading_generic:'⏳ Loading…',
+    overwrite_btn:'➡ Overwrite: ',
+    cat_assignments_title:'🏷 Category assignments',
+    choose_category:'Choose category:',choose_category2:'Choose category',
+    plan_title:'📅 Meal Plan',plan_copy_text:'📋 Copy as text',plan_all_to_list:'🛒 All ingredients to list',
+    exp_add:'+ Add',exp_saved:'✓ Saved',tag_new_add:'+ Add',
     confirm_del:'Really delete this recipe?',confirm_del_all:'Delete all recipes? This cannot be undone.',confirm_reset_cats:'Reset categories to default?',
     toast_saved:'Saved ✓',toast_deleted:'Deleted',toast_copied:'Copied ✓',toast_tags_saved:'Tags saved ✓',toast_cats_saved:'Categories saved ✓',toast_backup_ok:'Backup restored ✓',
     step_promote:'↑ Header',step_demote:'↓ Step',
+    pdf_save:'🖨 Save as PDF',pdf_print:'🖨 Print',pdf_html_hint:'Use ⬇ HTML → open in Chrome → Print',
     no_photos:'No photos found.',photos_compressed:'Photos compressed ✓',
     recipe_count_single:'Recipe',recipe_count_plural:'Recipes',
+    hdr_pantry:'📦 Pantry',tab_shopping:'Shopping List',tab_pantry:'Pantry',
+    pantry_items:'items',pantry_expired:'expired',pantry_soon:'expiring soon',
+    pantry_scan:'Smart Scan',pantry_add:'Add',pantry_empty:'Pantry is empty.',
+    pantry_confirm_del:'Really delete this pantry item?',
+    pantry_edit_title:'Edit item',pantry_add_title:'New pantry item',
+    pantry_name:'Product',pantry_name_ph:'e.g. Milk',pantry_qty:'Quantity',pantry_unit:'Unit',
+    pantry_expiry:'Best-before / expiry date',pantry_note:'Note (optional)',pantry_note_ph:'e.g. opened',
+    pantry_expired_since:'expired {n} day(s) ago',pantry_today:'expires today',pantry_in_days:'{n} day(s) left',
+    pantry_scan_title:'📷 Smart Scan',pantry_scan_hint:'Upload a photo of your groceries or a receipt – AI will automatically recognize the products. Expiry dates are rarely printed on receipts, so add them afterwards if needed.',
+    pantry_scan_choose:'Select one or more images',pantry_scan_images_sg:'image selected',pantry_scan_images_pl:'images selected',
+    pantry_scan_analyze:'Analyze with AI',pantry_scan_analyzing:'AI analyzing…',pantry_scan_none:'No products recognized.',
+    pantry_scan_found:'{n} products recognized – review and adjust if needed:',pantry_scan_add_all:'Add all',
+    auth_appname:'My Recipes',auth_signin:'Sign in',auth_signup:'Register',
+    auth_email_ph:'Email',auth_pw_ph:'Password (min. 6 characters)',
+    auth_submit_signup:'Create account',auth_forgot:'Forgot password?',
+    auth_reset_sent:'✓ Password reset email sent (if an account exists).',
+    auth_err_email_first:'Please enter your email address above first.',
+    auth_err_fill:'Please enter email and password',
+    auth_err_in_use:'This email is already registered – switch to "Sign in" above.',
+    auth_err_invalid_email:'Invalid email address.',
+    auth_err_weak_pw:'Password too weak (min. 6 characters).',
+    auth_err_no_account:'No account found with this email.',
+    auth_err_wrong_pw:'Wrong password.',
+    auth_err_invalid_cred:'Wrong email or password.',
+    auth_err_too_many:'Too many attempts – please wait a moment.',
+    auth_err_generic:'Sign-in error.',
+    pending_title:'Waiting for approval',
+    pending_body:'Your account ({email}) has been created but still needs to be approved by an admin. Please check back later.',
+    pending_signout:'Sign out',
+    auth_loading:'Loading…',
   }
 };
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.6.0';
+const APP_VERSION = '3.7.0';
 const APP_DATE = '2026-07-18';
 const VERSION_HISTORY = [
+  { version:'3.7.0', date:'2026-07-18', de:['🆕 Neuer Tab „Vorratskammer" (in „Liste" neben Einkaufsliste): Produkte mit Menge, Einheit und MHD/Verfallsdatum erfassen','Ampel-Anzeige: gelb ab 3 Tagen vor Ablauf, rot bei überschrittenem MHD','📷 Smart-Scan: Foto vom Einkauf oder Kassenbon hochladen – KI erkennt Produkte automatisch, MHD danach ergänzbar','Vorratskammer synct wie die Einkaufsliste automatisch zwischen allen Gruppenmitgliedern','Großer Übersetzungs-Fix: Login/Registrierung, Kochsession-Planung, PDF-Export, KI-Rezeptsuche, Import-Tabs, Kategorie-/Tag-Dialoge und diverse Hinweistexte liefen bisher fest auf Deutsch – jetzt vollständig zweisprachig','Bugfix: KI-Nährwertschätzung zeigte Status-Meldung wegen Tippfehler (t(\'lang\') statt S.lang) immer auf Deutsch'], en:['🆕 New "Pantry" tab (inside "List" next to the shopping list): track products with quantity, unit and best-before/expiry date','Traffic-light indicator: yellow from 3 days before expiry, red once expired','📷 Smart Scan: upload a photo of your groceries or a receipt – AI recognizes products automatically, add expiry dates afterwards','Pantry syncs automatically between all group members, just like the shopping list','Major translation fix: sign-in/registration, cook-session planning, PDF export, AI recipe search, import tabs, category/tag dialogs and various hints were previously stuck in German – now fully bilingual','Bugfix: AI nutrition estimate status message always showed German due to a typo (t(\'lang\') instead of S.lang)'] },
   { version:'3.6.0', date:'2026-07-18', de:['Navigation überarbeitet: Bottom-Nav von 7 auf 5 Einträge reduziert','Favoriten sind jetzt ein Tab oben in der Rezepte-Ansicht statt eigenem Nav-Punkt','Import + KI-Suche + manuelles Erstellen zusammengefasst in "Neues Rezept" mit drei Tabs','"Mehr" umbenannt in "Einstellungen", mit eigenem Tab "Nutzerverwaltung" (nur für Admin sichtbar)'], en:['Navigation overhauled: bottom nav reduced from 7 to 5 items','Favorites are now a tab at the top of the recipes view instead of a separate nav item','Import + AI search + manual creation merged into "New Recipe" with three tabs','"More" renamed to "Settings", with its own "User management" tab (admin-only)'] },
   { version:'3.5.1', date:'2026-07-18', de:['Neu: Admin kann Nutzer im Admin-Panel entfernen – löscht Nutzer-Datensatz und Mitgliedschaft in allen geteilten Gruppen (räumt auch Reste bereits in der Firebase Console gelöschter Konten auf)','Hinweis: Das Firebase-Auth-Konto selbst muss weiterhin manuell in der Console gelöscht werden, das kann die App aus Sicherheitsgründen nicht selbst'], en:['New: admin can remove users in the admin panel – deletes the user record and membership in all shared groups (also cleans up leftovers from accounts already deleted in the Firebase Console)','Note: the Firebase Auth account itself still needs to be deleted manually in the console, the app cannot do this itself for security reasons'] },
   { version:'3.5.0', date:'2026-07-18', de:['Neu: "Passwort vergessen?" auf dem Anmelde-Bildschirm (verschickt Reset-Mail über Firebase Auth)','Fix/Sicherheit: KI-Nutzungsstatistik zeigt normalen Nutzern nur noch die eigenen Daten, nicht mehr die aller Nutzer','Admin-Nutzerverwaltung zeigt jetzt zusätzlich "Zuletzt online" und KI-Aufrufe pro Nutzer','Neu: Geteilte Rezepte/Einkaufsliste zeigen jetzt die E-Mail-Adressen der Mitglieder statt nur die Anzahl'], en:['New: "Forgot password?" on the sign-in screen (sends a reset email via Firebase Auth)','Fix/security: AI usage stats now only show regular users their own data, not everyone\\u2019s','Admin user management now also shows "last online" and AI calls per user','New: shared recipes/shopping list now show member email addresses instead of just a count'] },
@@ -1665,9 +1838,9 @@ function renderPendingApproval(){
   document.getElementById('app').innerHTML=`
   <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:85dvh;padding:1.5rem;text-align:center">
     <div style="font-size:3rem;margin-bottom:1rem">⏳</div>
-    <div style="font-size:1.2rem;font-weight:700;margin-bottom:.6rem;font-family:var(--font)">Warte auf Freischaltung</div>
-    <div style="color:var(--muted);font-size:.9rem;font-family:var(--ui);max-width:320px;margin-bottom:1.5rem">Dein Konto (${esc(S.user.email)}) wurde erstellt, muss aber erst von einem Admin freigeschaltet werden. Schau später nochmal vorbei.</div>
-    <button id="pendingSignOut" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:10px;padding:.6rem 1.4rem;font-family:var(--ui);font-weight:700;cursor:pointer">Abmelden</button>
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:.6rem;font-family:var(--font)">${t('pending_title')}</div>
+    <div style="color:var(--muted);font-size:.9rem;font-family:var(--ui);max-width:320px;margin-bottom:1.5rem">${esc(t('pending_body').replace('{email}',S.user.email))}</div>
+    <button id="pendingSignOut" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:10px;padding:.6rem 1.4rem;font-family:var(--ui);font-weight:700;cursor:pointer">${t('pending_signout')}</button>
   </div>`;
   document.getElementById('pendingSignOut').onclick=doSignOut;
 }
@@ -1675,7 +1848,7 @@ function renderPendingApproval(){
 function renderAuthLoading(){
   document.getElementById('hdr').style.display='none';
   document.getElementById('bnav').style.display='none';
-  document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:80dvh;flex-direction:column;gap:1rem"><div style="font-size:2rem">🍳</div><div style="font-size:.9rem;color:var(--muted);font-family:var(--ui)">Laden…</div></div>';
+  document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:80dvh;flex-direction:column;gap:1rem"><div style="font-size:2rem">🍳</div><div style="font-size:.9rem;color:var(--muted);font-family:var(--ui)">'+t('auth_loading')+'</div></div>';
 }
 
 function renderAuthScreen(){
@@ -1685,18 +1858,18 @@ function renderAuthScreen(){
   document.getElementById('app').innerHTML=`
   <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:85dvh;padding:1.5rem">
     <div style="font-size:3rem;margin-bottom:.5rem">🍳</div>
-    <div style="font-size:1.3rem;font-weight:700;margin-bottom:1.5rem;font-family:var(--font)">Meine Rezepte</div>
+    <div style="font-size:1.3rem;font-weight:700;margin-bottom:1.5rem;font-family:var(--font)">${t('auth_appname')}</div>
     <div style="width:100%;max-width:340px;background:var(--surface);border-radius:16px;padding:1.5rem;box-shadow:0 4px 20px rgba(0,0,0,.08)">
       <div style="display:flex;gap:.5rem;margin-bottom:1.2rem;background:var(--surface2);border-radius:10px;padding:.25rem">
-        <button id="authTabSignin" style="flex:1;padding:.5rem;border:none;border-radius:8px;font-family:var(--ui);font-weight:700;cursor:pointer;background:${!isSignup?'var(--accent)':'transparent'};color:${!isSignup?'#fff':'var(--muted)'}">Anmelden</button>
-        <button id="authTabSignup" style="flex:1;padding:.5rem;border:none;border-radius:8px;font-family:var(--ui);font-weight:700;cursor:pointer;background:${isSignup?'var(--accent)':'transparent'};color:${isSignup?'#fff':'var(--muted)'}">Registrieren</button>
+        <button id="authTabSignin" style="flex:1;padding:.5rem;border:none;border-radius:8px;font-family:var(--ui);font-weight:700;cursor:pointer;background:${!isSignup?'var(--accent)':'transparent'};color:${!isSignup?'#fff':'var(--muted)'}">${t('auth_signin')}</button>
+        <button id="authTabSignup" style="flex:1;padding:.5rem;border:none;border-radius:8px;font-family:var(--ui);font-weight:700;cursor:pointer;background:${isSignup?'var(--accent)':'transparent'};color:${isSignup?'#fff':'var(--muted)'}">${t('auth_signup')}</button>
       </div>
-      <input type="email" id="authEmail" placeholder="E-Mail" autocomplete="email" style="width:100%;padding:.7rem .9rem;margin-bottom:.6rem;border:1px solid var(--border2);border-radius:10px;background:var(--surface);color:var(--text);font-family:var(--ui);font-size:.95rem;outline:none">
-      <input type="password" id="authPw" placeholder="Passwort (min. 6 Zeichen)" autocomplete="${isSignup?'new-password':'current-password'}" style="width:100%;padding:.7rem .9rem;margin-bottom:.9rem;border:1px solid var(--border2);border-radius:10px;background:var(--surface);color:var(--text);font-family:var(--ui);font-size:.95rem;outline:none">
+      <input type="email" id="authEmail" placeholder="${t('auth_email_ph')}" autocomplete="email" style="width:100%;padding:.7rem .9rem;margin-bottom:.6rem;border:1px solid var(--border2);border-radius:10px;background:var(--surface);color:var(--text);font-family:var(--ui);font-size:.95rem;outline:none">
+      <input type="password" id="authPw" placeholder="${t('auth_pw_ph')}" autocomplete="${isSignup?'new-password':'current-password'}" style="width:100%;padding:.7rem .9rem;margin-bottom:.9rem;border:1px solid var(--border2);border-radius:10px;background:var(--surface);color:var(--text);font-family:var(--ui);font-size:.95rem;outline:none">
       ${S.authError?`<div style="color:var(--danger);font-size:.8rem;margin-bottom:.7rem;font-family:var(--ui)">⚠ ${esc(S.authError)}</div>`:''}
-      ${S.authResetSent?`<div style="color:var(--ok);font-size:.8rem;margin-bottom:.7rem;font-family:var(--ui)">✓ E-Mail zum Zurücksetzen wurde verschickt (falls das Konto existiert).</div>`:''}
-      <button id="authSubmit" ${S.authBusy?'disabled':''} style="width:100%;padding:.75rem;border:none;border-radius:10px;background:var(--accent);color:#fff;font-family:var(--ui);font-weight:700;font-size:.95rem;cursor:pointer;opacity:${S.authBusy?.6:1}">${S.authBusy?'…':(isSignup?'Konto erstellen':'Anmelden')}</button>
-      ${!isSignup?`<button id="authForgotPw" style="width:100%;background:none;border:none;color:var(--muted);font-family:var(--ui);font-size:.8rem;margin-top:.7rem;cursor:pointer;text-decoration:underline">Passwort vergessen?</button>`:''}
+      ${S.authResetSent?`<div style="color:var(--ok);font-size:.8rem;margin-bottom:.7rem;font-family:var(--ui)">${t('auth_reset_sent')}</div>`:''}
+      <button id="authSubmit" ${S.authBusy?'disabled':''} style="width:100%;padding:.75rem;border:none;border-radius:10px;background:var(--accent);color:#fff;font-family:var(--ui);font-weight:700;font-size:.95rem;cursor:pointer;opacity:${S.authBusy?.6:1}">${S.authBusy?'…':(isSignup?t('auth_submit_signup'):t('auth_signin'))}</button>
+      ${!isSignup?`<button id="authForgotPw" style="width:100%;background:none;border:none;color:var(--muted);font-family:var(--ui);font-size:.8rem;margin-top:.7rem;cursor:pointer;text-decoration:underline">${t('auth_forgot')}</button>`:''}
     </div>
   </div>`;
   document.getElementById('authTabSignin').onclick=()=>{S.authMode='signin';S.authError='';S.authResetSent=false;render();};
@@ -1705,7 +1878,7 @@ function renderAuthScreen(){
   document.getElementById('authPw').addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth();});
   document.getElementById('authForgotPw')?.addEventListener('click',async()=>{
     const email=(document.getElementById('authEmail')?.value||'').trim();
-    if(!email){S.authError='Bitte zuerst deine E-Mail-Adresse oben eintragen.';render();return;}
+    if(!email){S.authError=t('auth_err_email_first');render();return;}
     S.authBusy=true;S.authError='';S.authResetSent=false;render();
     try{
       await fbAuth.sendPasswordResetEmail(email);
@@ -1720,7 +1893,7 @@ function renderAuthScreen(){
 async function submitAuth(){
   const email=(document.getElementById('authEmail')?.value||'').trim();
   const pw=document.getElementById('authPw')?.value||'';
-  if(!email||!pw){S.authError='Bitte E-Mail und Passwort eingeben';render();return;}
+  if(!email||!pw){S.authError=t('auth_err_fill');render();return;}
   S.authBusy=true;S.authError='';render();
   try{
     if(S.authMode==='signup'){
@@ -1738,15 +1911,15 @@ async function submitAuth(){
 
 function authErrorMsg(e){
   const map={
-    'auth/email-already-in-use':'Diese E-Mail ist schon registriert – oben auf "Anmelden" wechseln.',
-    'auth/invalid-email':'Ungültige E-Mail-Adresse.',
-    'auth/weak-password':'Passwort zu schwach (min. 6 Zeichen).',
-    'auth/user-not-found':'Kein Konto mit dieser E-Mail gefunden.',
-    'auth/wrong-password':'Falsches Passwort.',
-    'auth/invalid-credential':'E-Mail oder Passwort falsch.',
-    'auth/too-many-requests':'Zu viele Versuche – bitte kurz warten.',
+    'auth/email-already-in-use':t('auth_err_in_use'),
+    'auth/invalid-email':t('auth_err_invalid_email'),
+    'auth/weak-password':t('auth_err_weak_pw'),
+    'auth/user-not-found':t('auth_err_no_account'),
+    'auth/wrong-password':t('auth_err_wrong_pw'),
+    'auth/invalid-credential':t('auth_err_invalid_cred'),
+    'auth/too-many-requests':t('auth_err_too_many'),
   };
-  return map[e.code]||e.message||'Fehler bei der Anmeldung.';
+  return map[e.code]||e.message||t('auth_err_generic');
 }
 
 async function doSignOut(){
@@ -1771,7 +1944,7 @@ function renderHdr(){
     acts.innerHTML=`<button class="btn bo sm" onclick="shareR()">📤</button><button class="btn bo sm" onclick="exportRecipeJSON('${S.selId}')">JSON</button><button class="btn bo sm" onclick="exportRecipePDF('${S.selId}')">PDF</button><button class="btn bo sm" onclick="openEdit('${S.selId}')">✏️</button><button class="btn bdo sm" onclick="askDel('${S.selId}')">🗑</button>`;  } else if(S.view==='form'){
     tit.textContent=S.editId?t('hdr_edit'):t('hdr_new');sub.textContent='';
     acts.innerHTML=`<button class="btn bp" onclick="submitForm()">${t('btn_save')}</button>`;
-  } else if(S.view==='shopping'){tit.textContent=t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
+  } else if(S.view==='shopping'){tit.textContent=S.shopTab==='pantry'?t('hdr_pantry'):t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
   else if(S.view==='session'){
     const sess=S.sessions.find(s=>s.id===S.activeSession);
     tit.textContent='👨‍🍳 '+(sess?.name||'Kochsession');
@@ -2047,8 +2220,8 @@ function renderList(app){
     });
     if(rs.length===0){
       grid.innerHTML=`<div class="empty"><div class="ei">${isFav?'❤️':S.search||activeFilterCount()>0?'🔍':'📖'}</div>
-        <p>${isFav?'Noch keine Favoriten.':S.search||activeFilterCount()>0?'Keine Rezepte gefunden.':'Noch keine Rezepte.'}</p>
-        ${!S.search&&activeFilterCount()===0&&!isFav?`<button class="btn bp" id="addFirstBtn">Erstes Rezept hinzufügen</button>`:''}</div>`;
+        <p>${isFav?t('list_empty_fav'):S.search||activeFilterCount()>0?t('list_no_results'):t('list_empty')}</p>
+        ${!S.search&&activeFilterCount()===0&&!isFav?`<button class="btn bp" id="addFirstBtn">${t('list_add_first')}</button>`:''}</div>`;
       document.getElementById('addFirstBtn')?.addEventListener('click',openNew);
       return;
     }
@@ -2495,7 +2668,7 @@ function renderDetail(app){
       </div>
       ${r.nutrition&&Object.values(r.nutrition).some(v=>v)?`
       <div style="margin-top:.6rem;padding-top:.6rem;border-top:1px solid rgba(255,255,255,.1)">
-        <div style="font-size:.62rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:1px;margin-bottom:.4rem">Nährwerte pro Portion</div>
+        <div style="font-size:.62rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:1px;margin-bottom:.4rem">${t("det_nutrition")}</div>
         <div style="display:flex;gap:.6rem;flex-wrap:nowrap;overflow-x:auto">
           ${r.nutrition.kcal?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.kcal}</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">kcal</div></div>`:''}
           ${r.nutrition.protein?`<div style="text-align:center;flex-shrink:0"><div style="font-size:.95rem;font-weight:bold;color:var(--ht)">${r.nutrition.protein}g</div><div style="font-size:.58rem;color:var(--hm);font-family:var(--ui);text-transform:uppercase;letter-spacing:.3px">${t('nut_protein')}</div></div>`:''}
@@ -2560,11 +2733,11 @@ function renderDetail(app){
             })()}
             </div>
             <div id="ingAddBar" style="display:none" class="ing-add-bar">
-              <span id="ingAddLabel">0 ausgewählt</span>
-              <span>🛒 In Einkaufsliste →</span>
+              <span id="ingAddLabel">0 ${t('det_selected')}</span>
+              <span>${t('det_shop_arrow')}</span>
             </div>
           </div>`:'<div style="padding:1rem;color:var(--faint);font-size:.85rem">Keine Zutaten eingetragen.</div>'}
-          ${r.notes?`<div class="nb2" style="margin-top:1.2rem;margin-bottom:.5rem"><div class="nbl2">📝 Notizen</div><div class="nbt2" style="white-space:pre-wrap">${esc(r.notes)}</div></div>`:''}
+          ${r.notes?`<div class="nb2" style="margin-top:1.2rem;margin-bottom:.5rem"><div class="nbl2">${t('det_notes').replace('📝 ','')}</div><div class="nbt2" style="white-space:pre-wrap">${esc(r.notes)}</div></div>`:''}
         </div>
         <!-- TAB 1: ZUBEREITUNG + ERFAHRUNGEN + CHAT -->
         <div class="det-panel" style="padding:1rem 1.3rem 5rem">
@@ -2587,7 +2760,7 @@ function renderDetail(app){
           </div>`:'<div style="padding:1rem;color:var(--faint);font-size:.85rem">Keine Zubereitung eingetragen.</div>'}
           <!-- Erfahrungen -->
           <div style="margin-top:1.4rem;border-top:2px solid var(--border);padding-top:1rem;margin-bottom:.8rem">
-            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-family:var(--font);font-weight:700;margin-bottom:.6rem">📓 Erfahrungen</div>
+            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-family:var(--font);font-weight:700;margin-bottom:.6rem">${t('det_experiences').replace('📓 ','')}</div>
             ${(r.experiences||[]).length===0?`<div style="font-size:.78rem;color:var(--faint);font-family:var(--font);font-style:italic;margin-bottom:.6rem">Noch keine Erfahrungen eingetragen.</div>`:''}
             <div id="expList">
               ${(r.experiences||[]).map((e,i)=>`
@@ -2607,13 +2780,13 @@ function renderDetail(app){
             </div>
             <div style="display:flex;gap:.5rem;margin-top:.7rem;align-items:flex-end">
               <textarea id="expInp" class="chat-inp" rows="2" placeholder="Neue Erfahrung hinzufügen…" style="flex:1"></textarea>
-              <button id="expAddBtn" class="btn bp sm" style="align-self:flex-end;white-space:nowrap;min-width:80px">+ Hinzufügen</button>
+              <button id="expAddBtn" class="btn bp sm" style="align-self:flex-end;white-space:nowrap;min-width:80px">${t('exp_add')}</button>
             </div>
-            <div id="expSavedMsg" style="display:none;font-size:.75rem;color:var(--ok);font-family:var(--font);margin-top:.3rem;font-weight:600">✓ Gespeichert</div>
+            <div id="expSavedMsg" style="display:none;font-size:.75rem;color:var(--ok);font-family:var(--font);margin-top:.3rem;font-weight:600">${t('exp_saved')}</div>
           </div>
           <!-- Chat -->
           <div style="margin-top:1.4rem;border-top:2px solid var(--border);padding-top:1rem;margin-bottom:1rem">
-            <div style="font-size:.74rem;text-transform:uppercase;letter-spacing:2px;color:var(--accent);font-weight:700;font-family:var(--ui);margin-bottom:.8rem">💬 Rückfragen zum Rezept</div>
+            <div style="font-size:.74rem;text-transform:uppercase;letter-spacing:2px;color:var(--accent);font-weight:700;font-family:var(--ui);margin-bottom:.8rem">${t('recipe_chat_title')}</div>
             <div class="chat-msgs" id="detailChat"></div>
             <div style="display:flex;gap:.5rem;align-items:stretch;border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--bg);margin:0 0 .5rem 0">
               <textarea id="detailChatInp" rows="2" placeholder="z.B. „Kann ich Butter durch Öl ersetzen?"" style="flex:1;border:none;outline:none;background:transparent;font-family:var(--ui);font-size:.88rem;color:var(--text);padding:.7rem .8rem;resize:none;line-height:1.5"></textarea>
@@ -2637,7 +2810,7 @@ function renderDetail(app){
   function updateIngBar(){
     const sel=Object.values(S.ingSelected[r.id]).filter(Boolean).length;
     const bar=document.getElementById('ingAddBar');
-    if(bar){bar.style.display=sel>0?'flex':'none';document.getElementById('ingAddLabel').textContent=sel+' ausgewählt';}
+    if(bar){bar.style.display=sel>0?'flex':'none';document.getElementById('ingAddLabel').textContent=sel+' '+t('det_selected');}
   }
   document.getElementById('ingList')?.addEventListener('click',e=>{
     // Handle promote/demote – mirror steps approach
@@ -2920,18 +3093,18 @@ function renderForm(app){
         </div>
         <div style="display:flex;gap:.4rem">
           <input class="fi" id="tagNewInp" placeholder="${t('form_tag_add')}" style="flex:1;padding:.45rem .65rem">
-          <button type="button" id="tagNewAdd" class="btn bg sm">+ Hinzufügen</button>
+          <button type="button" id="tagNewAdd" class="btn bg sm">${t('tag_new_add')}</button>
         </div>
         <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin-top:.3rem;font-style:italic">Tippe vorhandene Tags an oder erstelle neue</div>
         ${S.formTags.length?`<div style="margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.3rem;padding:.5rem;background:var(--surface2);border-radius:8px">
-          <span style="font-size:.7rem;color:var(--muted);font-family:var(--ui);width:100%;margin-bottom:.2rem">Ausgewählt:</span>
+          <span style="font-size:.7rem;color:var(--muted);font-family:var(--ui);width:100%;margin-bottom:.2rem">${t('form_selected')}</span>
           ${S.formTags.map(t=>`<span style="background:var(--accent);color:#fff;border-radius:20px;font-size:.75rem;padding:.18rem .55rem;font-family:var(--ui);display:flex;align-items:center;gap:.3rem">${esc(t)}<button type="button" class="tag-rm-btn" data-rmtag="${esc(t)}" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.8);font-size:.8rem;padding:0;line-height:1">✕</button></span>`).join('')}
         </div>`:''}
       </div>
       <div class="cf">
         <div class="fl">${t('form_photo')} (optional)</div>
         <div class="pa" onclick="document.getElementById('pup').click()">
-          ${photo?`<img class="pp" src="${photo}"><small style="font-family:var(--ui)">Tippen zum Ändern</small>`:t('form_photo_add')}
+          ${photo?`<img class="pp" src="${photo}"><small style="font-family:var(--ui)">${t('form_photo_tap_change')}</small>`:t('form_photo_add')}
         </div>
         <input type="file" id="pup" accept="image/*" style="display:none">
         ${photo?`<button class="btn bg sm" style="margin-top:.4rem" onclick="S.formPhoto=null;S.formData.photo=null;renderApp()">${t('form_photo_remove')}</button>`:''}
@@ -2942,7 +3115,7 @@ function renderForm(app){
           <span>${t('det_steps')}</span>
           <button id="boldBtn" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:.15rem .5rem;font-family:var(--ui);font-size:.8rem;font-weight:bold;cursor:pointer;color:var(--text)">B Fett</button>
         </div>
-        <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin:.25rem 0 .35rem;font-style:italic">Tipp: **Text** = fett · **Überschrift** als ganze Zeile = Abschnitt · [5] am Anfang = 5 Minuten</div>
+        <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin:.25rem 0 .35rem;font-style:italic">${t('form_cluster_hint')}</div>
         <textarea class="ft" id="f-st" rows="9" placeholder="${t('form_steps_hint')}">${esc(f.steps)}</textarea>
       </div>
       <div class="cf"><div class="fl">${t('form_notes')}</div><textarea class="ft" id="f-n" rows="7" placeholder="${t('form_notes_hint')}" style="min-height:140px">${esc(f.notes)}</textarea></div>
@@ -2993,10 +3166,10 @@ Alle Werte gerundete Ganzzahlen außer Salz (eine Dezimalstelle).`,
       document.getElementById('f-fat').value=n.fat||'';
       document.getElementById('f-fiber').value=n.fiber||'';
       document.getElementById('f-salt').value=n.salt||'';
-      document.getElementById('nutritionStatus').textContent=t('lang')==='en'?'✓ Estimated – please check and adjust.':'✓ Geschätzt – bitte prüfen und ggf. anpassen.';
+      document.getElementById('nutritionStatus').textContent=S.lang==='en'?'✓ Estimated – please check and adjust.':'✓ Geschätzt – bitte prüfen und ggf. anpassen.';
       document.getElementById('nutritionStatus').style.color='var(--ok)';
     }catch(e){
-      document.getElementById('nutritionStatus').textContent='⚠ Fehler: '+e.message;
+      document.getElementById('nutritionStatus').textContent=(S.lang==='en'?'⚠ Error: ':'⚠ Fehler: ')+e.message;
       document.getElementById('nutritionStatus').style.color='var(--danger)';
     }
     btn.textContent='✨ KI schätzen';btn.disabled=false;
@@ -3111,7 +3284,67 @@ function getShopCat(text){
 }
 function saveShopCats(){try{localStorage.setItem('mrshcats',JSON.stringify(S.customShopCats||{}));}catch{}}
 
+// ══════════════ VORRATSKAMMER / PANTRY ══════════════
+const PANTRY_SOON_DAYS = 3; // Ab wie vielen Tagen vor Ablauf gelb markiert wird
+
+// Tage bis zum Ablaufdatum (negativ = bereits abgelaufen). null = kein Datum gesetzt.
+function pantryDaysLeft(item){
+  if(!item.expiry)return null;
+  const today=new Date();today.setHours(0,0,0,0);
+  const exp=new Date(item.expiry+'T00:00:00');
+  return Math.round((exp-today)/86400000);
+}
+// 'expired' | 'soon' | 'ok' | 'none'
+function pantryStatus(item){
+  const d=pantryDaysLeft(item);
+  if(d===null)return 'none';
+  if(d<0)return 'expired';
+  if(d<=PANTRY_SOON_DAYS)return 'soon';
+  return 'ok';
+}
+function pantryStatusColor(status){
+  if(status==='expired')return 'var(--danger)';
+  if(status==='soon')return '#e6a700';
+  return 'var(--muted)';
+}
+function fmtExpiry(item){
+  if(!item.expiry)return '';
+  const d=pantryDaysLeft(item);
+  const locale=S.lang==='en'?'en-GB':'de-DE';
+  const dateStr=new Date(item.expiry+'T00:00:00').toLocaleDateString(locale,{day:'2-digit',month:'2-digit',year:'numeric'});
+  if(d<0)return dateStr+' · '+t('pantry_expired_since').replace('{n}',Math.abs(d));
+  if(d===0)return dateStr+' · '+t('pantry_today');
+  return dateStr+' · '+t('pantry_in_days').replace('{n}',d);
+}
+function addPantryItem(item){
+  S.pantry.push({id:uid(),name:'',category:15,qty:'',unit:'',expiry:'',note:'',addedAt:Date.now(),_updatedAt:Date.now(),...item});
+  savePantry();
+}
+function updatePantryItem(id,patch){
+  const idx=S.pantry.findIndex(x=>x.id===id);
+  if(idx===-1)return;
+  S.pantry[idx]={...S.pantry[idx],...patch,_updatedAt:Date.now()};
+  savePantry();
+}
+function removePantryItem(id){
+  S.pantry=S.pantry.filter(x=>x.id!==id);
+  savePantry();
+  renderApp();
+}
+
 function renderShop(app){
+  app.innerHTML=`<div class="itabs" style="margin-bottom:1rem">
+    <button class="itab${S.shopTab!=='pantry'?' on':''}" data-shoptab="shopping">🛒 ${t('tab_shopping')}</button>
+    <button class="itab${S.shopTab==='pantry'?' on':''}" data-shoptab="pantry">📦 ${t('tab_pantry')}</button>
+  </div><div id="shopTabBody"></div>`;
+  app.querySelectorAll('[data-shoptab]').forEach(btn=>btn.addEventListener('click',()=>{
+    S.shopTab=btn.dataset.shoptab;renderHdr();renderApp();
+  }));
+  const body=document.getElementById('shopTabBody');
+  if(S.shopTab==='pantry')renderPantry(body);else renderShopList(body);
+}
+
+function renderShopList(app){
   const items=S.shopping,done=items.filter(x=>x.done).length;
   const grouped={};
   items.forEach((it,i)=>{
@@ -3140,14 +3373,14 @@ function renderShop(app){
   }).join('');
   app.innerHTML=`
     <div class="shop-hdr">
-      <h2 style="font-size:1rem">Einkaufsliste <small style="color:var(--muted);font-family:var(--font);font-size:.78rem">${items.length-done} ${t('sh_open')}</small></h2>
+      <h2 style="font-size:1rem">${t('tab_shopping')} <small style="color:var(--muted);font-family:var(--font);font-size:.78rem">${items.length-done} ${t('sh_open')}</small></h2>
       <div style="display:flex;gap:.45rem;flex-wrap:wrap">
         ${done>0?`<button class="btn bg sm" onclick="clearDone()">${t('sh_clear_done')}</button>`:''}
         ${items.length>0?`<button class="btn bg sm" onclick="copySh()">${t('sh_copy')}</button>`:''}
         ${items.length>0?`<button class="btn bdo sm" onclick="clearAllSh()">${t('sh_clear_all')}</button>`:''}
       </div>
     </div>
-    ${items.length===0?`<div class="empty"><div class="ei">🛒</div><p>Einkaufsliste ist leer.</p></div>`:groupedHtml}
+    ${items.length===0?`<div class="empty"><div class="ei">🛒</div><p>${t('sh_empty')}</p></div>`:groupedHtml}
     <div class="sadd">
       <input class="sadd-i" id="saddi" placeholder="${t('sh_add_ph')}">
       <button class="btn bp" onclick="addShM()">+</button>
@@ -3162,7 +3395,7 @@ function showShopCatPicker(idx){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:200';
   const md=document.createElement('div');
   md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem;width:100%;max-width:500px;max-height:80dvh;overflow-y:auto;font-family:var(--font)';
-  md.innerHTML=`<div style="font-size:.85rem;font-weight:700;color:var(--text);margin-bottom:.8rem">Kategorie für „${esc(it.text)}"</div>
+  md.innerHTML=`<div style="font-size:.85rem;font-weight:700;color:var(--text);margin-bottom:.8rem">${esc(t('shopcat_for').replace('{name}',it.text))}</div>
     <div style="display:flex;flex-direction:column;gap:.35rem">
       ${SHOP_CATS.map((c,i)=>`<button data-ci="${i}" style="background:${current===i?'var(--accent)':'var(--surface2)'};color:${current===i?'#fff':'var(--text)'};border:none;border-radius:10px;padding:.55rem .9rem;text-align:left;cursor:pointer;font-family:var(--font);font-size:.9rem;font-weight:${current===i?'700':'400'}">${c}</button>`).join('')}
     </div>
@@ -3184,6 +3417,218 @@ function showShopCatPicker(idx){
   });
   md.querySelector('#scpCancel').addEventListener('click',()=>document.body.removeChild(ov));
   ov.addEventListener('click',e=>{if(e.target===ov)document.body.removeChild(ov);});
+}
+
+// VORRATSKAMMER
+const PANTRY_UNITS=['Stück','g','kg','ml','l','Packung','Dose','Glas','Bund'];
+
+function renderPantry(app){
+  const items=S.pantry;
+  const expiredCnt=items.filter(x=>pantryStatus(x)==='expired').length;
+  const soonCnt=items.filter(x=>pantryStatus(x)==='soon').length;
+  const grouped={};
+  items.forEach((it,i)=>{
+    const cat=it.category??15;
+    if(!grouped[cat])grouped[cat]=[];
+    grouped[cat].push({...it,idx:i});
+  });
+  const sortedCats=Object.keys(grouped).sort((a,b)=>Number(a)-Number(b));
+  const statusRank={expired:0,soon:1,ok:2,none:3};
+  const groupedHtml=sortedCats.map(cat=>{
+    const catItems=grouped[cat].sort((a,b)=>{
+      const r=statusRank[pantryStatus(a)]-statusRank[pantryStatus(b)];
+      if(r!==0)return r;
+      return (pantryDaysLeft(a)??9999)-(pantryDaysLeft(b)??9999);
+    });
+    return `<div style="margin-bottom:1rem">
+      <div style="font-size:.72rem;font-weight:700;color:var(--muted);font-family:var(--font);text-transform:uppercase;letter-spacing:1.5px;padding:.4rem 0 .3rem;border-bottom:1px solid var(--border);margin-bottom:.3rem">${SHOP_CATS[cat]}</div>
+      ${catItems.map(it=>{
+        const status=pantryStatus(it);
+        const col=pantryStatusColor(status);
+        return `<div class="si-row" style="cursor:pointer" onclick="openPantryForm('${it.id}')">
+          <div style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;margin-top:.5rem"></div>
+          <div style="flex:1;min-width:0">
+            <div class="stx">${esc(it.name)}${it.qty?` <span style="color:var(--muted);font-weight:400">· ${esc(String(it.qty))}${esc(it.unit||'')}</span>`:''}</div>
+            ${it.expiry?`<div style="font-size:.72rem;font-family:var(--ui);color:${col};font-weight:${status==='expired'||status==='soon'?'700':'400'}">${fmtExpiry(it)}</div>`:''}
+            ${it.note?`<div class="ssrc">${esc(it.note)}</div>`:''}
+          </div>
+          <button class="srm" onclick="event.stopPropagation();askDelPantry('${it.id}')" title="${t('btn_delete')}">✕</button>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+  app.innerHTML=`
+    <div class="shop-hdr">
+      <h2 style="font-size:1rem">${t('hdr_pantry')} <small style="color:var(--muted);font-family:var(--font);font-size:.78rem">${items.length} ${t('pantry_items')}${expiredCnt?` · <span style="color:var(--danger)">${expiredCnt} ${t('pantry_expired')}</span>`:''}${soonCnt?` · <span style="color:#e6a700">${soonCnt} ${t('pantry_soon')}</span>`:''}</small></h2>
+      <div style="display:flex;gap:.45rem;flex-wrap:wrap">
+        <button class="btn bg sm" id="pantryScanBtn">📷 ${t('pantry_scan')}</button>
+        <button class="btn bp sm" id="pantryAddBtn">+ ${t('pantry_add')}</button>
+      </div>
+    </div>
+    ${items.length===0?`<div class="empty"><div class="ei">📦</div><p>${t('pantry_empty')}</p></div>`:groupedHtml}`;
+  document.getElementById('pantryAddBtn').addEventListener('click',()=>openPantryForm(null));
+  document.getElementById('pantryScanBtn').addEventListener('click',openPantryScan);
+}
+
+function askDelPantry(id){
+  if(confirm(t('pantry_confirm_del')))removePantryItem(id);
+}
+
+// ── Manuelles Hinzufügen / Bearbeiten ──
+function openPantryForm(id){
+  const existing=id?S.pantry.find(x=>x.id===id):null;
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:200';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem;width:100%;max-width:500px;max-height:85dvh;overflow-y:auto;font-family:var(--font)';
+  md.innerHTML=`
+    <div style="font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:.9rem">${existing?t('pantry_edit_title'):t('pantry_add_title')}</div>
+    <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_name')}</label>
+    <input class="fi" id="pfName" style="width:100%;margin-bottom:.7rem" value="${esc(existing?.name||'')}" placeholder="${t('pantry_name_ph')}">
+    <label class="sl" style="display:block;margin-bottom:.3rem">${t('form_category')}</label>
+    <select class="fi" id="pfCat" style="width:100%;margin-bottom:.7rem">
+      ${SHOP_CATS.map((c,i)=>`<option value="${i}" ${((existing?.category??15)===i)?'selected':''}>${c}</option>`).join('')}
+    </select>
+    <div style="display:flex;gap:.6rem;margin-bottom:.7rem">
+      <div style="flex:1">
+        <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_qty')}</label>
+        <input class="fi" id="pfQty" type="text" inputmode="decimal" style="width:100%" value="${esc(existing?.qty??'')}">
+      </div>
+      <div style="flex:1">
+        <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_unit')}</label>
+        <select class="fi" id="pfUnit" style="width:100%">
+          <option value="">–</option>
+          ${PANTRY_UNITS.map(u=>`<option value="${u}" ${existing?.unit===u?'selected':''}>${u}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_expiry')}</label>
+    <input class="fi" id="pfExpiry" type="date" style="width:100%;margin-bottom:.7rem" value="${esc(existing?.expiry||'')}">
+    <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_note')}</label>
+    <input class="fi" id="pfNote" style="width:100%;margin-bottom:1rem" value="${esc(existing?.note||'')}" placeholder="${t('pantry_note_ph')}">
+    <div style="display:flex;gap:.6rem">
+      <button class="btn bp" id="pfSave" style="flex:1">${t('btn_save')}</button>
+      <button class="btn bg" id="pfCancel" style="flex:1">${t('btn_cancel')}</button>
+    </div>`;
+  ov.appendChild(md);document.body.appendChild(ov);
+  document.getElementById('pfName').focus();
+  const close=()=>document.body.removeChild(ov);
+  document.getElementById('pfCancel').addEventListener('click',close);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.getElementById('pfSave').addEventListener('click',()=>{
+    const name=document.getElementById('pfName').value.trim();
+    if(!name)return;
+    const patch={
+      name,
+      category:Number(document.getElementById('pfCat').value),
+      qty:document.getElementById('pfQty').value.trim(),
+      unit:document.getElementById('pfUnit').value,
+      expiry:document.getElementById('pfExpiry').value,
+      note:document.getElementById('pfNote').value.trim(),
+    };
+    if(existing)updatePantryItem(existing.id,patch);else addPantryItem(patch);
+    close();renderApp();
+  });
+}
+
+// ── Smart-Scan: Foto vom Einkauf oder Kassenbon → KI erkennt Produkte ──
+function openPantryScan(){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:200';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem;width:100%;max-width:560px;max-height:88dvh;overflow-y:auto;font-family:var(--font)';
+  md.innerHTML=`
+    <div style="font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:.5rem">${t('pantry_scan_title')}</div>
+    <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('pantry_scan_hint')}</p>
+    <div class="idrp" id="pantryScanDrop">
+      <input type="file" id="pantryScanFile" accept="image/*" multiple style="display:none">
+      <div id="pantryScanLbl">📷<br>${t('pantry_scan_choose')}</div>
+    </div>
+    <div id="pantryScanPreview" style="display:none;margin-top:.7rem;gap:.5rem;flex-wrap:wrap"></div>
+    <div id="pantryScanRes"></div>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:.8rem">
+      <button class="btn bg" id="pantryScanClose">${t('btn_close')}</button>
+      <button class="btn bp" id="pantryScanAnalyze" style="display:none">✨ ${t('pantry_scan_analyze')}</button>
+    </div>`;
+  ov.appendChild(md);document.body.appendChild(ov);
+  const close=()=>document.body.removeChild(ov);
+  document.getElementById('pantryScanClose').addEventListener('click',close);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.getElementById('pantryScanDrop').addEventListener('click',()=>document.getElementById('pantryScanFile').click());
+  document.getElementById('pantryScanFile').addEventListener('change',async e=>{
+    const files=[...e.target.files];if(!files.length)return;
+    const pw=document.getElementById('pantryScanPreview');pw.style.display='flex';pw.innerHTML='';
+    const images=[];
+    for(const f of files){const d=await compressImg(f,1200,.85);if(d){images.push({data:d,mime:f.type||'image/jpeg'});const img=document.createElement('img');img.src=d;img.style.cssText='height:70px;border-radius:6px;object-fit:cover;flex:1;min-width:50px;max-width:100px';pw.appendChild(img);}}
+    document.getElementById('pantryScanLbl').innerHTML='✓ '+files.length+' '+(files.length!==1?t('pantry_scan_images_pl'):t('pantry_scan_images_sg'));
+    const btn=document.getElementById('pantryScanAnalyze');btn.style.display='inline-flex';btn._images=images;
+    document.getElementById('pantryScanRes').innerHTML='';
+  });
+  document.getElementById('pantryScanAnalyze').addEventListener('click',async function(){
+    const images=this._images;if(!images?.length)return;
+    document.getElementById('pantryScanRes').innerHTML=`<div class="iload"><span class="sp">🤖</span>${t('pantry_scan_analyzing')}</div>`;
+    this.style.display='none';
+    try{
+      const contentParts=images.map(img=>({image:{data:img.data,mime:img.mime}}));
+      contentParts.push({text:'Analysiere dieses Bild (Einkauf oder Kassenbon) und extrahiere alle Produkte.'});
+      const products=await pantryScanAI(contentParts);
+      showPantryScanResults(products,close);
+    }catch(e){
+      document.getElementById('pantryScanRes').innerHTML=`<div class="ierr">⚠️ ${esc(e.message)}</div>`;
+    }
+  });
+}
+
+async function pantryScanAI(contentParts){
+  const result=await window.geminiJSON({
+    feature:'pantry_scan',
+    system:`Du analysierst ein Foto von Lebensmitteln/Einkauf oder einen Kassenbon und extrahierst alle Produkte.
+Antworte NUR mit einem JSON-Array. Jedes Element: {"name":"string (Produktname, kurz, ohne Marke wenn generisch)","qty":"Zahl als String, z.B. 1 oder 500","unit":"Stück|g|kg|ml|l|Packung|Dose|Glas|Bund oder leer","expiry":"YYYY-MM-DD falls auf dem Bild ein MHD/Verfallsdatum erkennbar ist, sonst leerer String"}.
+Bei einem Kassenbon steht meist kein MHD drauf – dann "expiry":"" lassen. Ignoriere Preise, Rabatte, Summenzeilen. Fasse Mengenangaben so gut wie möglich zusammen.`,
+    contentParts,
+    temperature:0.3
+  });
+  return Array.isArray(result)?result:(result.items||result.products||[]);
+}
+
+function showPantryScanResults(products,closeModal){
+  const res=document.getElementById('pantryScanRes');
+  if(!products||!products.length){res.innerHTML=`<div class="ierr">⚠️ ${t('pantry_scan_none')}</div>`;return;}
+  const rows=products.map((p,i)=>{
+    const guessCat=getShopCat(p.name||'');
+    return {...p,category:guessCat,_i:i};
+  });
+  res.innerHTML=`<div style="margin-top:.8rem;font-size:.85rem;font-weight:700;color:var(--text)">${t('pantry_scan_found').replace('{n}',rows.length)}</div>
+    <div id="pantryScanRows" style="display:flex;flex-direction:column;gap:.5rem;margin-top:.6rem"></div>
+    <button class="btn bp" id="pantryScanConfirm" style="width:100%;margin-top:.9rem">+ ${t('pantry_scan_add_all')}</button>`;
+  const rowsEl=document.getElementById('pantryScanRows');
+  rowsEl.innerHTML=rows.map((p,i)=>`
+    <div style="background:var(--surface2);border-radius:10px;padding:.6rem .7rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap" data-psrow="${i}">
+      <input class="fi" style="flex:2;min-width:110px;padding:.35rem .5rem;font-size:.85rem" value="${esc(p.name||'')}" data-psfield="name">
+      <input class="fi" style="width:60px;padding:.35rem .5rem;font-size:.85rem" value="${esc(p.qty??'')}" data-psfield="qty" placeholder="${t('pantry_qty')}">
+      <select class="fi" style="width:90px;padding:.35rem .5rem;font-size:.85rem" data-psfield="unit">
+        <option value="">–</option>
+        ${PANTRY_UNITS.map(u=>`<option value="${u}" ${p.unit===u?'selected':''}>${u}</option>`).join('')}
+      </select>
+      <input class="fi" type="date" style="width:135px;padding:.35rem .5rem;font-size:.85rem" value="${esc(p.expiry||'')}" data-psfield="expiry">
+      <button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.9rem" data-psremove="${i}">✕</button>
+    </div>`).join('');
+  rowsEl.querySelectorAll('[data-psremove]').forEach(btn=>btn.addEventListener('click',()=>{
+    btn.closest('[data-psrow]').remove();
+  }));
+  document.getElementById('pantryScanConfirm').addEventListener('click',()=>{
+    rowsEl.querySelectorAll('[data-psrow]').forEach(rowEl=>{
+      const i=Number(rowEl.dataset.psrow);
+      const name=rowEl.querySelector('[data-psfield="name"]').value.trim();
+      if(!name)return;
+      const qty=rowEl.querySelector('[data-psfield="qty"]').value.trim();
+      const unit=rowEl.querySelector('[data-psfield="unit"]').value;
+      const expiry=rowEl.querySelector('[data-psfield="expiry"]').value;
+      addPantryItem({name,qty,unit,expiry,category:rows[i].category});
+    });
+    toast(t('toast_saved'));
+    closeModal();renderApp();
+  });
 }
 
 // SETTINGS
@@ -3211,8 +3656,8 @@ function renderSettings(app){
         <span class="acc-arr${S.tagAccOpen?' open':''}" id="tagAccArr">▶</span>
       </div>
       <div class="acc-body${S.tagAccOpen?' open':''}" id="tagAccBody">
-        <div style="font-size:.75rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">Tippe einen Tag um ihn umzubenennen. ✕ zum Löschen.</div>
-        ${allTags().length===0?'<div style="color:var(--muted);font-family:var(--ui);font-size:.85rem">Noch keine Tags vorhanden.</div>':''}
+        <div style="font-size:.75rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('set_tags_hint')}</div>
+        ${allTags().length===0?`<div style="color:var(--muted);font-family:var(--ui);font-size:.85rem">${t('set_no_tags')}</div>`:''}
         ${tagListHtml}
         <button class="btn bp sm" style="margin-top:.7rem;width:100%" id="tagSaveAllBtn">${t('btn_save_tags')}</button>
       </div>
@@ -3223,7 +3668,7 @@ function renderSettings(app){
         <span class="acc-arr${S.catAccOpen?' open':''}" id="catAccArr">▶</span>
       </div>
       <div class="acc-body${S.catAccOpen?' open':''}" id="catAccBody">
-        <div style="font-size:.75rem;color:var(--muted);font-family:var(--ui);margin-bottom:.6rem">Ziehen zum Sortieren · Farbe tippen · ✕ zum Löschen</div>
+        <div style="font-size:.75rem;color:var(--muted);font-family:var(--ui);margin-bottom:.6rem">${t('set_cats_hint')}</div>
         <div id="catList">
           ${getCats().map((c,i)=>{const cnt=S.recipes.filter(r=>r.category===c).length;return`
             <div class="sr2" style="gap:.5rem;align-items:center" data-origcat="${esc(c)}" data-catidx="${i}">
@@ -3506,7 +3951,7 @@ function renderSettings(app){
 
   document.getElementById('aiStatsBtn')?.addEventListener('click', async()=>{
     const box=document.getElementById('aiStatsBox');
-    box.innerHTML=`<div style="font-family:var(--ui);font-size:.78rem;color:var(--muted)">⏳ Lädt…</div>`;
+    box.innerHTML=`<div style="font-family:var(--ui);font-size:.78rem;color:var(--muted)">${t('loading_generic')}</div>`;
     try{
       const stats=await window.geminiUsageStats();
       const featureNames={chat_rezept:'Rezept-Chat',naehrwerte:'Nährwerte',kochsession:'Kochsession',foto_import:'Foto-Import',link_import:'Link-Import',pdf_import:'PDF-Import',websuche:'Websuche',rezept_generieren:'Rezept generieren',chat_suche:'Suche-Rückfragen',import:'Import'};
@@ -3879,7 +4324,7 @@ function exportRecipePDF(id){
       stepsHtml+=`<div class="step"><span class="num">${stepNum++}</span><span class="step-text">${clean}${timeTag}</span></div>`;
     }
   });
-  const html=`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
+  const html=`<!DOCTYPE html><html lang="${S.lang==='en'?'en':'de'}"><head><meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${r.title}</title>
   <style>
@@ -3907,27 +4352,27 @@ function exportRecipePDF(id){
   </style></head><body>
   <div class="pbar">
     <span style="color:#cdd6f4;font-family:system-ui;font-size:.82rem;flex:1">📄 ${r.title}</span>
-    <button class="pbtn" onclick="window.print()">🖨 Als PDF speichern</button>
+    <button class="pbtn" onclick="window.print()">${t('pdf_save')}</button>
   </div>
   <div class="content">
   ${r.photo?`<img class="photo" src="${r.photo}">`:''}
   <div class="header">
     <div class="badge">${r.category}</div>
     <h1>${r.title}</h1>
-    <div class="meta">👥 ${r.servings} Portionen &nbsp;·&nbsp; ⏱ ${mins(r)} &nbsp;${r.tags?.length?'·&nbsp; 🏷 '+r.tags.join(', '):''}</div>
+    <div class="meta">👥 ${r.servings} ${t('det_portions_pl')} &nbsp;·&nbsp; ⏱ ${mins(r)} &nbsp;${r.tags?.length?'·&nbsp; 🏷 '+r.tags.join(', '):''}</div>
   </div>
   ${ingLines?`<h2>${t('det_ingredients')}</h2><ul>${ingLines}</ul>`:''}
   ${stepsHtml?`<h2>${t('det_steps')}</h2>${stepsHtml}`:''}
-  ${r.notes?`<h2>Notizen</h2><div class="notes">${r.notes.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`:''}
+  ${r.notes?`<h2>${t('det_notes').replace('📝 ','')}</h2><div class="notes">${r.notes.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`:''}
   ${r.nutrition&&Object.values(r.nutrition).some(v=>v)?`
-  <h2>Nährwerte pro Portion</h2>
+  <h2>${t("det_nutrition")}</h2>
   <div style="display:flex;gap:1.2rem;flex-wrap:wrap;background:#faf7f2;border-radius:8px;padding:.8rem 1rem;border:1px solid #e0cdb4">
     ${r.nutrition.kcal?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.kcal}</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">kcal</div></div>`:''}
     ${r.nutrition.protein?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.protein}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">${t('nut_protein')}</div></div>`:''}
-    ${r.nutrition.carbs?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.carbs}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">Kohlenhydrate</div></div>`:''}
-    ${r.nutrition.fat?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.fat}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">Fett</div></div>`:''}
+    ${r.nutrition.carbs?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.carbs}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">${t('nut_carbs')}</div></div>`:''}
+    ${r.nutrition.fat?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.fat}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">${t('nut_fat')}</div></div>`:''}
     ${r.nutrition.fiber?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.fiber}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">${t('nut_fiber')}</div></div>`:''}
-    ${r.nutrition.salt?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.salt}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">Salz</div></div>`:''}
+    ${r.nutrition.salt?`<div style="text-align:center"><div style="font-size:1.1rem;font-weight:bold;color:${catColor}">${r.nutrition.salt}g</div><div style="font-size:.7rem;color:#7c6a56;font-family:system-ui;text-transform:uppercase">${t('nut_salt')}</div></div>`:''}
   </div>`:''}
   </div>
   </body></html>`;
@@ -3940,7 +4385,7 @@ function exportRecipePDF(id){
   bar.innerHTML=`
     <button id="pdfClose" style="background:none;border:none;color:#cdd6f4;font-size:1.1rem;cursor:pointer;padding:.2rem .4rem">✕</button>
     <span style="color:#cdd6f4;font-family:system-ui;font-size:.85rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📄 ${esc(r.title)}</span>
-    <button id="pdfPrintBtn" style="background:#89b4fa;color:#1e1e2e;border:none;border-radius:8px;padding:.45rem .9rem;font-family:system-ui;font-size:.82rem;font-weight:700;cursor:pointer;flex-shrink:0">🖨 Drucken</button>
+    <button id="pdfPrintBtn" style="background:#89b4fa;color:#1e1e2e;border:none;border-radius:8px;padding:.45rem .9rem;font-family:system-ui;font-size:.82rem;font-weight:700;cursor:pointer;flex-shrink:0">${t('pdf_print')}</button>
     <button id="pdfDlBtn" style="background:#a6e3a1;color:#1e1e2e;border:none;border-radius:8px;padding:.45rem .9rem;font-family:system-ui;font-size:.82rem;font-weight:700;cursor:pointer;flex-shrink:0">⬇ HTML</button>`;
   const iframe=document.createElement('iframe');
   iframe.style.cssText='flex:1;border:none;width:100%';
@@ -3953,7 +4398,7 @@ function exportRecipePDF(id){
   bar.querySelector('#pdfClose').onclick=()=>document.body.removeChild(ov);
   bar.querySelector('#pdfPrintBtn').onclick=()=>{
     try{iframe.contentWindow.print();}
-    catch(e){toast(S.lang==='en'?'Use ⬇ HTML → open in Chrome → Print':'⬇ HTML → in Chrome öffnen → Drucken');}
+    catch(e){toast(t('pdf_html_hint'));}
   };
   bar.querySelector('#pdfDlBtn').onclick=()=>{
     const b=new Blob([html],{type:'text/html'});
@@ -4095,7 +4540,7 @@ function showShopCatImportModal(conflicts,newItems,same,existing,incoming){
       </div>
       <div style="display:flex;flex-direction:column;gap:.5rem">
         <button id="cfKeep" style="padding:.65rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--text);font-family:var(--font);font-size:.88rem;cursor:pointer;text-align:left">⬅ Behalten: <strong>${oldName}</strong></button>
-        <button id="cfOver" style="padding:.65rem;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:.88rem;cursor:pointer;text-align:left">➡ Überschreiben: <strong>${newName}</strong></button>
+        <button id="cfOver" style="padding:.65rem;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:.88rem;cursor:pointer;text-align:left">${t('overwrite_btn')}<strong>${newName}</strong></button>
         <div style="display:flex;gap:.4rem;margin-top:.2rem">
           <button id="cfKeepAll" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--border2);background:none;color:var(--muted);font-family:var(--font);font-size:.78rem;cursor:pointer">${S.lang==='en'?'Keep all':'Alle behalten'}</button>
           <button id="cfOverAll" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--accent);background:none;color:var(--accent);font-family:var(--font);font-size:.78rem;cursor:pointer">${S.lang==='en'?'Override all':'Alle überschreiben'}</button>
@@ -4155,7 +4600,7 @@ function showShopCatManager(){
     }).join('');
     md.innerHTML=`
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
-        <div style="font-size:1rem;font-weight:700;color:var(--text)">🏷 Kategorie-Zuweisungen</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text)">${t('cat_assignments_title')}</div>
         <button id="scmClose" style="background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer">✕</button>
       </div>
       <div style="font-size:.73rem;color:var(--muted);margin-bottom:.7rem;font-family:var(--ui)">${Object.keys(all).length} gesamt · <span style="color:var(--accent)">${manualCount} manuell ✎</span> · ${Object.keys(all).length-manualCount} automatisch</div>
@@ -4187,7 +4632,7 @@ function showShopCatPickerForText(text,current,onSave){
   ov2.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:400';
   const md2=document.createElement('div');
   md2.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem;width:100%;max-width:500px;max-height:80dvh;overflow-y:auto;font-family:var(--font)';
-  md2.innerHTML='<div style="font-size:.85rem;font-weight:700;color:var(--text);margin-bottom:.8rem">Kategorie für \u201e'+text+'\u201c</div>'
+  md2.innerHTML='<div style="font-size:.85rem;font-weight:700;color:var(--text);margin-bottom:.8rem">'+esc(t('shopcat_for').replace('{name}',text))+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:.35rem">'
     +SHOP_CATS.map((c,i)=>'<button data-ci="'+i+'" style="background:'+(current===i?'var(--accent)':'var(--surface2)')
       +';color:'+(current===i?'#fff':'var(--text)')
@@ -4593,26 +5038,26 @@ function renderSessionSetup(app, session, recipes){
           </div>
           <div style="flex:1;min-width:0">
             <div style="font-size:.88rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.title)}</div>
-            <div style="font-size:.7rem;color:var(--muted)">⏱ ${(parseInt(r.prepTime)||0)+(parseInt(r.cookTime)||0)} Min. · ${(r.steps||'').split('\n').filter(l=>l.trim()&&!l.match(/^\*\*/)).length} Schritte</div>
+            <div style="font-size:.7rem;color:var(--muted)">⏱ ${(parseInt(r.prepTime)||0)+(parseInt(r.cookTime)||0)} ${t('det_min')} · ${(r.steps||'').split('\n').filter(l=>l.trim()&&!l.match(/^\*\*/)).length} ${t('session_steps')}</div>
           </div>
         </div>`).join('')}
     </div>
 
     <!-- Mode selection -->
-    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:.7rem">Planungsmodus wählen</div>
+    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:.7rem">${t('session_mode_title')}</div>
     <div style="display:flex;flex-direction:column;gap:.7rem;margin-bottom:1.4rem">
       <div id="modeManual" onclick="setSessionMode('${session.id}','manual')" style="border-radius:12px;border:2px solid ${session.mode==='manual'?'var(--accent)':'var(--border)'};padding:.9rem 1rem;cursor:pointer;background:${session.mode==='manual'?'var(--accent-bg)':'var(--surface)'}">
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.25rem">🖐 Manuell</div>
-        <div style="font-size:.78rem;color:var(--muted)">Alle Schritte werden aufgelistet, du ziehst sie in deine gewünschte Reihenfolge.</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.25rem">${t('session_mode_manual')}</div>
+        <div style="font-size:.78rem;color:var(--muted)">${t('session_mode_manual_hint')}</div>
       </div>
       <div id="modeAI" onclick="setSessionMode('${session.id}','ai')" style="border-radius:12px;border:2px solid ${session.mode==='ai'?'var(--accent)':'var(--border)'};padding:.9rem 1rem;cursor:pointer;background:${session.mode==='ai'?'var(--accent-bg)':'var(--surface)'}">
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.25rem">✨ KI-optimiert</div>
-        <div style="font-size:.78rem;color:var(--muted)">Die KI analysiert aktive vs. passive Zeiten und erstellt einen optimierten Ablaufplan. Du kannst danach noch anpassen.</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.25rem">${t('session_mode_ai')}</div>
+        <div style="font-size:.78rem;color:var(--muted)">${t('session_mode_ai_hint')}</div>
       </div>
     </div>
 
     <button onclick="startSession('${session.id}')" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:.8rem;font-family:var(--font);font-size:.95rem;font-weight:700;cursor:pointer">
-      ${session.mode==='ai'?'✨ KI-Plan erstellen':'🖐 Manuell planen'}
+      ${session.mode==='ai'?t('session_start_ai'):t('session_start_manual')}
     </button>
 
     <!-- Existing sessions -->
@@ -4951,9 +5396,9 @@ function renderSessionTimeline(app, session, recipes){
     </div>
 
     <div style="display:flex;gap:.5rem;margin-top:1.2rem;flex-wrap:wrap">
-      ${session.mode==='manual'?`<button onclick="resetSessionTimeline('${session.id}')" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer">↺ Zurücksetzen</button>`:''}
-      ${session.aiDone?`<button onclick="rebuildAI('${session.id}')" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer">✨ Neu planen</button>`:''}
-      <button onclick="deleteSession('${session.id}')" style="flex:1;background:rgba(239,68,68,.15);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--danger);cursor:pointer">🗑 Session löschen</button>
+      ${session.mode==='manual'?`<button onclick="resetSessionTimeline('${session.id}')" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer">${t('session_reset')}</button>`:''}
+      ${session.aiDone?`<button onclick="rebuildAI('${session.id}')" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer">${t('session_replan')}</button>`:''}
+      <button onclick="deleteSession('${session.id}')" style="flex:1;background:rgba(239,68,68,.15);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--danger);cursor:pointer">${t('session_delete')}</button>
     </div>
   </div>`;
 
@@ -5407,22 +5852,22 @@ function renderAISearch(app){
     <div style="max-width:680px;margin:0 auto">
       <div style="background:var(--surface);border-radius:14px;border:1px solid var(--border);padding:1.4rem;box-shadow:0 4px 16px rgba(0,0,0,.07);margin-bottom:1rem">
         <div style="font-size:.78rem;color:var(--muted);font-family:var(--ui);margin-bottom:.6rem;text-transform:uppercase;letter-spacing:1px;font-weight:700">${t('ai_placeholder')}</div>
-        <textarea id="aiSearchInput" class="ft" rows="2" placeholder="z.B. „Etwas mit Halloumi, vegetarisch, unter 30 Min." oder „Was kann ich mit Hackfleisch und Kartoffeln machen?"" style="margin-bottom:.7rem">${esc(S.aiSearchQuery||'')}</textarea>
+        <textarea id="aiSearchInput" class="ft" rows="2" placeholder="${t('ai_ph_text')}" style="margin-bottom:.7rem">${esc(S.aiSearchQuery||'')}</textarea>
         <!-- Photo option -->
         <div style="border:1px dashed var(--border2);border-radius:8px;padding:.7rem;margin-bottom:.7rem;background:var(--bg)">
-          <div style="font-family:var(--ui);font-size:.75rem;color:var(--muted);margin-bottom:.4rem">📷 Oder: Zutaten fotografieren</div>
+          <div style="font-family:var(--ui);font-size:.75rem;color:var(--muted);margin-bottom:.4rem">${t('ai_photo_hint')}</div>
           <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
-            <button class="btn bg sm" id="aiPhotoBtn">📷 Foto(s) auswählen</button>
+            <button class="btn bg sm" id="aiPhotoBtn">${t('ai_photo_choose')}</button>
             <input type="file" id="aiPhotoFile" accept="image/*" multiple style="display:none">
-            <span id="aiPhotoLabel" style="font-family:var(--ui);font-size:.78rem;color:var(--muted)">Kein Foto ausgewählt</span>
+            <span id="aiPhotoLabel" style="font-family:var(--ui);font-size:.78rem;color:var(--muted)">${t('ai_photo_none')}</span>
           </div>
           <div id="aiPhotoPreview" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem"></div>
         </div>
         <div style="display:flex;gap:.6rem;flex-wrap:wrap">
-          <button class="btn bp" id="aiSearchBtn" style="flex:1">🔍 Im Internet suchen</button>
-          <button class="btn bg" id="aiGenBtn" style="flex:1">✨ Rezept generieren</button>
+          <button class="btn bp" id="aiSearchBtn" style="flex:1">${t('ai_web_search')}</button>
+          <button class="btn bg" id="aiGenBtn" style="flex:1">${t('ai_generate')}</button>
         </div>
-        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-top:.5rem;font-style:italic">„Suchen" findet echte Rezepte · „Generieren" erfindet ein neues · Fotos werden von der KI analysiert</div>
+        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-top:.5rem;font-style:italic">${t('ai_footer_hint')}</div>
       </div>
       <div id="aiSearchRes"></div>
     </div>`;
@@ -5434,7 +5879,7 @@ function renderAISearch(app){
     const files=[...e.target.files];if(!files.length)return;
     aiSearchImages=[];const preview=document.getElementById('aiPhotoPreview');preview.innerHTML='';
     for(const f of files){const d=await compressImg(f,900,.8);if(d){aiSearchImages.push({data:d,mime:f.type||'image/jpeg'});const img=document.createElement('img');img.src=d;img.style.cssText='height:60px;border-radius:5px;object-fit:cover';preview.appendChild(img);}}
-    document.getElementById('aiPhotoLabel').textContent='✓ '+files.length+' Bild'+(files.length!==1?'er':'')+' ausgewählt';
+    document.getElementById('aiPhotoLabel').textContent='✓ '+files.length+' '+(files.length!==1?t('pantry_scan_images_pl'):t('pantry_scan_images_sg'));
   });
 
   document.getElementById('aiSearchBtn').addEventListener('click',()=>runAISearch(true,aiSearchImages));
@@ -5447,7 +5892,7 @@ async function runAISearch(useWeb,images=[]){
   if(!query&&!images.length)return;
   S.aiSearchQuery=query;
   const res=document.getElementById('aiSearchRes');
-  res.innerHTML=`<div class="iload" style="padding:2rem"><span class="sp">✨</span>${useWeb?'Suche im Internet…':'Rezept wird generiert…'}</div>`;
+  res.innerHTML=`<div class="iload" style="padding:2rem"><span class="sp">✨</span>${useWeb?t('ai_searching_web'):t('ai_generating')}</div>`;
   try{
     let result;
     const hasPhotos=images&&images.length>0;
@@ -5477,7 +5922,7 @@ async function runAISearch(useWeb,images=[]){
 function renderAIResults(explanation,recipes){
   const res=document.getElementById('aiSearchRes');
   if(!res)return;
-  if(!recipes.length){res.innerHTML=`<div class="empty"><div class="ei">🤔</div><p>Keine Rezepte gefunden. Versuch eine andere Beschreibung.</p></div>`;return;}
+  if(!recipes.length){res.innerHTML=`<div class="empty"><div class="ei">🤔</div><p>${t('ai_none_found')}</p></div>`;return;}
   const alreadySaved=new Set(S.recipes.map(r=>r.title.toLowerCase()));
   res.innerHTML=`
     ${explanation?`<div style="font-family:var(--ui);font-size:.88rem;color:var(--muted);margin-bottom:.8rem;padding:.7rem;background:var(--surface2);border-radius:8px;line-height:1.6">${esc(explanation)}</div>`:''}
@@ -5491,7 +5936,7 @@ function renderAIResults(explanation,recipes){
               <div style="color:var(--hm);font-size:.75rem;font-family:var(--ui);margin-top:.15rem">👥 ${r.servings||4} Port. · ⏱ ${(+r.prepTime||0)+(+r.cookTime||0)||'?'} Min.</div>
             </div>
             ${alreadySaved.has((r.title||'').toLowerCase())
-              ?`<span style="font-family:var(--ui);font-size:.75rem;color:var(--ok)">✓ Bereits gespeichert</span>`
+              ?`<span style="font-family:var(--ui);font-size:.75rem;color:var(--ok)">${t('ai_already_saved')}</span>`
               :`<button class="btn bp sm" data-ridx="${i}">+ ${t('btn_save')}</button>`}
           </div>
           <div style="padding:.9rem 1.2rem">
@@ -5506,17 +5951,17 @@ function renderAIResults(explanation,recipes){
       const r=recipes[Number(btn.dataset.ridx)];
       S.recipes.push({...r,id:uid(),createdAt:Date.now(),favorite:false,photo:null,tags:r.tags||[]});
       saveR();
-      btn.textContent='✓ Gespeichert';btn.disabled=true;btn.style.background='var(--ok)';
+      btn.textContent=t('ai_saved');btn.disabled=true;btn.style.background='var(--ok)';
     });
   });
   // Chat for AI results
   if(!S.aiSearchChat)S.aiSearchChat=[];
   res.insertAdjacentHTML('beforeend',`
     <div class="chat-wrap" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-top:.8rem">
-      <div class="chat-title">💬 Rückfragen zu den Vorschlägen</div>
+      <div class="chat-title">${t('ai_followup_title')}</div>
       <div class="chat-msgs" id="aiChat"></div>
       <div class="chat-row">
-        <textarea class="chat-inp" id="aiChatInp" rows="1" placeholder="z.B. „Welches davon ist am schnellsten?" oder „Gibt es eine vegane Variante?""></textarea>
+        <textarea class="chat-inp" id="aiChatInp" rows="1" placeholder="${t('ai_followup_ph')}"></textarea>
         <button class="chat-send" id="aiChatSend">↑</button>
       </div>
     </div>`);
@@ -5560,59 +6005,59 @@ function renderImportPage(app){
       <div style="background:var(--surface);border-radius:14px;border:1px solid var(--border);overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.07)">
         <div class="itabs" style="margin:0;padding:0 1rem">
           <button class="itab on" data-tab="json">🗂 JSON</button>
-          <button class="itab" data-tab="photo">📸 Foto</button>
+          <button class="itab" data-tab="photo">${S.lang==='en'?'📸 Photo':'📸 Foto'}</button>
           <button class="itab" data-tab="url">🔗 Link</button>
           <button class="itab" data-tab="pdf">📄 PDF</button>
         </div>
         <div style="padding:1.2rem">
           <!-- Photo -->
           <div id="pnlPhoto" class="ipnl">
-            <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">Mehrere Fotos oder Screenshots auf einmal hochladen – z.B. Zutaten + Zubereitung auf verschiedenen Seiten.</p>
+            <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('imp_photo_hint')}</p>
             <div class="idrp" id="photoDrop2">
               <input type="file" id="photoFile2" accept="image/*" multiple style="display:none">
-              <div id="photoLbl2">📷<br>Ein oder mehrere Bilder auswählen</div>
+              <div id="photoLbl2">📷<br>${t('imp_photo_choose')}</div>
             </div>
             <div id="photoPreviewWrap2" style="display:none;margin-top:.7rem;display:flex;gap:.5rem;flex-wrap:wrap"></div>
             <div id="photoRes2"></div>
             <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:.8rem">
-              <button class="btn bp" id="photoAnalyze2" style="display:none">✨ KI analysieren</button>
-              <button class="btn bp" id="photoAdd2" style="display:none">+ Hinzufügen</button>
+              <button class="btn bp" id="photoAnalyze2" style="display:none">${t('imp_ai_analyze')}</button>
+              <button class="btn bp" id="photoAdd2" style="display:none">${t('imp_add')}</button>
             </div>
           </div>
           <!-- URL -->
           <div id="pnlUrl" class="ipnl">
-            <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">Link zu einer Rezeptseite (Chefkoch, Kitchen Stories…)</p>
+            <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('imp_url_hint')}</p>
             <input type="url" class="iurl" id="urlInput2" placeholder="https://www.chefkoch.de/rezepte/…">
-            <button class="btn bp" id="urlFetch2" style="width:100%">🔗 Rezept laden</button>
+            <button class="btn bp" id="urlFetch2" style="width:100%">${t('imp_url_load')}</button>
             <div id="urlRes2"></div>
             <div style="display:flex;justify-content:flex-end;margin-top:.8rem">
-              <button class="btn bp" id="urlAdd2" style="display:none">+ Hinzufügen</button>
+              <button class="btn bp" id="urlAdd2" style="display:none">${t('imp_add')}</button>
             </div>
           </div>
           <!-- PDF -->
           <div id="pnlPdf" class="ipnl">
-            <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">PDF-Rezept (gescannte Kochbuchseite oder exportierte Rezept-PDF)</p>
+            <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('imp_pdf_hint')}</p>
             <div class="idrp" id="pdfDrop2">
               <input type="file" id="pdfFile2" accept=".pdf,application/pdf" style="display:none">
-              <div id="pdfLbl2">📄<br>PDF-Datei auswählen</div>
+              <div id="pdfLbl2">📄<br>${t('imp_pdf_choose')}</div>
             </div>
             <div id="pdfRes2"></div>
             <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:.8rem">
-              <button class="btn bp" id="pdfAnalyze2" style="display:none">✨ KI analysieren</button>
-              <button class="btn bp" id="pdfAdd2" style="display:none">+ Hinzufügen</button>
+              <button class="btn bp" id="pdfAnalyze2" style="display:none">${t('imp_ai_analyze')}</button>
+              <button class="btn bp" id="pdfAdd2" style="display:none">${t('imp_add')}</button>
             </div>
           </div>
           <!-- JSON -->
           <div id="pnlJson" class="ipnl on">
-            <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">Mehrere JSON-Dateien oder ganzen Ordner auf einmal importieren.</p>
+            <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('imp_json_hint')}</p>
             <div style="display:flex;gap:.6rem;margin-bottom:.7rem;flex-wrap:wrap">
               <div class="idrp" style="flex:1;min-width:140px" id="jsonDrop2">
                 <input type="file" id="jsonFile2" accept=".json" multiple style="display:none">
-                📄 Dateien auswählen<br><small style="font-size:.72rem">(mehrere möglich)</small>
+                ${t('imp_json_choose')}<br><small style="font-size:.72rem">${t('imp_json_multi')}</small>
               </div>
               <div class="idrp" style="flex:1;min-width:140px" id="jsonFolderDrop2">
                 <input type="file" id="jsonFolderFile2" accept=".json" webkitdirectory style="display:none">
-                📁 Ordner auswählen
+                ${t('imp_json_folder')}
               </div>
             </div>
             <div id="jsonRes2" style="font-family:var(--ui);font-size:.82rem;color:var(--muted)"></div>
@@ -5631,10 +6076,10 @@ function renderImportPage(app){
   }));
 
   // Shared helpers for page import
-  const showL2=id=>document.getElementById(id).innerHTML=`<div class="iload"><span class="sp">🤖</span>KI analysiert…</div>`;
+  const showL2=id=>document.getElementById(id).innerHTML=`<div class="iload"><span class="sp">🤖</span>${t('pantry_scan_analyzing')}</div>`;
   const showE2=(id,msg)=>document.getElementById(id).innerHTML=`<div class="ierr">⚠️ ${esc(msg)}</div>`;
   let pg_pending=null;
-  function showP2(resId,addId,r){pg_pending=r;document.getElementById(resId).innerHTML=`<div class="iprev"><strong>${esc(r.title||'Rezept')}</strong><small>${esc(r.category)} · ${r.servings||'?'} Port.</small></div>`;document.getElementById(addId).style.display='inline-flex';}
+  function showP2(resId,addId,r){pg_pending=r;document.getElementById(resId).innerHTML=`<div class="iprev"><strong>${esc(r.title||(S.lang==='en'?'Recipe':'Rezept'))}</strong><small>${esc(r.category)} · ${r.servings||'?'} Port.</small></div>`;document.getElementById(addId).style.display='inline-flex';}
   function addImp2(r){addImport(r);S.view='list';render();}
 
   // Photo
@@ -5644,13 +6089,13 @@ function renderImportPage(app){
     const pw=document.getElementById('photoPreviewWrap2');pw.style.display='flex';pw.innerHTML='';
     const images=[];
     for(const f of files){const d=await compressImg(f,1200,.85);if(d){images.push({data:d,mime:f.type||'image/jpeg'});const img=document.createElement('img');img.src=d;img.style.cssText='height:70px;border-radius:6px;object-fit:cover;flex:1;min-width:50px;max-width:100px';pw.appendChild(img);}}
-    document.getElementById('photoLbl2').textContent='✓ '+files.length+' Bild'+(files.length!==1?'er':'')+' ausgewählt';
+    document.getElementById('photoLbl2').textContent='✓ '+files.length+' '+(files.length!==1?t('pantry_scan_images_pl'):t('pantry_scan_images_sg'));
     const btn=document.getElementById('photoAnalyze2');btn.style.display='inline-flex';btn._images=images;
     document.getElementById('photoAdd2').style.display='none';document.getElementById('photoRes2').innerHTML='';
   });
   document.getElementById('photoAnalyze2').addEventListener('click',async function(){
     const images=this._images;if(!images?.length)return;showL2('photoRes2');this.style.display='none';
-    try{const content=images.map(img=>({image:{data:img.data,mime:img.mime}}));content.push({text:`Diese ${images.length} Bilder zeigen zusammen ein Rezept. Extrahiere daraus ein vollständiges Rezept.`});const r=await callClaude(content,'foto_import');r?showP2('photoRes2','photoAdd2',r):showE2('photoRes2','Kein Rezept erkannt.');}catch(e){showE2('photoRes2',e.message);}
+    try{const content=images.map(img=>({image:{data:img.data,mime:img.mime}}));content.push({text:`Diese ${images.length} Bilder zeigen zusammen ein Rezept. Extrahiere daraus ein vollständiges Rezept.`});const r=await callClaude(content,'foto_import');r?showP2('photoRes2','photoAdd2',r):showE2('photoRes2',t('imp_none_found'));}catch(e){showE2('photoRes2',e.message);}
   });
   document.getElementById('photoAdd2').addEventListener('click',()=>{if(pg_pending)addImp2(pg_pending);});
 
@@ -5665,12 +6110,12 @@ function renderImportPage(app){
     ];
     try{
       let html='';for(const p of proxies){try{html=await p(url);if(html&&html.length>500)break;}catch{html='';}}
-      if(!html)throw new Error('Seite konnte nicht geladen werden.');
+      if(!html)throw new Error(t('imp_page_missing'));
       const div=document.createElement('div');div.innerHTML=html;
       div.querySelectorAll('script,style,nav,footer,header,aside').forEach(el=>el.remove());
       const text=(div.innerText||div.textContent||'').replace(/\s+/g,' ').slice(0,6000);
       const r=await callClaude([{text:'Extrahiere das Rezept:\n\n'+text}],'link_import');
-      r?showP2('urlRes2','urlAdd2',r):showE2('urlRes2','Kein Rezept gefunden.');
+      r?showP2('urlRes2','urlAdd2',r):showE2('urlRes2',t('imp_none_found_url'));
     }catch(e){showE2('urlRes2',e.message);}
   });
   document.getElementById('urlAdd2').addEventListener('click',()=>{if(pg_pending)addImp2(pg_pending);});
@@ -5685,7 +6130,7 @@ function renderImportPage(app){
     const f=this._file;if(!f)return;showL2('pdfRes2');this.style.display='none';
     try{const ab=await f.arrayBuffer();const bytes=new Uint8Array(ab);let bin='';const ch=8192;for(let i=0;i<bytes.length;i+=ch)bin+=String.fromCharCode(...bytes.subarray(i,Math.min(i+ch,bytes.length)));const b64=btoa(bin);
     const r=await callClaude([{pdf:{data:b64,mime:'application/pdf'}},{text:'Extrahiere das Rezept aus diesem PDF.'}],'pdf_import');
-    r?showP2('pdfRes2','pdfAdd2',r):showE2('pdfRes2','Kein Rezept erkannt.');}catch(e){showE2('pdfRes2',e.message);}
+    r?showP2('pdfRes2','pdfAdd2',r):showE2('pdfRes2',t('imp_none_found'));}catch(e){showE2('pdfRes2',e.message);}
   });
   document.getElementById('pdfAdd2').addEventListener('click',()=>{if(pg_pending)addImp2(pg_pending);});
 
@@ -5696,11 +6141,11 @@ function renderImportPage(app){
     const allRecipes=[];
 
     for(const f of files){
-      if(!f.name.endsWith('.json')){errs.push(f.name+': kein JSON');continue;}
+      if(!f.name.endsWith('.json')){errs.push(f.name+': '+t('imp_no_json'));continue;}
       try{
         const text=await f.text();
         let data;
-        try{data=JSON.parse(text);}catch(e){errs.push(f.name+': Ungültiges JSON – '+e.message);continue;}
+        try{data=JSON.parse(text);}catch(e){errs.push(f.name+': '+t('imp_invalid_json')+e.message);continue;}
         const rs=Array.isArray(data)?data:[data];
         rs.forEach(r=>{
           if(!r.title)return;
@@ -5731,10 +6176,10 @@ function renderImportPage(app){
     if(n>0)saveR();
     const res=document.getElementById('jsonRes2');
     if(res){
-      let msg=n>0?`✓ ${n} Rezept${n!==1?'e':''} importiert`:'';
-      if(skipped>0)msg+=(msg?' · ':'')+`${skipped} Duplikat${skipped!==1?'e':''} übersprungen`;
+      let msg=n>0?`✓ ${n} ${n!==1?t('recipe_count_plural'):t('recipe_count_single')} ${t('imp_imported')}`:'';
+      if(skipped>0)msg+=(msg?' · ':'')+`${skipped} ${t('imp_duplicates_skipped')}`;
       if(errs.length)msg+=(msg?'\n':'')+errs.join('\n');
-      if(!msg)msg='Keine Rezepte gefunden.';
+      if(!msg)msg=t('imp_none_found2');
       res.textContent=msg;
     }
     if(n>0)setTimeout(()=>{S.view='list';render();},1500);
@@ -5779,7 +6224,7 @@ function renderImportPage(app){
         <button id="cr-last" class="btn bg" style="width:100%;justify-content:center;color:var(--muted)">${S.lang==='en'?'Move to "Sonstiges"':'In „Sonstiges" verschieben'}</button>
       </div>
       <div id="cr-mapsel" style="display:none;margin-top:.9rem">
-        <div style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem">Kategorie auswählen:</div>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem">${t('choose_category')}</div>
         <div style="display:flex;flex-direction:column;gap:.35rem" id="cr-catlist"></div>
       </div>`;
     ov.appendChild(md);document.body.appendChild(ov);
@@ -5820,7 +6265,7 @@ function showTagInputModal(cb){
   const md=document.createElement('div');
   md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.4rem;width:100%;max-width:480px;font-family:var(--ui)';
   md.innerHTML=`
-    <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.7rem">Tag zu Auswahl hinzufügen</div>
+    <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.7rem">${t('tag_add_to_sel')}</div>
     <div style="display:flex;gap:.5rem;margin-bottom:.8rem">
       <input id="tagMdInp" class="fi" style="flex:1;padding:.48rem .7rem" placeholder="Tag eingeben…">
       <button id="tagMdAdd" class="btn bp">${t('sh_pick_confirm')}</button>
@@ -5864,12 +6309,12 @@ function showMealPlanModal(recipes,onDone){
   }).join('');
 
   md.innerHTML=`
-    <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.3rem">📅 Speiseplan</div>
+    <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.3rem">${t('plan_title')}</div>
     <div style="font-size:.82rem;color:var(--muted);margin-bottom:.9rem">${recipes.length} Rezept${recipes.length!==1?'e':''} wurden auf die Woche verteilt.</div>
     <div id="planContent">${planHtml()}</div>
     <div style="display:flex;gap:.6rem;margin-top:1rem;flex-wrap:wrap">
-      <button id="planCopy" class="btn bp" style="flex:1">📋 Als Text kopieren</button>
-      <button id="planShop" class="btn bg" style="flex:1">🛒 Alle Zutaten zur Liste</button>
+      <button id="planCopy" class="btn bp" style="flex:1">${t('plan_copy_text')}</button>
+      <button id="planShop" class="btn bg" style="flex:1">${t('plan_all_to_list')}</button>
     </div>
     <button style="width:100%;margin-top:.6rem;background:none;border:none;color:var(--muted);font-size:.85rem;cursor:pointer;padding:.4rem" id="planClose">${t('btn_close')}</button>`;
 
@@ -5918,7 +6363,7 @@ function showCatPicker(currentCat, onSelect){
 
   function renderPicker(){
     md.innerHTML=`
-      <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.8rem">Kategorie wählen</div>
+      <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:700;margin-bottom:.8rem">${t('choose_category2')}</div>
       <div style="display:flex;flex-direction:column;gap:.4rem;margin-bottom:.9rem" id="cpCatList">
         ${getCats().map(c=>`
           <button class="cp-cat" data-cat="${esc(c)}" style="background:${c===currentCat?getCatColor(c):'var(--surface2)'};color:${c===currentCat?'#fff':'var(--text)'};border:1px solid ${c===currentCat?getCatColor(c):'var(--border)'};border-radius:9px;padding:.55rem .9rem;text-align:left;cursor:pointer;font-family:var(--ui);font-size:.9rem;display:flex;align-items:center;gap:.7rem">
