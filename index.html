@@ -3583,8 +3583,17 @@ async function pantryScanAI(contentParts){
   const result=await window.geminiJSON({
     feature:'pantry_scan',
     system:`Du analysierst ein Foto von Lebensmitteln/Einkauf oder einen Kassenbon und extrahierst alle Produkte.
-Antworte NUR mit einem JSON-Array. Jedes Element: {"name":"string (Produktname, kurz, ohne Marke wenn generisch)","qty":"Zahl als String, z.B. 1 oder 500","unit":"Stück|g|kg|ml|l|Packung|Dose|Glas|Bund oder leer","expiry":"YYYY-MM-DD falls auf dem Bild ein MHD/Verfallsdatum erkennbar ist, sonst leerer String"}.
-Bei einem Kassenbon steht meist kein MHD drauf – dann "expiry":"" lassen. Ignoriere Preise, Rabatte, Summenzeilen. Fasse Mengenangaben so gut wie möglich zusammen.`,
+
+WICHTIGSTE REGEL: Erfasse NUR Produkte, die auf dem Bild eindeutig lesbar sind. Erfinde niemals zusätzliche Produkte. Wenn eine Zeile unleserlich oder unsicher ist, lasse sie lieber ganz weg statt zu raten.
+
+Bei einem Kassenbon (Spalten meist: Bezeichnung, Menge, MwSt., Einzelpreis, Summe):
+- "qty" ist IMMER die Zahl aus der Spalte "Menge" (Anzahl gekaufter Einheiten), niemals eine Zahl aus dem Produktnamen. Zahlen, die Teil der Produktbezeichnung sind (z.B. "4 Stück" bei Limetten, "2,5kg" bei Kartoffeln, "750g" beim Sandwich), beschreiben nur die Packungsgröße und gehören NICHT in "qty" – dort steht dann meist 1.
+- Jede Produktzeile des Bons ergibt genau einen Eintrag. Überspringe Preis-/MwSt-Spalten, Rabattzeilen, Pfand-Sammelzeilen (außer Pfand ist explizit gewünscht) und die Summenzeile.
+
+Produktname ("name"): kurz und generisch, OHNE Handelsmarken- oder Eigenmarken-Präfixe wie "REWE Beste Wahl", "REWE Bio", "ja!", "Bio" oder Herstellernamen (z.B. "Wilhelm Brandenburg"). Behalte nur die Kernbezeichnung plus relevante Sorte/Variante, z.B. "Erdnüsse" statt "REWE Beste Wahl Erdnüsse grosse Kerne", "Rindfleischsalami" statt "Wilhelm Brandenburg Rindfleischsalami", "Apfelsaft naturtrüb" statt "REWE Beste Wahl Apfelsaft naturtrüb".
+
+Antworte NUR mit einem JSON-Array. Jedes Element: {"name":"string","qty":"Zahl als String, z.B. 1 oder 500","unit":"Stück|g|kg|ml|l|Packung|Dose|Glas|Bund oder leer","expiry":"YYYY-MM-DD falls auf dem Bild ein MHD/Verfallsdatum erkennbar ist, sonst leerer String"}.
+Bei einem Kassenbon steht meist kein MHD drauf – dann "expiry":"" lassen.`,
     contentParts,
     temperature:0.3
   });
