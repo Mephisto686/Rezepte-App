@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "rezepte-multi-user"
-  }
+  },
+  "targets": {
+    "rezepte-multi-user": {
+      "hosting": {
+        "main": [
+          "rezepte-multi-user"
+        ],
+        "pretty": [
+          "my-recipes-and-more"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
