@@ -342,14 +342,18 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   <!-- ══════════════ FIREBASE AI LOGIC (Gemini) – ersetzt Anthropic API ══════════════ -->
   <!-- Setup-Doku: siehe FIREBASE_AI_SETUP.md -->
   <script type="module">
-    import { getApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
     import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js';
     import { getAI, getGenerativeModel, GoogleAIBackend, VertexAIBackend } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-ai.js';
 
     // TODO Andre (nur lokale Entwicklung, NIE in Produktion aktiv lassen / NIE committen):
     // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
 
-    const fbApp = getApp(); // greift dieselbe App ab, die oben per firebase.initializeApp() (compat) erstellt wurde
+    // Eigene, unabhängige App-Instanz für dieses Modul-Skript. Compat-Skripte (oben) und dieses
+    // ES-Modul laufen als getrennte SDK-Bundles und teilen sich NICHT automatisch dieselbe
+    // Firebase-App-Registrierung – deshalb hier initializeApp() erneut mit derselben Config,
+    // statt (fälschlich) getApp() zu erwarten, das nur innerhalb desselben Bundles funktioniert.
+    const fbApp = initializeApp(firebaseConfig);
 
     // TODO Andre: reCAPTCHA v3 Site-Key aus Firebase Console → App Check → Apps → Web-App eintragen
     const RECAPTCHA_SITE_KEY = '6LcfwFktAAAAAAxrEz2JLjBo_f4CUZV6O4Xa533';
@@ -1332,9 +1336,11 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.2.2';
+const APP_VERSION = '3.3.1';
 const APP_DATE = '2026-07-18';
 const VERSION_HISTORY = [
+  { version:'3.3.1', date:'2026-07-18', de:['Fix: KI-Funktionen warfen "No Firebase App has been created" – Compat- und Modul-Skript teilten sich fälschlich keine gemeinsame App-Registrierung, jetzt eigene initializeApp() im AI-Modul'], en:['Fix: AI features threw "No Firebase App has been created" – compat and module script did not actually share an app registry, now uses its own initializeApp() in the AI module'] },
+  { version:'3.3.0', date:'2026-07-18', de:['Neu: In-App-Kochtimer – Zeit-Badge bei Zubereitungsschritten antippen startet einen Timer','Timer läuft als schwebendes Widget weiter, übersteht App-Wechsel/Minimieren und sogar Neuladen der Seite','Bei Ablauf: Sound, Vibration, Systembenachrichtigung und In-App-Hinweis','Vorbereitet für native Android-Benachrichtigungen (Local Notifications), falls das Plugin später ergänzt wird'], en:['New: in-app cooking timer – tap a step\\'s time badge to start a timer','Timer keeps running as a floating widget, survives app switching/minimizing and even page reloads','On completion: sound, vibration, system notification and in-app alert','Prepared for native Android notifications (Local Notifications) if the plugin is added later'] },
   { version:'3.2.2', date:'2026-07-18', de:['Fix: KI-Funktionen liefen ins Leere, weil Firebase-SDK-Version (10.14.1) zu alt für AI Logic war','Alle Firebase-CDN-Referenzen (App, Auth, Firestore, Storage, AI Logic, App Check) auf aktuelle Version 12.16.0 angehoben'], en:['Fix: AI features silently failed because Firebase SDK version (10.14.1) was too old for AI Logic','All Firebase CDN references (App, Auth, Firestore, Storage, AI Logic, App Check) bumped to current version 12.16.0'] },
   { version:'3.2.1', date:'2026-07-17', de:['KI-Nutzungsstatistik: jeder KI-Aufruf wird pro Nutzer protokolliert','Neue Statistik-Ansicht in den Einstellungen (Gesamt, letzte 7/30 Tage, pro Nutzer, pro Funktion)','Fix: zweiten (bisher übersehenen) Import-Screen ebenfalls auf Gemini umgestellt'], en:['AI usage stats: every AI call is now logged per user','New stats view in settings (total, last 7/30 days, per user, per feature)','Fix: second (previously missed) import screen also switched to Gemini'] },
   { version:'3.2.0', date:'2026-07-17', de:['Großes Update: Anthropic Claude API durch Google Gemini via Firebase AI Logic ersetzt','Kein API-Key mehr nötig – KI-Funktionen laufen kostenlos direkt über das Firebase-Projekt','Websuche (Rezeptideen) nutzt jetzt Gemini-Grounding mit Google-Suche über Vertex AI','Foto-, Link- und PDF-Import sowie Nährwert-Schätzung und Kochsession-KI auf Gemini umgestellt'], en:['Major update: replaced Anthropic Claude API with Google Gemini via Firebase AI Logic','No API key needed anymore – AI features run free directly through the Firebase project','Web search (recipe ideas) now uses Gemini grounding with Google Search via Vertex AI','Photo, link and PDF import as well as nutrition estimate and cooking session AI switched to Gemini'] },
@@ -2326,7 +2332,7 @@ function stepRow(line,idx,done,ingMap){
     <span class="step-txt" style="font-size:.9rem;line-height:1.75;color:${done?'var(--muted)':'var(--text2)'};${done?'text-decoration:line-through;':''}transition:all .2s;flex:1">${displayText}</span>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;flex-shrink:0;margin-top:.2rem">
       <button class="step-toggle-btn" data-action="promote" data-line="${esc(line)}" title="${t('step_promote')}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;font-family:var(--ui);opacity:.5">${t('step_promote')}</button>
-      ${mins?`<span style="font-size:.65rem;font-weight:600;color:#fff;background:${done?'rgba(128,128,128,.15)':stepType==='passive'?'rgba(248,113,113,.18)':'rgba(74,222,128,.18)'};color:${done?'var(--faint)':typeColor};border-radius:5px;padding:.1rem .35rem;white-space:nowrap">${mins} Min.</span>`:''}
+      ${mins?`<button class="step-toggle-btn" data-action="timer" data-mins="${mins}" data-label="${esc(text.slice(0,60))}" title="Timer starten" style="font-size:.65rem;font-weight:600;color:#fff;background:${done?'rgba(128,128,128,.15)':stepType==='passive'?'rgba(248,113,113,.18)':'rgba(74,222,128,.18)'};color:${done?'var(--faint)':typeColor};border:none;border-radius:5px;padding:.1rem .35rem;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;gap:.2rem">⏱ ${mins} Min.</button>`:''}
     </div>
   </div>`;
 }
@@ -2583,6 +2589,10 @@ function renderDetail(app){
     if(toggleBtn){
       e.stopPropagation();
       const action=toggleBtn.dataset.action;
+      if(action==='timer'){
+        startTimer(parseInt(toggleBtn.dataset.mins), toggleBtn.dataset.label);
+        return;
+      }
       const line=toggleBtn.dataset.line;
       let lines=(r.steps||'').split('\n');
       if(action==='promote'){
@@ -5840,6 +5850,146 @@ function toast(msg,type='ok'){
   setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(-50%) translateY(10px)';setTimeout(()=>t.remove(),300);},2200);
 }
 
+// ══════════════ KOCH-TIMER ══════════════
+// Läuft solange die App/der Tab nicht komplett vom System beendet wird (nur minimiert/im Hintergrund reicht).
+// Für zuverlässige Alarme auch nach komplettem Schließen der Android-App: siehe native Local-Notifications-Hook unten.
+let _timerInterval=null;
+
+function saveTimerState(){
+  try{
+    if(S.timer)localStorage.setItem('mrtimer',JSON.stringify(S.timer));
+    else localStorage.removeItem('mrtimer');
+  }catch{}
+}
+
+function loadTimerState(){
+  try{const raw=localStorage.getItem('mrtimer');return raw?JSON.parse(raw):null;}catch{return null;}
+}
+
+function playTimerSound(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const beep=(delay,freq)=>{
+      const osc=ctx.createOscillator(), gain=ctx.createGain();
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.frequency.value=freq;osc.type='sine';
+      gain.gain.setValueAtTime(0,ctx.currentTime+delay);
+      gain.gain.linearRampToValueAtTime(.35,ctx.currentTime+delay+.02);
+      gain.gain.linearRampToValueAtTime(0,ctx.currentTime+delay+.35);
+      osc.start(ctx.currentTime+delay);osc.stop(ctx.currentTime+delay+.4);
+    };
+    beep(0,880);beep(.45,880);beep(.9,1100);
+  }catch{}
+  try{navigator.vibrate?.([300,150,300,150,500]);}catch{}
+}
+
+async function ensureNotifyPermission(){
+  if(!('Notification' in window))return false;
+  if(Notification.permission==='granted')return true;
+  if(Notification.permission==='denied')return false;
+  try{return (await Notification.requestPermission())==='granted';}catch{return false;}
+}
+
+// Native Hook: falls die Android-App später das @capacitor/local-notifications Plugin bekommt,
+// wird es hier automatisch genutzt (Feature-Detection, bricht sonst nichts).
+function scheduleNativeTimerNotification(id, endTime, label){
+  try{
+    const LN=window.Capacitor?.Plugins?.LocalNotifications;
+    if(!LN)return;
+    LN.schedule({notifications:[{
+      id, title:'⏱ Timer fertig!', body:label||'Dein Kochtimer ist abgelaufen.',
+      schedule:{at:new Date(endTime)}, sound:null
+    }]});
+  }catch{}
+}
+function cancelNativeTimerNotification(id){
+  try{window.Capacitor?.Plugins?.LocalNotifications?.cancel({notifications:[{id}]});}catch{}
+}
+
+function startTimer(mins,label){
+  if(!mins||mins<=0)return;
+  ensureNotifyPermission();
+  const endTime=Date.now()+mins*60000;
+  const id=Date.now()%1000000;
+  S.timer={id,endTime,durationMins:mins,label:label||'Timer'};
+  saveTimerState();
+  scheduleNativeTimerNotification(id,endTime,label);
+  toast('⏱ Timer gestartet: '+mins+' Min.');
+  runTimerLoop();
+}
+
+function cancelTimer(){
+  if(S.timer)cancelNativeTimerNotification(S.timer.id);
+  S.timer=null;
+  saveTimerState();
+  if(_timerInterval){clearInterval(_timerInterval);_timerInterval=null;}
+  document.getElementById('timerWidget')?.remove();
+}
+
+function timerFinished(){
+  playTimerSound();
+  if(Notification.permission==='granted'){
+    try{
+      const n=new Notification('⏱ Timer fertig!',{body:S.timer?.label||'Dein Kochtimer ist abgelaufen.',requireInteraction:true});
+      n.onclick=()=>{window.focus();n.close();};
+    }catch{}
+  }
+  const label=S.timer?.label||'';
+  cancelTimer();
+  // Kurzes In-App-Modal zusätzlich zur Systembenachrichtigung
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:500';
+  ov.innerHTML=`<div style="background:var(--surface);border-radius:16px;padding:1.6rem;max-width:320px;text-align:center;font-family:var(--font)">
+    <div style="font-size:2.5rem;margin-bottom:.5rem">⏱</div>
+    <div style="font-weight:700;font-size:1.05rem;margin-bottom:.3rem">Timer fertig!</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:1.1rem;font-family:var(--ui)">${esc(label)}</div>
+    <button style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:.65rem 1.4rem;font-family:var(--ui);font-weight:700;cursor:pointer">OK</button>
+  </div>`;
+  ov.querySelector('button').onclick=()=>ov.remove();
+  document.body.appendChild(ov);
+}
+
+function renderTimerWidget(){
+  if(!S.timer)return;
+  let w=document.getElementById('timerWidget');
+  const remaining=Math.max(0,S.timer.endTime-Date.now());
+  const mm=String(Math.floor(remaining/60000)).padStart(2,'0');
+  const ss=String(Math.floor((remaining%60000)/1000)).padStart(2,'0');
+  if(!w){
+    w=document.createElement('div');
+    w.id='timerWidget';
+    w.style.cssText='position:fixed;top:max(.6rem,env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;border-radius:24px;padding:.4rem .5rem .4rem 1rem;display:flex;align-items:center;gap:.6rem;z-index:400;box-shadow:0 4px 16px rgba(0,0,0,.25);font-family:var(--ui);cursor:pointer';
+    w.innerHTML=`<span style="font-weight:700;font-size:.9rem" id="timerWidgetTime"></span><span style="font-size:.75rem;opacity:.85;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="timerWidgetLabel"></span><button id="timerWidgetCancel" style="background:rgba(255,255,255,.25);border:none;color:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:.8rem;flex-shrink:0">✕</button>`;
+    document.body.appendChild(w);
+    document.getElementById('timerWidgetCancel').onclick=e=>{e.stopPropagation();cancelTimer();};
+  }
+  document.getElementById('timerWidgetTime').textContent=`${mm}:${ss}`;
+  document.getElementById('timerWidgetLabel').textContent=S.timer.label;
+}
+
+function runTimerLoop(){
+  if(_timerInterval)clearInterval(_timerInterval);
+  renderTimerWidget();
+  _timerInterval=setInterval(()=>{
+    if(!S.timer){clearInterval(_timerInterval);_timerInterval=null;return;}
+    if(Date.now()>=S.timer.endTime){timerFinished();return;}
+    renderTimerWidget();
+  },1000);
+}
+
+function resumeTimerOnLoad(){
+  const saved=loadTimerState();
+  if(!saved)return;
+  if(Date.now()>=saved.endTime){
+    // Timer ist abgelaufen, während die App geschlossen war
+    S.timer=saved;
+    timerFinished();
+  } else {
+    S.timer=saved;
+    runTimerLoop();
+  }
+}
+
 // ══════════════ ICON PICKER ══════════════
 function showIconPicker(catName, onSelect){
   const ov=document.createElement('div');
@@ -5963,6 +6113,7 @@ function loadSession(){
   await load();
   loadSession();
   render();
+  resumeTimerOnLoad();
   // Wake Lock: needs user interaction first on iOS Safari
   // → activate on first tap instead of immediately
   const _wlInit=()=>{
