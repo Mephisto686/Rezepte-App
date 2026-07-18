@@ -1727,16 +1727,16 @@ function mergeIntoShopping(text, from){
   return 'added';
 }
 
-async function compressImg(file,maxW=640,q=0.55){
+async function compressImg(file,maxW=640,q=0.55,maxH=maxW){
   return new Promise(res=>{
     const img=new Image(),url=URL.createObjectURL(file);
     img.onload=()=>{
       URL.revokeObjectURL(url);
       let w=img.width,h=img.height;
-      // Also limit height
-      const maxH=640;
-      if(w>h){if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}}
-      else{if(h>maxH){w=Math.round(w*maxH/h);h=maxH;}}
+      if(w>maxW||h>maxH){
+        const scale=Math.min(maxW/w,maxH/h);
+        w=Math.round(w*scale);h=Math.round(h*scale);
+      }
       const c=document.createElement('canvas');c.width=w;c.height=h;
       c.getContext('2d').drawImage(img,0,0,w,h);
       res(c.toDataURL('image/jpeg',q));
@@ -3563,7 +3563,7 @@ function openPantryScan(){
     const files=[...e.target.files];if(!files.length)return;
     const pw=document.getElementById('pantryScanPreview');pw.style.display='flex';pw.innerHTML='';
     const images=[];
-    for(const f of files){const d=await compressImg(f,1800,.92);if(d){images.push({data:d,mime:f.type||'image/jpeg'});const img=document.createElement('img');img.src=d;img.style.cssText='height:70px;border-radius:6px;object-fit:cover;flex:1;min-width:50px;max-width:100px';pw.appendChild(img);}}
+    for(const f of files){const d=await compressImg(f,2000,.92);if(d){images.push({data:d,mime:f.type||'image/jpeg'});const img=document.createElement('img');img.src=d;img.style.cssText='height:70px;border-radius:6px;object-fit:cover;flex:1;min-width:50px;max-width:100px';pw.appendChild(img);}}
     document.getElementById('pantryScanLbl').innerHTML='✓ '+files.length+' '+(files.length!==1?t('pantry_scan_images_pl'):t('pantry_scan_images_sg'));
     const btn=document.getElementById('pantryScanAnalyze');btn.style.display='inline-flex';btn._images=images;
     document.getElementById('pantryScanRes').innerHTML='';
@@ -3596,10 +3596,12 @@ MENGEN: Lies "qty" ausschließlich aus der Spalte "Menge" DERSELBEN Zeile – ve
 
 Produktname ("name"): kurz und generisch, OHNE Handelsmarken- oder Eigenmarken-Präfixe wie "REWE Beste Wahl", "REWE Bio", "ja!", "Bio" oder Herstellernamen (z.B. "Wilhelm Brandenburg"). Behalte nur die Kernbezeichnung plus relevante Sorte/Variante, z.B. "Erdnüsse" statt "REWE Beste Wahl Erdnüsse grosse Kerne", "Rindfleischsalami" statt "Wilhelm Brandenburg Rindfleischsalami", "Apfelsaft naturtrüb" statt "REWE Beste Wahl Apfelsaft naturtrüb". Wenn du dir bei einem Wort im Namen unsicher bist, nimm die naheliegendste sinnvolle Lesart (z.B. ein Fisch-/Fleischprodukt in Tomatensauce statt eines Fantasieworts) – aber erfinde keine neuen Produkte.
 
+VORSICHT BEI UNSICHERHEIT: Ersetze ein schwer lesbares Wort NIEMALS durch ein anderes, aber ähnlich aussehendes oder plausibel klingendes Produkt (z.B. nicht "Apfelmark" zu "Kaffee Mark" machen, nicht "Weidemilch" zu "Weidekäse Joghurt" machen, nicht ein Produkt durch eine bekannte Marke wie "Fanta Zero" ersetzen, nur weil die Form der Verpackung ähnlich aussieht). Wenn du dir bei einem Wort unsicher bist, gib lieber den Teil wieder, den du sicher lesen kannst (z.B. nur "Milch" statt eines erfundenen Produkts), oder lasse die Zeile weg.
+
 Antworte NUR mit einem JSON-Array. Jedes Element: {"name":"string","qty":"Zahl als String, z.B. 1 oder 500","unit":"Stück|g|kg|ml|l|Packung|Dose|Glas|Bund oder leer","expiry":"YYYY-MM-DD falls auf dem Bild ein MHD/Verfallsdatum erkennbar ist, sonst leerer String"}.
 Bei einem Kassenbon steht meist kein MHD drauf – dann "expiry":"" lassen.`,
     contentParts,
-    temperature:0.3
+    temperature:0
   });
   return Array.isArray(result)?result:(result.items||result.products||[]);
 }
