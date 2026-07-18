@@ -492,10 +492,8 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   <button class="nb" data-nav="list"><div class="ic">🍳</div><span id="navLblRecipes">Rezepte</span></button>
   <button class="nb" data-nav="shopping"><div class="ic">🛒</div><span id="shopLbl">Liste</span></button>
   <button class="nb" data-nav="planner"><div class="ic">📅</div><span id="navLblPlanner">Speiseplan</span></button>
-  <button class="nb" data-nav="favorites"><div class="ic">❤️</div><span id="navLblFavs">Favoriten</span></button>
-  <button class="nb" data-nav="aisearch"><div class="ic">✨</div><span id="navLblAi">KI-Suche</span></button>
-  <button class="nb" data-nav="import"><div class="ic">📥</div><span id="navLblImport">Import</span></button>
-  <button class="nb" data-nav="settings"><div class="ic">⚙️</div><span id="navLblMore">Mehr</span></button>
+  <button class="nb" data-nav="newrecipe"><div class="ic">✨</div><span id="navLblNewRecipe">Neues Rezept</span></button>
+  <button class="nb" data-nav="settings"><div class="ic">⚙️</div><span id="navLblMore">Einstellungen</span></button>
 </nav>
 
 <button class="fab" id="fab">+</button>
@@ -653,7 +651,7 @@ const S={
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
   scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, sessions:[], activeSession:null, lang:'de', apiKey:'',  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
-  user:null, authReady:false, authError:'', authMode:'signin', authBusy:false, authResetSent:false,
+  user:null, authReady:false, authError:'', authMode:'signin', authBusy:false, authResetSent:false, settingsTab:'general', newRecipeTab:'import',
   recipeGroupId:null, shoppingGroupId:null, groupsReady:false,
   userDoc:null, userDocReady:false,
   shareBusy:false, shareError:{recipes:'',shopping:''}, lastInviteCode:{recipes:'',shopping:''},
@@ -1347,7 +1345,7 @@ const uid=()=>'r'+Date.now()+Math.random().toString(36).slice(2,5);
 // ══════════════ TRANSLATIONS ══════════════
 const LANG={
   de:{
-    nav_recipes:'Rezepte',nav_favorites:'Favoriten',nav_ai:'KI-Suche',nav_import:'Import',nav_list:'Liste',nav_more:'Mehr',
+    nav_recipes:'Rezepte',nav_favorites:'Favoriten',nav_ai:'KI-Suche',nav_import:'Import',nav_newrecipe:'Neues Rezept',nav_list:'Liste',nav_more:'Einstellungen',
     hdr_recipes:'🍳 Meine Rezepte',hdr_new:'Neues Rezept',hdr_edit:'Bearbeiten',hdr_shopping:'🛒 Einkaufsliste',hdr_ai:'✨ KI-Rezeptsuche',hdr_import:'📥 Importieren',hdr_settings:'⚙️ Einstellungen',hdr_saving:'Speichern…',
     btn_save:'Speichern',btn_cancel:'Abbrechen',btn_delete:'Löschen',btn_export:'Export',btn_import:'Import',btn_close:'Schließen',btn_reset:'Zurücksetzen',btn_compress:'Komprimieren',btn_add_cat:'+ Neue Kategorie',btn_default:'↺ Standard',btn_save_key:'Key speichern',btn_save_keys:'Keys speichern',btn_save_tags:'Speichern',btn_manage:'🏷 Zuweisungen verwalten',btn_ai_est:'✨ KI schätzen',
     det_portions:'Portionen',det_portion:'Portion',det_portions_pl:'Portionen',det_ingredients:'Zutaten',det_steps:'Zubereitung',det_notes:'📝 Notizen',det_experiences:'📓 Erfahrungen',det_no_exp:'Noch keine Erfahrungen eingetragen.',det_nutrition:'Nährwerte pro Portion',det_not_cooked:'🍽 Noch nicht zubereitet',det_cooked:'✅ Schon zubereitet',det_prep:'🔪 Vorbereitung',det_cook:'🍳 Kochzeit',det_total:'⏱ Gesamt',det_min:'Min.',det_reset_steps:'Zurücksetzen',det_selected:'ausgewählt',det_shop_arrow:'🛒 In Einkaufsliste →',
@@ -1365,7 +1363,7 @@ const LANG={
     recipe_count_single:'Rezept',recipe_count_plural:'Rezepte',
   },
   en:{
-    nav_recipes:'Recipes',nav_favorites:'Favorites',nav_ai:'AI Search',nav_import:'Import',nav_list:'List',nav_more:'More',
+    nav_recipes:'Recipes',nav_favorites:'Favorites',nav_ai:'AI Search',nav_import:'Import',nav_newrecipe:'New Recipe',nav_list:'List',nav_more:'Settings',
     hdr_recipes:'🍳 My Recipes',hdr_new:'New Recipe',hdr_edit:'Edit',hdr_shopping:'🛒 Shopping List',hdr_ai:'✨ AI Recipe Search',hdr_import:'📥 Import',hdr_settings:'⚙️ Settings',hdr_saving:'Saving…',
     btn_save:'Save',btn_cancel:'Cancel',btn_delete:'Delete',btn_export:'Export',btn_import:'Import',btn_close:'Close',btn_reset:'Reset',btn_compress:'Compress',btn_add_cat:'+ New Category',btn_default:'↺ Default',btn_save_key:'Save Key',btn_save_keys:'Save Keys',btn_save_tags:'Save',btn_manage:'🏷 Manage Assignments',btn_ai_est:'✨ AI Estimate',
     det_portions:'Servings',det_portion:'Serving',det_portions_pl:'Servings',det_ingredients:'Ingredients',det_steps:'Instructions',det_notes:'📝 Notes',det_experiences:'📓 Experiences',det_no_exp:'No experiences recorded yet.',det_nutrition:'Nutrition per Serving',det_not_cooked:'🍽 Not yet cooked',det_cooked:'✅ Already cooked',det_prep:'🔪 Prep',det_cook:'🍳 Cook time',det_total:'⏱ Total',det_min:'min.',det_reset_steps:'Reset',det_selected:'selected',det_shop_arrow:'🛒 Add to Shopping List →',
@@ -1386,9 +1384,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.5.1';
+const APP_VERSION = '3.6.0';
 const APP_DATE = '2026-07-18';
 const VERSION_HISTORY = [
+  { version:'3.6.0', date:'2026-07-18', de:['Navigation überarbeitet: Bottom-Nav von 7 auf 5 Einträge reduziert','Favoriten sind jetzt ein Tab oben in der Rezepte-Ansicht statt eigenem Nav-Punkt','Import + KI-Suche + manuelles Erstellen zusammengefasst in "Neues Rezept" mit drei Tabs','"Mehr" umbenannt in "Einstellungen", mit eigenem Tab "Nutzerverwaltung" (nur für Admin sichtbar)'], en:['Navigation overhauled: bottom nav reduced from 7 to 5 items','Favorites are now a tab at the top of the recipes view instead of a separate nav item','Import + AI search + manual creation merged into "New Recipe" with three tabs','"More" renamed to "Settings", with its own "User management" tab (admin-only)'] },
   { version:'3.5.1', date:'2026-07-18', de:['Neu: Admin kann Nutzer im Admin-Panel entfernen – löscht Nutzer-Datensatz und Mitgliedschaft in allen geteilten Gruppen (räumt auch Reste bereits in der Firebase Console gelöschter Konten auf)','Hinweis: Das Firebase-Auth-Konto selbst muss weiterhin manuell in der Console gelöscht werden, das kann die App aus Sicherheitsgründen nicht selbst'], en:['New: admin can remove users in the admin panel – deletes the user record and membership in all shared groups (also cleans up leftovers from accounts already deleted in the Firebase Console)','Note: the Firebase Auth account itself still needs to be deleted manually in the console, the app cannot do this itself for security reasons'] },
   { version:'3.5.0', date:'2026-07-18', de:['Neu: "Passwort vergessen?" auf dem Anmelde-Bildschirm (verschickt Reset-Mail über Firebase Auth)','Fix/Sicherheit: KI-Nutzungsstatistik zeigt normalen Nutzern nur noch die eigenen Daten, nicht mehr die aller Nutzer','Admin-Nutzerverwaltung zeigt jetzt zusätzlich "Zuletzt online" und KI-Aufrufe pro Nutzer','Neu: Geteilte Rezepte/Einkaufsliste zeigen jetzt die E-Mail-Adressen der Mitglieder statt nur die Anzahl'], en:['New: "Forgot password?" on the sign-in screen (sends a reset email via Firebase Auth)','Fix/security: AI usage stats now only show regular users their own data, not everyone\\u2019s','Admin user management now also shows "last online" and AI calls per user','New: shared recipes/shopping list now show member email addresses instead of just a count'] },
   { version:'3.4.3', date:'2026-07-18', de:['Edamam Nährwert-Datenbank komplett entfernt (nicht genutzt, kostenpflichtig)'], en:['Removed Edamam nutrition database entirely (unused, paid service)'] },
@@ -1788,6 +1787,7 @@ function renderHdr(){
     tit.textContent=S.lang==='en'?'📅 Meal Plan':'📅 Speiseplan';sub.textContent='';
     acts.innerHTML='';
   }
+  else if(S.view==='newrecipe'){tit.textContent=S.lang==='en'?'New Recipe':'Neues Rezept';sub.textContent='';acts.innerHTML='';}
   else if(S.view==='aisearch'){tit.textContent=t('hdr_ai');sub.textContent='';acts.innerHTML='';}
   else if(S.view==='import'){tit.textContent=t('hdr_import');sub.textContent='';acts.innerHTML='';}
   else if(S.view==='settings'){tit.textContent=t('hdr_settings');sub.textContent='';acts.innerHTML='';}
@@ -1796,7 +1796,7 @@ function renderHdr(){
 function renderNav(){
   document.querySelectorAll('.nb').forEach(b=>{
     const n=b.dataset.nav;
-    b.classList.toggle('on',S.view===n||(n==='list'&&(S.view==='detail'||S.view==='form')));
+    b.classList.toggle('on',S.view===n||(n==='list'&&(S.view==='detail'||S.view==='form'||S.view==='favorites')));
   });  const cnt=S.shopping.filter(x=>!x.done).length;
   document.getElementById('shopLbl').innerHTML=t('nav_list')+(cnt?`<span class="badge">${cnt}</span>`:'');
   document.getElementById('bnav').style.display=S.view==='form'?'none':'flex';
@@ -1805,7 +1805,7 @@ function renderNav(){
   const _dd=document.getElementById('delConfirm');if(_dd)_dd.textContent=t('btn_delete');
   const _spc=document.getElementById('shopPickCancel');if(_spc)_spc.textContent=t('btn_cancel');
   // Update nav labels for language
-  const navMap={navLblRecipes:'nav_recipes',navLblFavs:'nav_favorites',navLblAi:'nav_ai',navLblImport:'nav_import',navLblMore:'nav_more'};
+  const navMap={navLblRecipes:'nav_recipes',navLblNewRecipe:'nav_newrecipe',navLblMore:'nav_more'};
   Object.entries(navMap).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.textContent=t(key);});
   const planLbl=document.getElementById('navLblPlanner');if(planLbl)planLbl.textContent=S.lang==='en'?'Speiseplan':'Meal Plan';
 }
@@ -1818,9 +1818,37 @@ function renderApp(){
   else if(S.view==='shopping')renderShop(app);
   else if(S.view==='planner')renderPlanner(app);
   else if(S.view==='session')renderSession(app);
+  else if(S.view==='newrecipe')renderNewRecipe(app);
   else if(S.view==='aisearch')renderAISearch(app);
   else if(S.view==='import')renderImportPage(app);
   else if(S.view==='settings')renderSettings(app);
+}
+
+function renderNewRecipe(app){
+  if(!S.newRecipeTab)S.newRecipeTab='import';
+  app.innerHTML=`
+    <div class="itabs" style="margin-bottom:1rem">
+      <button class="itab${S.newRecipeTab==='import'?' on':''}" data-nrtab="import">📥 ${S.lang==='en'?'Import':'Import'}</button>
+      <button class="itab${S.newRecipeTab==='aisearch'?' on':''}" data-nrtab="aisearch">✨ ${S.lang==='en'?'AI Search':'KI-Suche'}</button>
+      <button class="itab${S.newRecipeTab==='manual'?' on':''}" data-nrtab="manual">✏️ ${S.lang==='en'?'Manual':'Manuell'}</button>
+    </div>
+    <div id="newRecipeContent"></div>`;
+  document.querySelectorAll('[data-nrtab]').forEach(b=>b.addEventListener('click',()=>{
+    S.newRecipeTab=b.dataset.nrtab;renderApp();
+  }));
+  const content=document.getElementById('newRecipeContent');
+  if(S.newRecipeTab==='aisearch'){
+    renderAISearch(content);
+  } else if(S.newRecipeTab==='manual'){
+    content.innerHTML=`<div style="max-width:420px;margin:2.5rem auto;text-align:center">
+      <div style="font-size:2.5rem;margin-bottom:1rem">✏️</div>
+      <div style="font-family:var(--ui);color:var(--muted);font-size:.9rem;margin-bottom:1.3rem;line-height:1.5">${S.lang==='en'?'Start a recipe from scratch – enter ingredients, steps and nutrition yourself.':'Leg ein Rezept von Grund auf neu an – Zutaten, Zubereitung und Nährwerte selbst eintragen.'}</div>
+      <button class="btn bp" id="manualNewBtn">+ ${S.lang==='en'?'Create new recipe':'Neues Rezept erstellen'}</button>
+    </div>`;
+    document.getElementById('manualNewBtn').addEventListener('click',openNew);
+  } else {
+    renderImportPage(content);
+  }
 }
 
 function activeFilterCount(){
@@ -1940,6 +1968,10 @@ function renderList(app){
   // First render: build shell
   if(!app.querySelector('#rezepteGrid')){
     app.innerHTML=`
+      <div class="itabs" style="margin-bottom:.8rem">
+        <button class="itab${S.view==='list'?' on':''}" data-listtab="list">🍳 ${S.lang==='en'?'All':'Alle'}</button>
+        <button class="itab${S.view==='favorites'?' on':''}" data-listtab="favorites">❤️ ${t('nav_favorites')}</button>
+      </div>
       <div class="sw">
         <div style="position:relative;width:100%">
           <span style="position:absolute;left:.9rem;top:50%;transform:translateY(-50%);font-size:1rem;pointer-events:none;z-index:1">🔍</span>
@@ -1955,6 +1987,14 @@ function renderList(app){
         </div>
       </div>
       <div id="rezepteGrid"></div>`;
+    document.querySelectorAll('[data-listtab]').forEach(b=>b.addEventListener('click',()=>{
+      const n=b.dataset.listtab;
+      if(n===S.view)return;
+      saveScroll();
+      if(n==='list'){S.lastSelId=null;saveSession();}
+      S.view=n;S.selId=null;S.search='';S.filters={cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};
+      render();restoreScroll(n);
+    }));
     document.getElementById('srch').setAttribute('placeholder',t('list_search'));
     document.getElementById('srch').addEventListener('input',e=>{S.search=e.target.value;renderGrid();});
     document.getElementById('filterBtn').addEventListener('click',()=>showFilterPanel(()=>renderGrid()));
@@ -3160,6 +3200,11 @@ function renderSettings(app){
   }).join('');
 
   app.innerHTML=`
+    ${isAdmin()?`<div class="itabs" style="margin-bottom:1rem">
+      <button class="itab${S.settingsTab!=='admin'?' on':''}" data-stab="general">⚙️ ${S.lang==='en'?'Settings':'Einstellungen'}</button>
+      <button class="itab${S.settingsTab==='admin'?' on':''}" data-stab="admin">👑 ${S.lang==='en'?'User management':'Nutzerverwaltung'}</button>
+    </div>`:''}
+    ${(!isAdmin()||S.settingsTab!=='admin')?`
     <div class="acc-sec" style="margin-bottom:.5rem">
       <div class="acc-hdr" id="tagAccHdr">
         <span class="acc-hdr-title">🏷 Tags (${allTags().length})</span>
@@ -3216,14 +3261,6 @@ function renderSettings(app){
         <div id="aiStatsBox" style="width:100%;margin-top:.6rem"></div>
       </div>
     </div>
-    ${isAdmin()?`<div class="ss"><div class="st2">👑 Admin: Nutzerverwaltung</div>
-      <div class="sr2" style="flex-direction:column;align-items:flex-start">
-        <div class="ss2" style="margin-bottom:.6rem">Neue Registrierungen brauchen Freischaltung. Du (Admin) bist davon nicht betroffen.</div>
-        <div id="adminUsersBox" style="width:100%">
-          <div style="font-family:var(--ui);font-size:.78rem;color:var(--muted)">⏳ Lädt…</div>
-        </div>
-      </div>
-    </div>`:''}
     <div class="ss"><div class="st2">🔄 ${S.lang==='en'?'Account & Sync':'Konto & Synchronisation'}</div>
       <div class="sr2" style="margin-bottom:.3rem">
         <div>
@@ -3264,7 +3301,18 @@ function renderSettings(app){
     <div style="text-align:center;color:var(--muted);font-size:.75rem;font-family:var(--ui);margin-top:2rem;padding-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:.5rem">
       <span>${t('set_footer')} · v${APP_VERSION} · ${APP_DATE}</span>
       <button onclick="showVersionHistory()" style="background:var(--surface2);border:1px solid var(--border);border-radius:50%;width:1.35rem;height:1.35rem;font-size:.7rem;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--ui);font-weight:700" title="Versionshistorie">i</button>
-    </div>`;
+    </div>`:''}
+    ${isAdmin()&&S.settingsTab==='admin'?`<div class="ss"><div class="st2">👑 ${S.lang==='en'?'User management':'Nutzerverwaltung'}</div>
+      <div class="sr2" style="flex-direction:column;align-items:flex-start">
+        <div class="ss2" style="margin-bottom:.6rem">Neue Registrierungen brauchen Freischaltung. Du (Admin) bist davon nicht betroffen.</div>
+        <div id="adminUsersBox" style="width:100%">
+          <div style="font-family:var(--ui);font-size:.78rem;color:var(--muted)">⏳ Lädt…</div>
+        </div>
+      </div>
+    </div>`:''}`;
+  document.querySelectorAll('[data-stab]').forEach(b=>b.addEventListener('click',()=>{
+    S.settingsTab=b.dataset.stab;renderApp();
+  }));
   // Category management
   const fallbackCat=()=>getCats().find(c=>c==='Sonstiges')||getCats()[getCats().length-1]||'Sonstiges';
 
@@ -3403,7 +3451,7 @@ function renderSettings(app){
     });
   });
 
-  document.getElementById('dtgl').addEventListener('click',()=>{S.dark=!S.dark;saveDark();applyTheme();renderApp();});
+  document.getElementById('dtgl')?.addEventListener('click',()=>{S.dark=!S.dark;saveDark();applyTheme();renderApp();});
   document.getElementById('wltgl')?.addEventListener('click',()=>toggleWakeLock());
   document.getElementById('backupImportBtn')?.addEventListener('click',()=>document.getElementById('backupFile')?.click());
   document.getElementById('shopCatsImportBtn')?.addEventListener('click',()=>document.getElementById('shopCatsFile')?.click());
@@ -3479,7 +3527,7 @@ function renderSettings(app){
     }
   });
 
-  if(isAdmin()){
+  if(isAdmin()&&S.settingsTab==='admin'){
     loadAdminUsers();
   }
 }
@@ -6164,8 +6212,8 @@ document.querySelectorAll('.nb').forEach(b=>b.addEventListener('click',()=>{
   saveScroll();
   if(n==='list'){S.lastSelId=null;saveSession();}
   S.view=n;S.selId=null;
-  if(n==='list'||n==='favorites'){S.search='';S.filters={cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};}
-  if(n==='aisearch')S.aiSearchChat=[];
+  if(n==='list'){S.search='';S.filters={cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};}
+  if(n==='newrecipe')S.aiSearchChat=[];
   render();restoreScroll(n);
 }));
 // Ingredient picker modal
@@ -6280,7 +6328,7 @@ function loadSession(){
   initDetSwipe(); // Detail tab swipe – runs once for entire app lifetime
   // ══ Swipe navigation ══
   (()=>{
-    const NAV_ORDER=['list','shopping','planner','favorites','aisearch','import','settings'];
+    const NAV_ORDER=['list','shopping','planner','newrecipe','settings'];
     let tx=0,ty=0;
     const appEl=document.getElementById('app');
     appEl.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
