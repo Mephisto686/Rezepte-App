@@ -1386,9 +1386,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.5.0';
+const APP_VERSION = '3.5.1';
 const APP_DATE = '2026-07-18';
 const VERSION_HISTORY = [
+  { version:'3.5.1', date:'2026-07-18', de:['Neu: Admin kann Nutzer im Admin-Panel entfernen – löscht Nutzer-Datensatz und Mitgliedschaft in allen geteilten Gruppen (räumt auch Reste bereits in der Firebase Console gelöschter Konten auf)','Hinweis: Das Firebase-Auth-Konto selbst muss weiterhin manuell in der Console gelöscht werden, das kann die App aus Sicherheitsgründen nicht selbst'], en:['New: admin can remove users in the admin panel – deletes the user record and membership in all shared groups (also cleans up leftovers from accounts already deleted in the Firebase Console)','Note: the Firebase Auth account itself still needs to be deleted manually in the console, the app cannot do this itself for security reasons'] },
   { version:'3.5.0', date:'2026-07-18', de:['Neu: "Passwort vergessen?" auf dem Anmelde-Bildschirm (verschickt Reset-Mail über Firebase Auth)','Fix/Sicherheit: KI-Nutzungsstatistik zeigt normalen Nutzern nur noch die eigenen Daten, nicht mehr die aller Nutzer','Admin-Nutzerverwaltung zeigt jetzt zusätzlich "Zuletzt online" und KI-Aufrufe pro Nutzer','Neu: Geteilte Rezepte/Einkaufsliste zeigen jetzt die E-Mail-Adressen der Mitglieder statt nur die Anzahl'], en:['New: "Forgot password?" on the sign-in screen (sends a reset email via Firebase Auth)','Fix/security: AI usage stats now only show regular users their own data, not everyone\\u2019s','Admin user management now also shows "last online" and AI calls per user','New: shared recipes/shopping list now show member email addresses instead of just a count'] },
   { version:'3.4.3', date:'2026-07-18', de:['Edamam Nährwert-Datenbank komplett entfernt (nicht genutzt, kostenpflichtig)'], en:['Removed Edamam nutrition database entirely (unused, paid service)'] },
   { version:'3.4.2', date:'2026-07-18', de:['Fix: Einladungscode einlösen schlug mit "Missing or insufficient permissions" fehl – App versuchte Rezepte in die Zielgruppe zu kopieren, bevor die Mitgliedschaft dort bestand. Reihenfolge korrigiert (erst beitreten, dann Daten mitnehmen)','Fix: Alte Fehlermeldung beim Einladungscode-Erzeugen blieb nach erfolgreichem Versuch stehen'], en:['Fix: Redeeming an invite code failed with "Missing or insufficient permissions" – app tried to copy recipes into the target group before membership existed there. Fixed order (join first, then bring data)','Fix: stale error message when generating an invite code stuck around after a successful attempt'] },
@@ -3483,6 +3484,37 @@ function renderSettings(app){
   }
 }
 
+// Entfernt einen Nutzer vollständig aus Firestore: eigener Datensatz + Mitgliedschaft in allen Gruppen.
+// WICHTIG: Löscht NICHT das Firebase-Auth-Konto selbst (kann der Client-SDK nicht für fremde Konten) –
+// das bleibt weiterhin ein manueller Schritt in der Firebase Console → Authentication.
+// Funktioniert auch für Nutzer, deren Auth-Konto schon gelöscht wurde (räumt die Firestore-Reste auf).
+async function adminDeleteUser(uid,email){
+  if(!isAdmin())return;
+  if(!confirm(`"${email}" wirklich entfernen?\n\nEntfernt den Nutzer-Datensatz und die Mitgliedschaft aus allen geteilten Gruppen.\n\nDas Firebase-Auth-Konto selbst musst du zusätzlich (falls noch nicht geschehen) in der Firebase Console → Authentication löschen.`))return;
+  try{
+    // Alle Gruppen finden, in denen der Nutzer Mitglied ist
+    const groupsSnap=await fbDb.collection('groups').where('members','array-contains',uid).get();
+    for(const doc of groupsSnap.docs){
+      const members=(doc.data().members||[]).filter(m=>m!==uid);
+      if(members.length===0){
+        await doc.ref.delete(); // letzte:r Nutzer:in raus → verwaiste Gruppe gleich mitlöschen
+      } else {
+        await doc.ref.update({
+          members:firebase.firestore.FieldValue.arrayRemove(uid),
+          ['memberEmails.'+uid]:firebase.firestore.FieldValue.delete()
+        });
+      }
+    }
+    // Eigenen Nutzer-Datensatz löschen (falls noch vorhanden)
+    await fbDb.collection('users').doc(uid).delete();
+    toast('✓ Nutzer entfernt');
+    loadAdminUsers();
+    refreshMemberCounts();
+  }catch(e){
+    toast('Fehler: '+e.message,'err');
+  }
+}
+
 function formatLastSeen(ts){
   if(!ts)return 'nie';
   const diff=Date.now()-ts;
@@ -3513,7 +3545,10 @@ async function loadAdminUsers(){
       const aiEnabled=u.aiEnabled!==false;
       const aiCount=aiCountByUid[u.uid]||0;
       return `<div style="border:1px solid var(--border2);border-radius:10px;padding:.6rem .8rem;margin-bottom:.5rem;width:100%">
-        <div style="font-weight:700;font-size:.85rem;margin-bottom:.2rem;font-family:var(--ui)">${esc(u.email||u.uid)}${isSelf?' <span style="font-weight:400;color:var(--muted)">(du, Admin)</span>':''}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+          <div style="font-weight:700;font-size:.85rem;margin-bottom:.2rem;font-family:var(--ui)">${esc(u.email||u.uid)}${isSelf?' <span style="font-weight:400;color:var(--muted)">(du, Admin)</span>':''}</div>
+          ${!isSelf?`<button data-deluid="${esc(u.uid)}" data-delemail="${esc(u.email||u.uid)}" title="Nutzer entfernen" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;font-size:.68rem;padding:.15rem .4rem;cursor:pointer;flex-shrink:0;font-family:var(--ui)">🗑 Entfernen</button>`:''}
+        </div>
         <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-bottom:.4rem">Zuletzt online: ${formatLastSeen(u.lastSeen)} · KI-Aufrufe gesamt: ${aiCount}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0">
           <span style="font-size:.8rem;font-family:var(--ui)">Freigeschaltet</span>
@@ -3538,6 +3573,9 @@ async function loadAdminUsers(){
           toast('Fehler: '+e.message,'err');
         }
       });
+    });
+    box.querySelectorAll('[data-deluid]').forEach(btn=>{
+      btn.addEventListener('click',()=>adminDeleteUser(btn.dataset.deluid,btn.dataset.delemail));
     });
   }catch(e){
     box.innerHTML=`<div class="ierr">⚠️ Fehler beim Laden: ${esc(e.message)}</div>`;

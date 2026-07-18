@@ -62,17 +62,22 @@ service cloud.firestore {
     // Gruppen: lesen/schreiben nur für freigeschaltete Mitglieder.
     // Anlegen bleibt ungated (nötig für den Signup-Flow, bevor der User-Doc mit approved:false existiert;
     // erzeugt nur eine leere, private Gruppe – ohne Freischaltung kommt man nicht an Inhalte/Sync).
+    // Admin darf zusätzlich die Gruppen-METADATEN (members/memberEmails) lesen/ändern/löschen,
+    // um beim Löschen eines Nutzers dessen Mitgliedschaften aufzuräumen – NICHT aber die eigentlichen
+    // Rezepte/Einkaufslisten fremder Gruppen (siehe Unter-Collection-Regel unten, bewusst ohne Admin-Bypass).
     match /groups/{groupId} {
-      allow read: if isApproved() && isMember(resource.data);
+      allow read: if isApproved() && (isAdmin() || isMember(resource.data));
       allow create: if request.auth != null && request.resource.data.members == [request.auth.uid];
       allow update: if isApproved() && (
-                      isMember(resource.data)
+                      isAdmin()
+                      || isMember(resource.data)
                       || addingSelfOnly(resource.data, request.resource.data)
                       || removingSelfOnly(resource.data, request.resource.data)
                     );
-      allow delete: if isApproved() && isMember(resource.data);
+      allow delete: if isApproved() && (isAdmin() || isMember(resource.data));
 
-      // Rezepte, Kategorien, Einkaufsliste: nur für freigeschaltete Gruppenmitglieder
+      // Rezepte, Kategorien, Einkaufsliste: nur für freigeschaltete Gruppenmitglieder (bewusst OHNE
+      // Admin-Bypass – der Admin verwaltet nur Mitgliedschaften, sieht aber keine fremden Rezeptinhalte)
       match /{document=**} {
         allow read, write: if isApproved() && isMember(get(/databases/$(database)/documents/groups/$(groupId)).data);
       }
