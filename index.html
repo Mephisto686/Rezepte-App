@@ -1081,6 +1081,7 @@ async function createInvite(type){
     const code=genInviteCode();
     await fbDb.collection('invites').doc(code).set({groupId,type,createdBy:fsUid(),createdAt:Date.now()});
     S.lastInviteCode[type]=code;
+    S.shareError[type]='';
   }catch(e){
     S.shareError[type]=e.message;
   }
@@ -1099,6 +1100,10 @@ async function redeemInvite(type,code){
     const targetGroupId=invite.groupId;
     const currentGroupId=type==='shopping'?S.shoppingGroupId:S.recipeGroupId;
     if(targetGroupId===currentGroupId)throw new Error(S.lang==='en'?'You are already in this group':'Du bist bereits in dieser Gruppe');
+
+    // Erst der Zielgruppe beitreten (erlaubt über "addingSelfOnly" auch ohne bisherige Mitgliedschaft) –
+    // erst DANACH darf laut Sicherheitsregeln überhaupt in ihre Unter-Collections geschrieben werden.
+    await fsGroupRef(targetGroupId).update({members:firebase.firestore.FieldValue.arrayUnion(fsUid())});
 
     if(type==='recipes'){
       // Eigene Rezepte + Kategorien in die Zielgruppe mitnehmen (mergen)
@@ -1132,8 +1137,6 @@ async function redeemInvite(type,code){
       }
     }
 
-    // Sich selbst der Zielgruppe hinzufügen
-    await fsGroupRef(targetGroupId).update({members:firebase.firestore.FieldValue.arrayUnion(fsUid())});
     // Eigenen Nutzer-Datensatz umbiegen
     await fsUserRef().update({[groupIdField(type)]:targetGroupId});
     if(type==='shopping')S.shoppingGroupId=targetGroupId;else S.recipeGroupId=targetGroupId;
@@ -1368,9 +1371,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.4.1';
+const APP_VERSION = '3.4.2';
 const APP_DATE = '2026-07-18';
 const VERSION_HISTORY = [
+  { version:'3.4.2', date:'2026-07-18', de:['Fix: Einladungscode einlösen schlug mit "Missing or insufficient permissions" fehl – App versuchte Rezepte in die Zielgruppe zu kopieren, bevor die Mitgliedschaft dort bestand. Reihenfolge korrigiert (erst beitreten, dann Daten mitnehmen)','Fix: Alte Fehlermeldung beim Einladungscode-Erzeugen blieb nach erfolgreichem Versuch stehen'], en:['Fix: Redeeming an invite code failed with "Missing or insufficient permissions" – app tried to copy recipes into the target group before membership existed there. Fixed order (join first, then bring data)','Fix: stale error message when generating an invite code stuck around after a successful attempt'] },
   { version:'3.4.1', date:'2026-07-18', de:['Neu: E-Mail-Benachrichtigung an den Admin bei jeder Neuregistrierung (via Firebase "Trigger Email" Extension)'], en:['New: email notification to the admin on every new registration (via Firebase "Trigger Email" extension)'] },
   { version:'3.4.0', date:'2026-07-18', de:['Neu: Admin-Rolle – neue Registrierungen brauchen jetzt Freischaltung durch den Admin, bevor sie die App nutzen können','Admin kann pro Nutzer separat die KI-Funktionen erlauben/sperren','Neuer Bereich in den Einstellungen (nur für Admin sichtbar): Nutzerverwaltung mit Freischalt- und KI-Schaltern','Bestandskonten bleiben automatisch freigeschaltet, keine Unterbrechung'], en:['New: admin role – new registrations now require approval by the admin before they can use the app','Admin can separately allow/block AI features per user','New section in settings (admin-only): user management with approval and AI toggles','Existing accounts remain approved automatically, no disruption'] },
   { version:'3.3.2', date:'2026-07-18', de:['Fix: "Prepayment credits depleted" Fehler – Google hat die Gemini Developer API im März 2026 auf ein separates Prepaid-Modell umgestellt, das bei aktiviertem Billing keinen Gratis-Modus mehr bietet','Alle KI-Funktionen laufen jetzt einheitlich über Vertex AI Gemini API und buchen gegen das vorhandene Blaze-Guthaben statt gegen ein leeres Prepay-Wallet'], en:['Fix: "Prepayment credits depleted" error – Google switched the Gemini Developer API to a separate prepaid model in March 2026 that no longer offers a free mode once billing is enabled','All AI features now uniformly use the Vertex AI Gemini API and bill against the existing Blaze credit instead of an empty prepay wallet'] },
