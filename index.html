@@ -321,10 +321,10 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       }).catch(()=>{});
     }
   </script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-storage-compat.js"></script>
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyA90Ht5dzexXe4qZt2Jbn-sieMxieDnvJo",
@@ -342,9 +342,9 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   <!-- ══════════════ FIREBASE AI LOGIC (Gemini) – ersetzt Anthropic API ══════════════ -->
   <!-- Setup-Doku: siehe FIREBASE_AI_SETUP.md -->
   <script type="module">
-    import { getApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-    import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js';
-    import { getAI, getGenerativeModel, GoogleAIBackend, VertexAIBackend } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-ai.js';
+    import { getApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
+    import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js';
+    import { getAI, getGenerativeModel, GoogleAIBackend, VertexAIBackend } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-ai.js';
 
     // TODO Andre (nur lokale Entwicklung, NIE in Produktion aktiv lassen / NIE committen):
     // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
@@ -1332,9 +1332,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.2.1';
-const APP_DATE = '2026-07-17';
+const APP_VERSION = '3.2.2';
+const APP_DATE = '2026-07-18';
 const VERSION_HISTORY = [
+  { version:'3.2.2', date:'2026-07-18', de:['Fix: KI-Funktionen liefen ins Leere, weil Firebase-SDK-Version (10.14.1) zu alt für AI Logic war','Alle Firebase-CDN-Referenzen (App, Auth, Firestore, Storage, AI Logic, App Check) auf aktuelle Version 12.16.0 angehoben'], en:['Fix: AI features silently failed because Firebase SDK version (10.14.1) was too old for AI Logic','All Firebase CDN references (App, Auth, Firestore, Storage, AI Logic, App Check) bumped to current version 12.16.0'] },
   { version:'3.2.1', date:'2026-07-17', de:['KI-Nutzungsstatistik: jeder KI-Aufruf wird pro Nutzer protokolliert','Neue Statistik-Ansicht in den Einstellungen (Gesamt, letzte 7/30 Tage, pro Nutzer, pro Funktion)','Fix: zweiten (bisher übersehenen) Import-Screen ebenfalls auf Gemini umgestellt'], en:['AI usage stats: every AI call is now logged per user','New stats view in settings (total, last 7/30 days, per user, per feature)','Fix: second (previously missed) import screen also switched to Gemini'] },
   { version:'3.2.0', date:'2026-07-17', de:['Großes Update: Anthropic Claude API durch Google Gemini via Firebase AI Logic ersetzt','Kein API-Key mehr nötig – KI-Funktionen laufen kostenlos direkt über das Firebase-Projekt','Websuche (Rezeptideen) nutzt jetzt Gemini-Grounding mit Google-Suche über Vertex AI','Foto-, Link- und PDF-Import sowie Nährwert-Schätzung und Kochsession-KI auf Gemini umgestellt'], en:['Major update: replaced Anthropic Claude API with Google Gemini via Firebase AI Logic','No API key needed anymore – AI features run free directly through the Firebase project','Web search (recipe ideas) now uses Gemini grounding with Google Search via Vertex AI','Photo, link and PDF import as well as nutrition estimate and cooking session AI switched to Gemini'] },
   { version:'3.1.3', date:'2026-07-17', de:['Fix: Foto-Storage-Token – nach jedem Foto-Upload wird die frische Download-URL sofort lokal übernommen (State + Cache) statt der alten zu vertrauen','Fix: Erstsync holt beim Zusammenführen frische Foto-URL, wenn eine Cloud-Version gewinnt (verhindert 404 nach Foto-Austausch auf anderem Gerät)'], en:['Fix: Photo storage token – after every photo upload, the fresh download URL is applied locally (state + cache) immediately instead of trusting the old one','Fix: Initial sync fetches a fresh photo URL when merging if the cloud version wins (prevents 404 after photo swap on another device)'] },
