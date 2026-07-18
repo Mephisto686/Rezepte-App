@@ -339,6 +339,121 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     const fbDb = firebase.firestore();
     const fbStorage = firebase.storage();
   </script>
+  <!-- ══════════════ FIREBASE AI LOGIC (Gemini) – ersetzt Anthropic API ══════════════ -->
+  <!-- Setup-Doku: siehe FIREBASE_AI_SETUP.md -->
+  <script type="module">
+    import { getApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js';
+    import { getAI, getGenerativeModel, GoogleAIBackend, VertexAIBackend } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-ai.js';
+
+    // TODO Andre (nur lokale Entwicklung, NIE in Produktion aktiv lassen / NIE committen):
+    // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+
+    const fbApp = getApp(); // greift dieselbe App ab, die oben per firebase.initializeApp() (compat) erstellt wurde
+
+    // TODO Andre: reCAPTCHA v3 Site-Key aus Firebase Console → App Check → Apps → Web-App eintragen
+    const RECAPTCHA_SITE_KEY = '6LcfwFktAAAAAAxrEz2JLjBo_f4CUZV6O4Xa533';
+
+    initializeAppCheck(fbApp, {
+      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+
+    // Gemini Developer API (kostenlos, kein Billing nötig) – Text/Bild/PDF/JSON
+    const aiFree = getAI(fbApp, { backend: new GoogleAIBackend() });
+    // Vertex AI Gemini API (nutzt vorhandenes Blaze-Guthaben) – nur für Websuche/Grounding
+    const aiVertex = getAI(fbApp, { backend: new VertexAIBackend() });
+
+    const GEMINI_MODEL = 'gemini-2.5-flash';
+
+    function toParts(contentParts){
+      // contentParts: Array von {text} | {image:{data,mime}} | {pdf:{data,mime}}
+      return contentParts.map(p=>{
+        if(p.text!==undefined) return {text:p.text};
+        if(p.image) return {inlineData:{mimeType:p.image.mime, data:p.image.data.includes(',')?p.image.data.split(',')[1]:p.image.data}};
+        if(p.pdf) return {inlineData:{mimeType:p.pdf.mime||'application/pdf', data:p.pdf.data}};
+        return {text:''};
+      });
+    }
+
+    // Protokolliert jeden KI-Aufruf pro Nutzer (für die Nutzungsstatistik in den Einstellungen).
+    // Fire-and-forget: blockiert nie die eigentliche KI-Antwort, Fehler werden verschluckt.
+    function logAIUsage(feature){
+      try{
+        if(typeof fbDb==='undefined'||!fbDb) return;
+        if(typeof S==='undefined'||!S.user||!S.user.uid) return;
+        fbDb.collection('aiUsage').add({
+          uid:S.user.uid, email:S.user.email||'', feature:feature||'unbekannt', ts:Date.now()
+        }).catch(()=>{});
+      }catch{}
+    }
+
+    // Lädt alle Nutzungs-Logs und aggregiert sie (für die Statistik-Ansicht in den Einstellungen)
+    window.geminiUsageStats = async function(){
+      const snap = await fbDb.collection('aiUsage').get();
+      const byUser={}, byFeature={};
+      let total=0, last7d=0, last30d=0;
+      const now=Date.now(), d7=now-7*86400000, d30=now-30*86400000;
+      snap.forEach(doc=>{
+        const d=doc.data(); total++;
+        const key=d.email||d.uid||'unbekannt';
+        byUser[key]=(byUser[key]||0)+1;
+        byFeature[d.feature]=(byFeature[d.feature]||0)+1;
+        if(d.ts>=d7)last7d++;
+        if(d.ts>=d30)last30d++;
+      });
+      return {total,last7d,last30d,byUser,byFeature};
+    };
+
+    // Reiner Chat-Text (System-Prompt + Verlauf) – für Rezept-Chat & KI-Suche-Rückfragen
+    window.geminiText = async function({system, messages, feature}){
+      logAIUsage(feature);
+      const model = getGenerativeModel(aiFree, {model:GEMINI_MODEL, systemInstruction:system||undefined});
+      const contents = messages.map(m=>({role: m.role==='user'?'user':'model', parts:[{text:m.content}]}));
+      const result = await model.generateContent({contents});
+      return result.response.text();
+    };
+
+    // Reines JSON-Ergebnis – für Extraktion (Foto/Link/PDF), Nährwerte, Kochsession-Zeitplan
+    window.geminiJSON = async function({system, contentParts, temperature, feature}){
+      logAIUsage(feature);
+      const model = getGenerativeModel(aiFree, {
+        model:GEMINI_MODEL,
+        systemInstruction:system||undefined,
+        generationConfig:{temperature: temperature??1, responseMimeType:'application/json'}
+      });
+      const result = await model.generateContent(toParts(contentParts));
+      return JSON.parse(result.response.text());
+    };
+
+    // Freitext + optionaler <rezepte>-JSON-Block – für "Rezept generieren"
+    window.geminiRecipeBlock = async function({system, contentParts, feature}){
+      logAIUsage(feature);
+      const model = getGenerativeModel(aiFree, {model:GEMINI_MODEL, systemInstruction:system||undefined});
+      const result = await model.generateContent(toParts(contentParts));
+      const txt = result.response.text();
+      const jsonMatch = txt.match(/<rezepte>([\s\S]*?)<\/rezepte>/);
+      const explanation = txt.replace(/<rezepte>[\s\S]*?<\/rezepte>/g,'').trim();
+      let recipes=[]; if(jsonMatch){ try{ recipes=JSON.parse(jsonMatch[1].trim()); }catch{} }
+      return {explanation, recipes};
+    };
+
+    // Websuche mit Grounding (Vertex AI, nutzt Blaze-Guthaben) – für "Im Internet suchen"
+    window.geminiSearch = async function({system, contentParts, feature}){
+      logAIUsage(feature);
+      const model = getGenerativeModel(aiVertex, {
+        model:GEMINI_MODEL,
+        systemInstruction:system||undefined,
+        tools:[{googleSearch:{}}]
+      });
+      const result = await model.generateContent(toParts(contentParts));
+      const txt = result.response.text();
+      const jsonMatch = txt.match(/<rezepte>([\s\S]*?)<\/rezepte>/);
+      const explanation = txt.replace(/<rezepte>[\s\S]*?<\/rezepte>/g,'').trim();
+      let recipes=[]; if(jsonMatch){ try{ recipes=JSON.parse(jsonMatch[1].trim()); }catch{} }
+      return {explanation, recipes};
+    };
+  </script>
 </head>
 <body>
 
@@ -767,7 +882,7 @@ async function fsPushAllRecipes(showToast=false){
     });
     await batch.commit();
     // Fotos separat hochladen (Storage statt Base64-Dokument)
-    for(const r of S.recipes){ if(r.photo&&r.photo.startsWith('data:')) await fsUploadPhoto(r.id,r.photo); }
+    await Promise.all(S.recipes.filter(r=>r.photo&&r.photo.startsWith('data:')).map(r=>fsUploadPhoto(r.id,r.photo)));
     if(showToast)toast(S.lang==='en'?`✓ ${S.recipes.length} recipes uploaded`:`✓ ${S.recipes.length} Rezepte hochgeladen`);
   }catch(e){if(showToast)toast('⚠ Upload: '+e.message,'err');}
 }
@@ -778,7 +893,13 @@ async function fsUploadPhoto(id,dataUrl){
   if(!fsReady()||!dataUrl)return null;
   try{
     const snap=await fsPhotoRef(id).putString(dataUrl,'data_url');
-    return await snap.ref.getDownloadURL();
+    const url=await snap.ref.getDownloadURL();
+    // Frischen Token sofort lokal übernehmen (State + IndexedDB), statt dem alten Base64/URL-Cache zu vertrauen.
+    // Verhindert 404s durch veraltete Tokens nach erneutem Foto-Upload.
+    const idx=S.recipes.findIndex(r=>r.id===id);
+    if(idx!==-1) S.recipes[idx]=({...S.recipes[idx],photo:url});
+    try{await dbPutBatch('photos',[{id,data:url}]);}catch(e){console.warn('Foto-Cache-Update fehlgeschlagen:',e);}
+    return url;
   }catch(e){console.warn('Storage upload failed:',e);return null;}
 }
 async function fsDeletePhoto(id){
@@ -1069,7 +1190,15 @@ async function fsInitialSync(){
     for(const id of mergedIds){
       const remote=remoteMap[id],local=localMap[id];
       if(remote&&local){
-        merged.push((remote._updatedAt||0)>=(local._updatedAt||0)?{...remote,id,photo:local.photo}:local);
+        if((remote._updatedAt||0)>=(local._updatedAt||0)){
+          // Remote gewinnt: Foto-URL frisch von Storage holen statt dem evtl. veralteten lokalen Cache
+          // zu vertrauen (verhindert 404s durch abgelaufene Tokens nach Foto-Überschreibung auf anderem Gerät).
+          let photo=local.photo;
+          try{photo=await fsPhotoRef(id).getDownloadURL();}catch{photo=null;}
+          merged.push({...remote,id,photo});
+        }else{
+          merged.push(local);
+        }
       } else if(remote){
         merged.push({...remote,id,photo:null});
       } else {
@@ -1203,9 +1332,13 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.1.1';
-const APP_DATE = '2026-07-16';
+const APP_VERSION = '3.2.1';
+const APP_DATE = '2026-07-17';
 const VERSION_HISTORY = [
+  { version:'3.2.1', date:'2026-07-17', de:['KI-Nutzungsstatistik: jeder KI-Aufruf wird pro Nutzer protokolliert','Neue Statistik-Ansicht in den Einstellungen (Gesamt, letzte 7/30 Tage, pro Nutzer, pro Funktion)','Fix: zweiten (bisher übersehenen) Import-Screen ebenfalls auf Gemini umgestellt'], en:['AI usage stats: every AI call is now logged per user','New stats view in settings (total, last 7/30 days, per user, per feature)','Fix: second (previously missed) import screen also switched to Gemini'] },
+  { version:'3.2.0', date:'2026-07-17', de:['Großes Update: Anthropic Claude API durch Google Gemini via Firebase AI Logic ersetzt','Kein API-Key mehr nötig – KI-Funktionen laufen kostenlos direkt über das Firebase-Projekt','Websuche (Rezeptideen) nutzt jetzt Gemini-Grounding mit Google-Suche über Vertex AI','Foto-, Link- und PDF-Import sowie Nährwert-Schätzung und Kochsession-KI auf Gemini umgestellt'], en:['Major update: replaced Anthropic Claude API with Google Gemini via Firebase AI Logic','No API key needed anymore – AI features run free directly through the Firebase project','Web search (recipe ideas) now uses Gemini grounding with Google Search via Vertex AI','Photo, link and PDF import as well as nutrition estimate and cooking session AI switched to Gemini'] },
+  { version:'3.1.3', date:'2026-07-17', de:['Fix: Foto-Storage-Token – nach jedem Foto-Upload wird die frische Download-URL sofort lokal übernommen (State + Cache) statt der alten zu vertrauen','Fix: Erstsync holt beim Zusammenführen frische Foto-URL, wenn eine Cloud-Version gewinnt (verhindert 404 nach Foto-Austausch auf anderem Gerät)'], en:['Fix: Photo storage token – after every photo upload, the fresh download URL is applied locally (state + cache) immediately instead of trusting the old one','Fix: Initial sync fetches a fresh photo URL when merging if the cloud version wins (prevents 404 after photo swap on another device)'] },
+  { version:'3.1.2', date:'2026-07-16', de:['Fix: Foto-Upload beim "Erzwinge Upload" läuft jetzt parallel statt nacheinander (schneller, weniger anfällig für Abbrüche)'], en:['Fix: Photo upload in "Force upload" now runs in parallel instead of sequentially (faster, less prone to interruption)'] },
   { version:'3.1.1', date:'2026-07-16', de:['Fix: Erstsync zeigt Rezepte sofort an, Fotos laden jetzt parallel statt nacheinander im Hintergrund nach (deutlich schneller, v.a. mobil)'], en:['Fix: Initial sync shows recipes immediately, photos now load in parallel instead of sequentially (much faster, especially on mobile)'] },
   { version:'3.1.0', date:'2026-07-16', de:['Getrennte Freigabe: Rezepte und Einkaufsliste können unabhängig voneinander geteilt werden','Einladungscodes zum Teilen mit anderen Nutzern','Freigabe jederzeit verlassbar (eigene Kopie der Daten bleibt erhalten)'], en:['Granular sharing: recipes and shopping list can be shared independently','Invite codes for sharing with other users','Leave a share anytime (keeps your own copy of the data)'] },
   { version:'3.0.0', date:'2026-07-16', de:['Großes Update: Login mit E-Mail/Passwort (Firebase Auth)','Rezepte, Kategorien & Einkaufsliste jetzt pro Nutzer isoliert in Firestore','Echtzeit-Sync über Live-Listener statt Polling (kein unnötiger Read-Verbrauch mehr)','Fotos werden über Firebase Storage statt als Base64 gespeichert'], en:['Major update: Email/password login (Firebase Auth)','Recipes, categories & shopping list now per-user isolated in Firestore','Real-time sync via live listeners instead of polling (no more unnecessary reads)','Photos now stored via Firebase Storage instead of Base64'] },
@@ -2620,13 +2753,10 @@ function renderDetail(app){
     try{
       const context=`Rezept: ${r.title}\nZutaten:\n${r.ingredients}\n\nZubereitung:\n${r.steps}`;
       const history=S.recipeChats[r.id].slice(-6).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,
-          system:`Du bist ein hilfreicher Kochassistent. Der Nutzer hat eine Frage zu folgendem Rezept:\n\n${context}\n\nBeantworte kurz und praktisch auf Deutsch.`,
-          messages:history})});
-      const d=await resp.json();
-      const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+      const txt=await window.geminiText({
+        feature:'chat_rezept',
+        system:`Du bist ein hilfreicher Kochassistent. Der Nutzer hat eine Frage zu folgendem Rezept:\n\n${context}\n\nBeantworte kurz und praktisch auf Deutsch.`,
+        messages:history});
       S.recipeChats[r.id].push({role:'ai',text:txt});
     }catch(e){S.recipeChats[r.id].push({role:'ai',text:'Fehler: '+e.message});}
     renderChatMsgs('detailChat',S.recipeChats[r.id]);
@@ -2706,25 +2836,20 @@ function renderForm(app){
     const servings=Number(document.getElementById('f-s')?.value)||4;
     const title=document.getElementById('f-t')?.value||'';
     if(!ingredients.trim()){document.getElementById('nutritionStatus').textContent='⚠ Bitte zuerst Zutaten eingeben.';return;}
-    if(!S.apiKey){document.getElementById('nutritionStatus').textContent='⚠ API Key in Einstellungen hinterlegen.';return;}
     const btn=document.getElementById('nutritionAiBtn');
     btn.textContent='⏳ Schätze…';btn.disabled=true;
     document.getElementById('nutritionStatus').textContent='';
     try{
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,
-          system:`Du bist ein präziser Ernährungsrechner. Berechne die Nährwerte PRO PORTION Schritt für Schritt:
+      const n=await window.geminiJSON({
+        feature:'naehrwerte',
+        system:`Du bist ein präziser Ernährungsrechner. Berechne die Nährwerte PRO PORTION Schritt für Schritt:
 1. Ermittle für jede Zutat die Kalorien und Makros anhand der exakten Menge
 2. Summiere alle Zutaten
 3. Teile durch ${servings} Portionen
-Antworte NUR mit JSON, kein Markdown, keine Erklärung: {"kcal":350,"protein":25,"carbs":40,"fat":12,"fiber":5,"salt":1.2}
+Antworte NUR mit JSON: {"kcal":350,"protein":25,"carbs":40,"fat":12,"fiber":5,"salt":1.2}
 Alle Werte gerundete Ganzzahlen außer Salz (eine Dezimalstelle).`,
-          messages:[{role:'user',content:`Rezept: ${title}\nPortionen: ${servings}\nZutaten:\n${ingredients}`}],
-          temperature:0})});
-      const d=await resp.json();
-      const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').replace(/```json?|```/g,'').trim();
-      const n=JSON.parse(txt);
+        contentParts:[{text:`Rezept: ${title}\nPortionen: ${servings}\nZutaten:\n${ingredients}`}],
+        temperature:0});
       document.getElementById('f-kcal').value=n.kcal||'';
       document.getElementById('f-prot').value=n.protein||'';
       document.getElementById('f-carb').value=n.carbs||'';
@@ -3033,14 +3158,10 @@ function renderSettings(app){
     </div>
     <div class="ss"><div class="st2">${t('set_ai')}</div>
       <div class="sr2" style="flex-direction:column;align-items:flex-start">
-        <div class="sl">${t('set_api_key')}</div>
-        <div class="ss2">${t('set_api_hint')}</div>
-        <div class="akw" style="width:100%">
-          <input class="aki" type="password" id="akinp" value="${esc(S.apiKey)}" placeholder="sk-ant-…">
-          <button class="ake" id="akshow">👁</button>
-        </div>
-        <div style="font-size:.72rem;color:var(--muted);margin-top:.35rem;font-family:var(--ui);font-style:italic">Key wird nur lokal auf diesem Gerät gespeichert.</div>
-        <button class="btn bp sm" style="margin-top:.6rem" onclick="saveKey2()">${t('btn_save_key')}</button>
+        <div class="sl">${S.lang==='en'?'✓ Built-in – no key needed':'✓ Eingebaut – kein Key nötig'}</div>
+        <div class="ss2">${S.lang==='en'?'AI features run via Google Gemini through this Firebase project. Nothing to set up.':'KI-Funktionen laufen über Google Gemini via dieses Firebase-Projekt. Nichts einzurichten.'}</div>
+        <button class="btn bg sm" style="margin-top:.6rem" id="aiStatsBtn">📊 ${S.lang==='en'?'Show AI usage':'KI-Nutzung anzeigen'}</button>
+        <div id="aiStatsBox" style="width:100%;margin-top:.6rem"></div>
       </div>
     </div>
     <div class="ss"><div class="st2">${t('set_edamam')}</div>
@@ -3292,8 +3413,29 @@ function renderSettings(app){
       toast('Backup wiederhergestellt ✓');render();
     }catch(err){alert('⚠ Fehler: '+err.message);}
   });
-  const ki=document.getElementById('akinp');
-  document.getElementById('akshow').addEventListener('click',()=>{ki.type=ki.type==='password'?'text':'password';});
+
+  document.getElementById('aiStatsBtn')?.addEventListener('click', async()=>{
+    const box=document.getElementById('aiStatsBox');
+    box.innerHTML=`<div style="font-family:var(--ui);font-size:.78rem;color:var(--muted)">⏳ Lädt…</div>`;
+    try{
+      const stats=await window.geminiUsageStats();
+      const featureNames={chat_rezept:'Rezept-Chat',naehrwerte:'Nährwerte',kochsession:'Kochsession',foto_import:'Foto-Import',link_import:'Link-Import',pdf_import:'PDF-Import',websuche:'Websuche',rezept_generieren:'Rezept generieren',chat_suche:'Suche-Rückfragen',import:'Import'};
+      const userRows=Object.entries(stats.byUser).sort((a,b)=>b[1]-a[1])
+        .map(([email,n])=>`<div style="display:flex;justify-content:space-between;padding:.25rem 0;font-size:.82rem"><span>${esc(email)}</span><strong>${n}</strong></div>`).join('');
+      const featRows=Object.entries(stats.byFeature).sort((a,b)=>b[1]-a[1])
+        .map(([f,n])=>`<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:.78rem;color:var(--muted)"><span>${esc(featureNames[f]||f)}</span><span>${n}</span></div>`).join('');
+      box.innerHTML=`
+        <div style="background:var(--surface2);border-radius:8px;padding:.7rem;font-family:var(--ui)">
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Gesamt: <strong>${stats.total}</strong> · Letzte 7 Tage: <strong>${stats.last7d}</strong> · Letzte 30 Tage: <strong>${stats.last30d}</strong></div>
+          <div style="font-weight:700;font-size:.78rem;margin-bottom:.2rem">Pro Nutzer</div>
+          ${userRows||'<div style="font-size:.78rem;color:var(--muted)">Noch keine Daten.</div>'}
+          <div style="font-weight:700;font-size:.78rem;margin:.6rem 0 .2rem">Pro Funktion</div>
+          ${featRows}
+        </div>`;
+    }catch(e){
+      box.innerHTML=`<div class="ierr">⚠️ Fehler beim Laden: ${esc(e.message)}</div>`;
+    }
+  });
 }
 
 // ══════════════ ACTIONS ══════════════
@@ -3708,23 +3850,13 @@ function threeOptionDialog(title, message, optYes, optNo, optCancel){
 }
 
 async function exportFullBackup(){
-  const keyChoice = S.apiKey
-    ? await threeOptionDialog(
-        'API Key ins Backup?',
-        'Soll der Anthropic API Key mit ins Backup aufgenommen werden?',
-        '✓ Ja, Key einschließen',
-        '✗ Nein, ohne Key',
-        'Abbrechen'
-      )
-    : 'no';
-  if(keyChoice==='cancel')return;
   const date=new Date().toISOString().slice(0,10);
   const defaultName='meine-rezepte-backup-'+date+'.json';
   showSaveDialog(defaultName, filename=>{
     const backup={
       __backup:true, version:1, exportedAt:Date.now(),
       recipes:S.recipes,
-      settings:{dark:S.dark, apiKey:keyChoice==='yes'?S.apiKey:'', customCats:S.customCats, customCatColors:S.customCatColors, customShopCats:S.customShopCats, edamamAppId:S.edamamAppId, edamamAppKey:S.edamamAppKey}
+      settings:{dark:S.dark, customCats:S.customCats, customCatColors:S.customCatColors, customShopCats:S.customShopCats, edamamAppId:S.edamamAppId, edamamAppKey:S.edamamAppKey}
     };
     doSave(filename, JSON.stringify(backup,null,2));
   });
@@ -4468,12 +4600,6 @@ function buildSmartTimeline(recipes){
 }
 
 async function buildAITimeline(session, recipes){
-  if(!S.apiKey){
-    toast('Kein API-Key – Mehr → Einstellungen → Claude API Key eintragen','err');
-    session.mode='manual';
-    await startSession(session.id);
-    return;
-  }
   const app=document.getElementById('app');
   app.innerHTML=`<div style="padding:3rem 1.5rem;text-align:center">
     <div style="font-size:2rem;margin-bottom:1rem">✨</div>
@@ -4519,19 +4645,7 @@ Antworte NUR mit validem JSON, kein weiterer Text:
 }`;
 
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:4000,
-        messages:[{role:'user',content:prompt}]
-      })
-    });
-    const data=await res.json();
-    const text=data.content?.find(c=>c.type==='text')?.text||'';
-    const clean=text.replace(/```json|```/g,'').trim();
-    const parsed=JSON.parse(clean);
+    const parsed=await window.geminiJSON({feature:'kochsession',contentParts:[{text:prompt}]});
     // Add recipeId and done fields
     session.timeline={
       steps:parsed.steps.map((s,i)=>{
@@ -4545,10 +4659,6 @@ Antworte NUR mit validem JSON, kein weiterer Text:
     let msg='KI-Fehler: '+e.message;
     if(e.message==='Failed to fetch'||e.message.includes('NetworkError')||e.message.includes('network')){
       msg='Kein Internetzugang – bitte Verbindung prüfen';
-    } else if(!S.apiKey){
-      msg='Kein API-Key eingetragen – Mehr → Einstellungen → Claude API Key';
-    } else {
-      msg='KI-Fehler – API Key unter Einstellungen prüfen ('+e.message+')';
     }
     toast(msg,'err');
     session.mode='manual';
@@ -4890,28 +5000,13 @@ function addImport(r){
   saveR();S.view='list';render();
 }
 
-async function callClaude(messages){
-  if(!S.apiKey){alert('Bitte zuerst den API Key in den Einstellungen speichern.');return null;}
-  const resp=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'x-api-key':S.apiKey,
-      'anthropic-version':'2023-06-01',
-      'anthropic-dangerous-direct-browser-access':'true'   // ← CORS-Fix für Browser
-    },
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1024,
-      system:`Du bist ein Rezept-Extraktor. Antworte NUR mit einem JSON-Objekt, kein Markdown, keine Erklärungen.
+async function callClaude(contentParts, feature){
+  return await window.geminiJSON({
+    feature: feature||'import',
+    system:`Du bist ein Rezept-Extraktor. Antworte NUR mit einem JSON-Objekt.
 Format: {"title":"string","category":"Frühstück|Suppen|Pasta & Nudeln|Fleisch & Fisch|Vegetarisch|Salate|Desserts|Backen|Sonstiges","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Tipps oder leer","tags":["Tag1"]}`,
-      messages})
+    contentParts
   });
-  if(!resp.ok){
-    const err=await resp.json().catch(()=>({}));
-    throw new Error('API-Fehler '+resp.status+(err.error?.message?': '+err.error.message:'. Bitte API Key prüfen.'));
-  }
-  const d=await resp.json();
-  const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-  return JSON.parse(txt.replace(/```json?/g,'').replace(/```/g,'').trim());
 }
 
 // Photo import (multi-image)
@@ -4940,10 +5035,10 @@ document.getElementById('photoAnalyze').addEventListener('click',async function(
   const images=this._images;if(!images?.length)return;
   showLoad('photoRes');this.style.display='none';
   try{
-    // Build message with all images + instruction
-    const content=images.map(img=>({type:'image',source:{type:'base64',media_type:img.mime,data:img.data.split(',')[1]}}));
-    content.push({type:'text',text:`Diese ${images.length} Bild${images.length!==1?'er':'r'} zeigen zusammen ein Rezept (z.B. verschiedene Seiten oder Fotos). Extrahiere daraus ein vollständiges Rezept und kombiniere alle Informationen. Falls Text nicht lesbar ist, nutze den sichtbaren Inhalt.`});
-    const r=await callClaude([{role:'user',content}]);
+    // Build content parts mit allen Bildern + Anweisung
+    const content=images.map(img=>({image:{data:img.data,mime:img.mime}}));
+    content.push({text:`Diese ${images.length} Bild${images.length!==1?'er':'r'} zeigen zusammen ein Rezept (z.B. verschiedene Seiten oder Fotos). Extrahiere daraus ein vollständiges Rezept und kombiniere alle Informationen. Falls Text nicht lesbar ist, nutze den sichtbaren Inhalt.`});
+    const r=await callClaude(content,'foto_import');
     r?showPrev('photoRes','photoAdd',r):showErr('photoRes','Kein Rezept erkannt.');
   }catch(e){showErr('photoRes',e.message);}
 });
@@ -4996,7 +5091,7 @@ document.getElementById('urlFetch').addEventListener('click',async()=>{
     const text=(div.innerText||div.textContent||'').replace(/\s+/g,' ').slice(0,6000);
     if(!text.trim())throw new Error('Kein lesbarer Inhalt auf der Seite gefunden.');
 
-    const r=await callClaude([{role:'user',content:'Extrahiere das Rezept aus diesem Text:\n\n'+text}]);
+    const r=await callClaude([{text:'Extrahiere das Rezept aus diesem Text:\n\n'+text}],'link_import');
     r?showPrev('urlRes','urlAdd',r):showErr('urlRes','Kein Rezept auf dieser Seite gefunden.');
   }catch(e){showErr('urlRes',e.message||'Unbekannter Fehler.');}
 });
@@ -5025,10 +5120,10 @@ document.getElementById('pdfAnalyze').addEventListener('click',async function(){
       binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));
     }
     const b64=btoa(binary);
-    const r=await callClaude([{role:'user',content:[
-      {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
-      {type:'text',text:'Extrahiere das Rezept aus diesem PDF. Gib nur ein einziges Rezept zurück.'}
-    ]}]);
+    const r=await callClaude([
+      {pdf:{data:b64,mime:'application/pdf'}},
+      {text:'Extrahiere das Rezept aus diesem PDF. Gib nur ein einziges Rezept zurück.'}
+    ],'pdf_import');
     r?showPrev('pdfRes','pdfAdd',r):showErr('pdfRes','Kein Rezept erkannt.');
   }catch(e){showErr('pdfRes',e.message);}
 });
@@ -5100,50 +5195,19 @@ document.getElementById('jsonFolderFile').addEventListener('change',e=>importJso
 document.querySelectorAll('.itab').forEach(t=>t.addEventListener('click',()=>swTab(t.dataset.tab)));
 
 // ══════════════ AI SEARCH ══════════════
-async function callClaudeSearch(userPrompt,messages){
-  if(!S.apiKey){alert('Bitte zuerst den API Key in den Einstellungen speichern.');return null;}
-  if(!messages)messages=[{role:'user',content:userPrompt}];
-  let resp=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({
-      model:'claude-sonnet-4-20250514',max_tokens:2048,
-      tools:[{type:'web_search_20250305',name:'web_search'}],
-      system:`Du bist ein Rezept-Assistent. Der Nutzer sucht Rezeptideen. 
+async function callClaudeSearch(userPrompt,contentParts){
+  if(!contentParts)contentParts=[{text:userPrompt}];
+  return await window.geminiSearch({
+    feature:'websuche',
+    system:`Du bist ein Rezept-Assistent. Der Nutzer sucht Rezeptideen.
 Suche im Internet nach passenden Rezepten und schlage 2-3 konkrete Rezepte vor.
 Für das beste Ergebnis antworte am Ende IMMER mit einem JSON-Block im Format:
 <rezepte>
 [{"title":"...","category":"...","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Quelle: ...","tags":["Tag"]}]
 </rezepte>
 Davor kannst du kurz auf Deutsch erklären was du gefunden hast.`,
-      messages
-    })
+    contentParts
   });
-  if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error('API-Fehler '+resp.status+(e.error?.message?': '+e.error.message:''));}
-  let data=await resp.json();
-
-  // Handle tool_use loop (web search needs follow-up)
-  while(data.stop_reason==='tool_use'){
-    const toolUses=data.content.filter(b=>b.type==='tool_use');
-    const toolResults=toolUses.map(t=>({type:'tool_result',tool_use_id:t.id,content:'Suche wurde ausgeführt.'}));
-    messages.push({role:'assistant',content:data.content});
-    messages.push({role:'user',content:toolResults});
-    resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2048,tools:[{type:'web_search_20250305',name:'web_search'}],system:messages[0]?.system||'',messages:messages.slice(1)})
-    });
-    if(!resp.ok)break;
-    data=await resp.json();
-  }
-
-  const txt=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-  // Extract JSON block and explanation text separately
-  const jsonMatch=txt.match(/<rezepte>([\s\S]*?)<\/rezepte>/);
-  const explanation=txt.replace(/<rezepte>[\s\S]*?<\/rezepte>/g,'').trim();
-  let recipes=[];
-  if(jsonMatch){try{recipes=JSON.parse(jsonMatch[1].trim());}catch{}}
-  return{explanation,recipes};
 }
 
 function renderAISearch(app){
@@ -5198,31 +5262,18 @@ async function runAISearch(useWeb,images=[]){
     const photoPrompt=hasPhotos?`Ich habe ${images.length} Foto${images.length!==1?'s':''} von meinen verfügbaren Zutaten hochgeladen. `:'';
     const fullQuery=photoPrompt+(query||'Schlage ein passendes Rezept vor.');
     if(useWeb){
-      let messages;
-      if(hasPhotos){
-        const content=images.map(img=>({type:'image',source:{type:'base64',media_type:img.mime,data:img.data.split(',')[1]}}));
-        content.push({type:'text',text:fullQuery});
-        messages=[{role:'user',content}];
-      } else {
-        messages=[{role:'user',content:fullQuery}];
-      }
-      result=await callClaudeSearch(fullQuery,messages);
+      const content=hasPhotos
+        ?[...images.map(img=>({image:{data:img.data,mime:img.mime}})),{text:fullQuery}]
+        :[{text:fullQuery}];
+      result=await callClaudeSearch(fullQuery,content);
     } else {
       const content=hasPhotos
-        ?[...images.map(img=>({type:'image',source:{type:'base64',media_type:img.mime,data:img.data.split(',')[1]}})),{type:'text',text:'Erstelle ein Rezept für: '+fullQuery}]
-        :[{type:'text',text:'Erstelle ein Rezept für: '+fullQuery}];
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,
-          system:`Erstelle ein detailliertes Rezept. Antworte mit einem Intro-Satz dann:\n<rezepte>\n[{"title":"...","category":"Frühstück|Suppen|Pasta & Nudeln|Fleisch & Fisch|Vegetarisch|Salate|Desserts|Backen|Sonstiges","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Tipps","tags":["Tag"]}]\n</rezepte>`,
-          messages:[{role:'user',content}]})});
-      if(!resp.ok)throw new Error('API-Fehler '+resp.status);
-      const d=await resp.json();
-      const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-      const jsonMatch=txt.match(/<rezepte>([\s\S]*?)<\/rezepte>/);
-      const explanation=txt.replace(/<rezepte>[\s\S]*?<\/rezepte>/g,'').trim();
-      let recipes=[];if(jsonMatch){try{recipes=JSON.parse(jsonMatch[1].trim());}catch{}}
-      result={explanation,recipes};
+        ?[...images.map(img=>({image:{data:img.data,mime:img.mime}})),{text:'Erstelle ein Rezept für: '+fullQuery}]
+        :[{text:'Erstelle ein Rezept für: '+fullQuery}];
+      result=await window.geminiRecipeBlock({
+        feature:'rezept_generieren',
+        system:`Erstelle ein detailliertes Rezept. Antworte mit einem Intro-Satz dann:\n<rezepte>\n[{"title":"...","category":"Frühstück|Suppen|Pasta & Nudeln|Fleisch & Fisch|Vegetarisch|Salate|Desserts|Backen|Sonstiges","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Tipps","tags":["Tag"]}]\n</rezepte>`,
+        contentParts:content});
     }
     S.aiSearchResults=result;
     renderAIResults(result.explanation,result.recipes);
@@ -5286,13 +5337,10 @@ function renderAIResults(explanation,recipes){
     try{
       const context=recipes.map((r,i)=>`${i+1}. ${r.title}: ${r.ingredients?.slice(0,200)}`).join('\n');
       const history=S.aiSearchChat.slice(-6).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,
-          system:`Du bist ein Kochassistent. Der Nutzer hat folgende Rezeptvorschläge erhalten:\n\n${context}\n\nBeantworte Fragen dazu kurz auf Deutsch.`,
-          messages:history})});
-      const d=await resp.json();
-      const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+      const txt=await window.geminiText({
+        feature:'chat_suche',
+        system:`Du bist ein Kochassistent. Der Nutzer hat folgende Rezeptvorschläge erhalten:\n\n${context}\n\nBeantworte Fragen dazu kurz auf Deutsch.`,
+        messages:history});
       S.aiSearchChat.push({role:'ai',text:txt});
     }catch(e){S.aiSearchChat.push({role:'ai',text:'Fehler: '+e.message});}
     renderChatMsgs('aiChat',S.aiSearchChat);
@@ -5410,7 +5458,7 @@ function renderImportPage(app){
   });
   document.getElementById('photoAnalyze2').addEventListener('click',async function(){
     const images=this._images;if(!images?.length)return;showL2('photoRes2');this.style.display='none';
-    try{const content=images.map(img=>({type:'image',source:{type:'base64',media_type:img.mime,data:img.data.split(',')[1]}}));content.push({type:'text',text:`Diese ${images.length} Bilder zeigen zusammen ein Rezept. Extrahiere daraus ein vollständiges Rezept.`});const r=await callClaude([{role:'user',content}]);r?showP2('photoRes2','photoAdd2',r):showE2('photoRes2','Kein Rezept erkannt.');}catch(e){showE2('photoRes2',e.message);}
+    try{const content=images.map(img=>({image:{data:img.data,mime:img.mime}}));content.push({text:`Diese ${images.length} Bilder zeigen zusammen ein Rezept. Extrahiere daraus ein vollständiges Rezept.`});const r=await callClaude(content,'foto_import');r?showP2('photoRes2','photoAdd2',r):showE2('photoRes2','Kein Rezept erkannt.');}catch(e){showE2('photoRes2',e.message);}
   });
   document.getElementById('photoAdd2').addEventListener('click',()=>{if(pg_pending)addImp2(pg_pending);});
 
@@ -5429,7 +5477,7 @@ function renderImportPage(app){
       const div=document.createElement('div');div.innerHTML=html;
       div.querySelectorAll('script,style,nav,footer,header,aside').forEach(el=>el.remove());
       const text=(div.innerText||div.textContent||'').replace(/\s+/g,' ').slice(0,6000);
-      const r=await callClaude([{role:'user',content:'Extrahiere das Rezept:\n\n'+text}]);
+      const r=await callClaude([{text:'Extrahiere das Rezept:\n\n'+text}],'link_import');
       r?showP2('urlRes2','urlAdd2',r):showE2('urlRes2','Kein Rezept gefunden.');
     }catch(e){showE2('urlRes2',e.message);}
   });
@@ -5444,7 +5492,7 @@ function renderImportPage(app){
   document.getElementById('pdfAnalyze2').addEventListener('click',async function(){
     const f=this._file;if(!f)return;showL2('pdfRes2');this.style.display='none';
     try{const ab=await f.arrayBuffer();const bytes=new Uint8Array(ab);let bin='';const ch=8192;for(let i=0;i<bytes.length;i+=ch)bin+=String.fromCharCode(...bytes.subarray(i,Math.min(i+ch,bytes.length)));const b64=btoa(bin);
-    const r=await callClaude([{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:'Extrahiere das Rezept aus diesem PDF.'}]}]);
+    const r=await callClaude([{pdf:{data:b64,mime:'application/pdf'}},{text:'Extrahiere das Rezept aus diesem PDF.'}],'pdf_import');
     r?showP2('pdfRes2','pdfAdd2',r):showE2('pdfRes2','Kein Rezept erkannt.');}catch(e){showE2('pdfRes2',e.message);}
   });
   document.getElementById('pdfAdd2').addEventListener('click',()=>{if(pg_pending)addImp2(pg_pending);});
