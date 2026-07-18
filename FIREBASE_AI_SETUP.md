@@ -45,14 +45,22 @@ Stattdessen den Debug-Provider nutzen:
 3. Firebase Console → **Security → App Check → Apps** → eure App → **⋮ → Manage debug tokens** → Token eintragen
 4. **Wichtig:** Vor dem Commit/Deploy die Zeile wieder auskommentieren! Nie mit `true` live gehen.
 
-## 5. Vertex AI aktivieren (nur für Websuche-Funktion nötig)
+## 5. Vertex AI aktivieren (Pflicht – nicht mehr optional!)
 
-Die "Im Internet suchen"-Funktion nutzt Google-Suche-Grounding, das nur über
-den Vertex-AI-Provider verfügbar ist (nutzt euer vorhandenes Blaze-Guthaben):
+**Update Juli 2026:** Google hat die Gemini Developer API im März 2026 auf ein separates
+Prepaid-Guthaben umgestellt. Sobald auf einem Google-Cloud-Projekt Billing aktiv ist (bei euch
+der Fall, ihr seid auf Blaze), gibt es dort keinen kostenlosen Gemini-Modus mehr – jeder Call
+würde ein leeres, nie aufgeladenes Prepay-Wallet ansprechen und mit
+"Your prepayment credits are depleted" fehlschlagen.
+
+Deshalb läuft jetzt **alles** über Vertex AI statt der Gemini Developer API – Vertex AI bucht
+normal gegen euer bestehendes Cloud-Billing (Blaze-Guthaben), nicht gegen das separate Prepay-Wallet:
 
 1. Firebase Console → **AI Logic** → **Vertex AI Gemini API** einrichten
    (Link erscheint im AI-Logic-Dashboard, "Set up Vertex AI Gemini API")
 2. Das ist bei euch unkompliziert, da ihr schon auf **Blaze** mit Guthaben seid – keine neue Kreditkarte nötig
+3. Kosten sind minimal (Gemini Flash: Bruchteile eines Cents pro Anfrage) – bei privater Nutzung
+   zu zweit im Cent-Bereich pro Monat, leicht vom vorhandenen Guthaben gedeckt
 
 ## 6. Testen
 

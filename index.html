@@ -344,7 +344,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
     import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js';
-    import { getAI, getGenerativeModel, GoogleAIBackend, VertexAIBackend } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-ai.js';
+    import { getAI, getGenerativeModel, VertexAIBackend } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-ai.js';
 
     // TODO Andre (nur lokale Entwicklung, NIE in Produktion aktiv lassen / NIE committen):
     // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
@@ -363,10 +363,10 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       isTokenAutoRefreshEnabled: true
     });
 
-    // Gemini Developer API (kostenlos, kein Billing nötig) – Text/Bild/PDF/JSON
-    const aiFree = getAI(fbApp, { backend: new GoogleAIBackend() });
-    // Vertex AI Gemini API (nutzt vorhandenes Blaze-Guthaben) – nur für Websuche/Grounding
-    const aiVertex = getAI(fbApp, { backend: new VertexAIBackend() });
+    // Alles läuft über Vertex AI Gemini API – bucht gegen euer normales Google-Cloud-Billing
+    // (Blaze-Guthaben), NICHT gegen das separate "Gemini Developer API"-Prepay-Wallet, das seit
+    // März 2026 für Projekte mit aktiviertem Billing ohnehin keinen kostenlosen Modus mehr bietet.
+    const ai = getAI(fbApp, { backend: new VertexAIBackend() });
 
     const GEMINI_MODEL = 'gemini-2.5-flash';
 
@@ -412,7 +412,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     // Reiner Chat-Text (System-Prompt + Verlauf) – für Rezept-Chat & KI-Suche-Rückfragen
     window.geminiText = async function({system, messages, feature}){
       logAIUsage(feature);
-      const model = getGenerativeModel(aiFree, {model:GEMINI_MODEL, systemInstruction:system||undefined});
+      const model = getGenerativeModel(ai, {model:GEMINI_MODEL, systemInstruction:system||undefined});
       const contents = messages.map(m=>({role: m.role==='user'?'user':'model', parts:[{text:m.content}]}));
       const result = await model.generateContent({contents});
       return result.response.text();
@@ -421,7 +421,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     // Reines JSON-Ergebnis – für Extraktion (Foto/Link/PDF), Nährwerte, Kochsession-Zeitplan
     window.geminiJSON = async function({system, contentParts, temperature, feature}){
       logAIUsage(feature);
-      const model = getGenerativeModel(aiFree, {
+      const model = getGenerativeModel(ai, {
         model:GEMINI_MODEL,
         systemInstruction:system||undefined,
         generationConfig:{temperature: temperature??1, responseMimeType:'application/json'}
@@ -433,7 +433,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     // Freitext + optionaler <rezepte>-JSON-Block – für "Rezept generieren"
     window.geminiRecipeBlock = async function({system, contentParts, feature}){
       logAIUsage(feature);
-      const model = getGenerativeModel(aiFree, {model:GEMINI_MODEL, systemInstruction:system||undefined});
+      const model = getGenerativeModel(ai, {model:GEMINI_MODEL, systemInstruction:system||undefined});
       const result = await model.generateContent(toParts(contentParts));
       const txt = result.response.text();
       const jsonMatch = txt.match(/<rezepte>([\s\S]*?)<\/rezepte>/);
@@ -445,7 +445,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
     // Websuche mit Grounding (Vertex AI, nutzt Blaze-Guthaben) – für "Im Internet suchen"
     window.geminiSearch = async function({system, contentParts, feature}){
       logAIUsage(feature);
-      const model = getGenerativeModel(aiVertex, {
+      const model = getGenerativeModel(ai, {
         model:GEMINI_MODEL,
         systemInstruction:system||undefined,
         tools:[{googleSearch:{}}]
@@ -1336,9 +1336,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.3.1';
+const APP_VERSION = '3.3.2';
 const APP_DATE = '2026-07-18';
 const VERSION_HISTORY = [
+  { version:'3.3.2', date:'2026-07-18', de:['Fix: "Prepayment credits depleted" Fehler – Google hat die Gemini Developer API im März 2026 auf ein separates Prepaid-Modell umgestellt, das bei aktiviertem Billing keinen Gratis-Modus mehr bietet','Alle KI-Funktionen laufen jetzt einheitlich über Vertex AI Gemini API und buchen gegen das vorhandene Blaze-Guthaben statt gegen ein leeres Prepay-Wallet'], en:['Fix: "Prepayment credits depleted" error – Google switched the Gemini Developer API to a separate prepaid model in March 2026 that no longer offers a free mode once billing is enabled','All AI features now uniformly use the Vertex AI Gemini API and bill against the existing Blaze credit instead of an empty prepay wallet'] },
   { version:'3.3.1', date:'2026-07-18', de:['Fix: KI-Funktionen warfen "No Firebase App has been created" – Compat- und Modul-Skript teilten sich fälschlich keine gemeinsame App-Registrierung, jetzt eigene initializeApp() im AI-Modul'], en:['Fix: AI features threw "No Firebase App has been created" – compat and module script did not actually share an app registry, now uses its own initializeApp() in the AI module'] },
   { version:'3.3.0', date:'2026-07-18', de:['Neu: In-App-Kochtimer – Zeit-Badge bei Zubereitungsschritten antippen startet einen Timer','Timer läuft als schwebendes Widget weiter, übersteht App-Wechsel/Minimieren und sogar Neuladen der Seite','Bei Ablauf: Sound, Vibration, Systembenachrichtigung und In-App-Hinweis','Vorbereitet für native Android-Benachrichtigungen (Local Notifications), falls das Plugin später ergänzt wird'], en:['New: in-app cooking timer – tap a step\'s time badge to start a timer','Timer keeps running as a floating widget, survives app switching/minimizing and even page reloads','On completion: sound, vibration, system notification and in-app alert','Prepared for native Android notifications (Local Notifications) if the plugin is added later'] },
   { version:'3.2.2', date:'2026-07-18', de:['Fix: KI-Funktionen liefen ins Leere, weil Firebase-SDK-Version (10.14.1) zu alt für AI Logic war','Alle Firebase-CDN-Referenzen (App, Auth, Firestore, Storage, AI Logic, App Check) auf aktuelle Version 12.16.0 angehoben'], en:['Fix: AI features silently failed because Firebase SDK version (10.14.1) was too old for AI Logic','All Firebase CDN references (App, Auth, Firestore, Storage, AI Logic, App Check) bumped to current version 12.16.0'] },
