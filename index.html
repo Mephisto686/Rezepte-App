@@ -403,9 +403,12 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       }
     }
 
-    // Lädt alle Nutzungs-Logs und aggregiert sie (für die Statistik-Ansicht in den Einstellungen)
+    // Lädt Nutzungs-Logs und aggregiert sie (für die Statistik-Ansicht in den Einstellungen).
+    // Admin sieht alle Nutzer, normale Nutzer sehen (per Firestore-Regel erzwungen) nur ihre eigenen.
     window.geminiUsageStats = async function(){
-      const snap = await fbDb.collection('aiUsage').get();
+      const isAdminUser=S.user&&typeof ADMIN_UID!=='undefined'&&S.user.uid===ADMIN_UID;
+      const query=isAdminUser?fbDb.collection('aiUsage'):fbDb.collection('aiUsage').where('uid','==',S.user.uid);
+      const snap=await query.get();
       const byUser={}, byFeature={};
       let total=0, last7d=0, last30d=0;
       const now=Date.now(), d7=now-7*86400000, d30=now-30*86400000;
@@ -417,7 +420,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
         if(d.ts>=d7)last7d++;
         if(d.ts>=d30)last30d++;
       });
-      return {total,last7d,last30d,byUser,byFeature};
+      return {total,last7d,last30d,byUser,byFeature,isAdminUser};
     };
 
     // Reiner Chat-Text (System-Prompt + Verlauf) – für Rezept-Chat & KI-Suche-Rückfragen
@@ -649,12 +652,12 @@ const S={
   view:'list', recipes:[], shopping:[], selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
-  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, sessions:[], activeSession:null, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
-  user:null, authReady:false, authError:'', authMode:'signin', authBusy:false,
+  scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, sessions:[], activeSession:null, lang:'de', apiKey:'',  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
+  user:null, authReady:false, authError:'', authMode:'signin', authBusy:false, authResetSent:false,
   recipeGroupId:null, shoppingGroupId:null, groupsReady:false,
   userDoc:null, userDocReady:false,
   shareBusy:false, shareError:{recipes:'',shopping:''}, lastInviteCode:{recipes:'',shopping:''},
-  groupMemberCount:{recipes:1,shopping:1}, joinCodeInput:{recipes:'',shopping:''},
+  groupMemberCount:{recipes:1,shopping:1}, groupMemberEmails:{recipes:[],shopping:[]}, joinCodeInput:{recipes:'',shopping:''},
 };
 
 // ══════════════ PERSISTENCE ══════════════
@@ -766,10 +769,7 @@ async function migrateIfNeeded(){
 async function load(){
   // Load small settings from localStorage (they're tiny, stay there)
   try{S.apiKey=localStorage.getItem('mrak')||'';}catch{}
-  try{S.edamamAppId=localStorage.getItem('mredid')||'';}catch{}
   try{S.lang=localStorage.getItem('mrlang')||'de';}catch{}
-  try{S.edamamAppKey=localStorage.getItem('mredk')||'';}catch{}
-  try{S.edamamEnabled=localStorage.getItem('mredamen')==='1';}catch{}
   // (Firebase RTDB settings removed – replaced by Firebase Auth + Firestore)
   
   try{S.plannerView=localStorage.getItem('mrpv')||'today';}catch{}
@@ -1048,8 +1048,8 @@ async function ensureUserGroups(){
       // Neuer Nutzer: zwei private Gruppen anlegen, standardmäßig NICHT freigeschaltet
       const recipeGroupId=fbDb.collection('groups').doc().id;
       const shoppingGroupId=fbDb.collection('groups').doc().id;
-      await fsGroupRef(recipeGroupId).set({type:'recipes',members:[fsUid()],ownerId:fsUid(),createdAt:Date.now()});
-      await fsGroupRef(shoppingGroupId).set({type:'shopping',members:[fsUid()],ownerId:fsUid(),createdAt:Date.now()});
+      await fsGroupRef(recipeGroupId).set({type:'recipes',members:[fsUid()],memberEmails:{[fsUid()]:S.user.email},ownerId:fsUid(),createdAt:Date.now()});
+      await fsGroupRef(shoppingGroupId).set({type:'shopping',members:[fsUid()],memberEmails:{[fsUid()]:S.user.email},ownerId:fsUid(),createdAt:Date.now()});
       const newUserData={email:S.user.email,recipeGroupId,shoppingGroupId,createdAt:Date.now(),approved:false,aiEnabled:false};
       await fsUserRef().set(newUserData);
       S.recipeGroupId=recipeGroupId;
@@ -1069,6 +1069,8 @@ async function ensureUserGroups(){
     S.groupsReady=true;
   }catch(e){console.warn('ensureUserGroups failed:',e);}
   S.userDocReady=true;
+  // "Zuletzt online" aktualisieren (fire-and-forget, blockiert nichts)
+  try{fsUserRef().update({lastSeen:Date.now()}).catch(()=>{});}catch{}
 }
 
 function groupIdField(type){return type==='shopping'?'shoppingGroupId':'recipeGroupId';}
@@ -1104,6 +1106,8 @@ async function redeemInvite(type,code){
     // Erst der Zielgruppe beitreten (erlaubt über "addingSelfOnly" auch ohne bisherige Mitgliedschaft) –
     // erst DANACH darf laut Sicherheitsregeln überhaupt in ihre Unter-Collections geschrieben werden.
     await fsGroupRef(targetGroupId).update({members:firebase.firestore.FieldValue.arrayUnion(fsUid())});
+    // Eigene E-Mail für die Mitglieder-Anzeige hinterlegen (andere dürfen fremde /users-Dokumente nicht lesen)
+    await fsGroupRef(targetGroupId).update({['memberEmails.'+fsUid()]:S.user.email});
 
     if(type==='recipes'){
       // Eigene Rezepte + Kategorien in die Zielgruppe mitnehmen (mergen)
@@ -1166,7 +1170,7 @@ async function leaveShare(type){
   try{
     const oldGroupId=type==='shopping'?S.shoppingGroupId:S.recipeGroupId;
     const newGroupId=fbDb.collection('groups').doc().id;
-    await fsGroupRef(newGroupId).set({type,members:[fsUid()],ownerId:fsUid(),createdAt:Date.now()});
+    await fsGroupRef(newGroupId).set({type,members:[fsUid()],memberEmails:{[fsUid()]:S.user.email},ownerId:fsUid(),createdAt:Date.now()});
 
     if(type==='recipes'){
       const snap=await fsGroupRef(oldGroupId).collection('recipes').get();
@@ -1201,17 +1205,30 @@ async function leaveShare(type){
   S.shareBusy=false;renderApp();
 }
 
-async function fetchGroupMemberCount(type){
+async function fetchGroupMembers(type){
   try{
     const groupId=type==='shopping'?S.shoppingGroupId:S.recipeGroupId;
-    if(!groupId)return 1;
+    if(!groupId)return {count:1,emails:[]};
     const doc=await fsGroupRef(groupId).get();
-    return doc.exists?(doc.data().members||[]).length:1;
-  }catch{return 1;}
+    if(!doc.exists)return {count:1,emails:[]};
+    const data=doc.data();
+    const members=data.members||[];
+    const memberEmails=data.memberEmails||{};
+    // Selbstreparatur: falls die eigene E-Mail dort noch fehlt (z.B. Gruppen von vor diesem Feature),
+    // einmalig nachtragen – fire-and-forget, kein Blocker für die Anzeige.
+    if(members.includes(fsUid())&&!memberEmails[fsUid()]&&S.user?.email){
+      fsGroupRef(groupId).update({['memberEmails.'+fsUid()]:S.user.email}).catch(()=>{});
+      memberEmails[fsUid()]=S.user.email;
+    }
+    const emails=members.map(uid=>memberEmails[uid]||(uid===fsUid()?S.user.email:null)).filter(Boolean);
+    return {count:members.length,emails};
+  }catch{return {count:1,emails:[]};}
 }
 async function refreshMemberCounts(){
-  S.groupMemberCount.recipes=await fetchGroupMemberCount('recipes');
-  S.groupMemberCount.shopping=await fetchGroupMemberCount('shopping');
+  const r=await fetchGroupMembers('recipes');
+  const s=await fetchGroupMembers('shopping');
+  S.groupMemberCount.recipes=r.count;S.groupMemberEmails.recipes=r.emails;
+  S.groupMemberCount.shopping=s.count;S.groupMemberEmails.shopping=s.emails;
   if(S.view==='settings')renderApp();
 }
 
@@ -1286,6 +1303,7 @@ async function fsInitialSync(){
 
 function renderShareSection(type,icon,label){
   const count=S.groupMemberCount[type]||1;
+  const emails=S.groupMemberEmails[type]||[];
   const isShared=count>1;
   const code=S.lastInviteCode[type];
   const err=S.shareError[type];
@@ -1296,6 +1314,9 @@ function renderShareSection(type,icon,label){
           ? (S.lang==='en'?`Shared with ${count} people`:`Geteilt mit ${count} Personen`)
           : (S.lang==='en'?'Private – only you':'Privat – nur du')}
       </div>
+      ${isShared&&emails.length?`<div style="margin-bottom:.6rem">
+        ${emails.map(e=>`<div style="font-size:.78rem;color:var(--text2);font-family:var(--ui);padding:.15rem 0">👤 ${esc(e)}${e===S.user.email?' <span style="color:var(--muted)">(du)</span>':''}</div>`).join('')}
+      </div>`:''}
       ${err?`<div style="color:var(--danger);font-size:.78rem;margin-bottom:.5rem;font-family:var(--ui)">⚠ ${esc(err)}</div>`:''}
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.7rem">
         <button class="btn bg sm" ${S.shareBusy?'disabled':''} onclick="createInvite('${type}')">${S.lang==='en'?'Generate invite code':'Einladungscode erzeugen'}</button>
@@ -1312,12 +1333,6 @@ function renderShareSection(type,icon,label){
     </div>`;
 }
 
-function saveEdamam(){
-  S.edamamAppId=(document.getElementById('edamamId')?.value||'').trim();
-  S.edamamAppKey=(document.getElementById('edamamKey')?.value||'').trim();
-  try{localStorage.setItem('mredid',S.edamamAppId);localStorage.setItem('mredk',S.edamamAppKey);}catch{}
-  toast(t('toast_keys_saved'));
-}
 function saveDark(){try{localStorage.setItem('mrdm',S.dark?'1':'0');}catch{}}
 function saveCats(){try{localStorage.setItem('mrcats',JSON.stringify(S.customCats));localStorage.setItem('mrcatcol',JSON.stringify(S.customCatColors));}catch{}touchCats();}
 function touchCats(){
@@ -1334,17 +1349,17 @@ const LANG={
   de:{
     nav_recipes:'Rezepte',nav_favorites:'Favoriten',nav_ai:'KI-Suche',nav_import:'Import',nav_list:'Liste',nav_more:'Mehr',
     hdr_recipes:'🍳 Meine Rezepte',hdr_new:'Neues Rezept',hdr_edit:'Bearbeiten',hdr_shopping:'🛒 Einkaufsliste',hdr_ai:'✨ KI-Rezeptsuche',hdr_import:'📥 Importieren',hdr_settings:'⚙️ Einstellungen',hdr_saving:'Speichern…',
-    btn_save:'Speichern',btn_cancel:'Abbrechen',btn_delete:'Löschen',btn_export:'Export',btn_import:'Import',btn_close:'Schließen',btn_reset:'Zurücksetzen',btn_compress:'Komprimieren',btn_add_cat:'+ Neue Kategorie',btn_default:'↺ Standard',btn_save_key:'Key speichern',btn_save_keys:'Keys speichern',btn_save_tags:'Speichern',btn_manage:'🏷 Zuweisungen verwalten',btn_ai_est:'✨ KI schätzen',btn_edamam:'🥗 Edamam',
+    btn_save:'Speichern',btn_cancel:'Abbrechen',btn_delete:'Löschen',btn_export:'Export',btn_import:'Import',btn_close:'Schließen',btn_reset:'Zurücksetzen',btn_compress:'Komprimieren',btn_add_cat:'+ Neue Kategorie',btn_default:'↺ Standard',btn_save_key:'Key speichern',btn_save_keys:'Keys speichern',btn_save_tags:'Speichern',btn_manage:'🏷 Zuweisungen verwalten',btn_ai_est:'✨ KI schätzen',
     det_portions:'Portionen',det_portion:'Portion',det_portions_pl:'Portionen',det_ingredients:'Zutaten',det_steps:'Zubereitung',det_notes:'📝 Notizen',det_experiences:'📓 Erfahrungen',det_no_exp:'Noch keine Erfahrungen eingetragen.',det_nutrition:'Nährwerte pro Portion',det_not_cooked:'🍽 Noch nicht zubereitet',det_cooked:'✅ Schon zubereitet',det_prep:'🔪 Vorbereitung',det_cook:'🍳 Kochzeit',det_total:'⏱ Gesamt',det_min:'Min.',det_reset_steps:'Zurücksetzen',det_selected:'ausgewählt',det_shop_arrow:'🛒 In Einkaufsliste →',
     nut_kcal:'kcal',nut_protein:'Eiweiß',nut_carbs:'Kohlenhydr.',nut_fat:'Fett',nut_fiber:'Ballaststoffe',nut_salt:'Salz',
     form_title:'Titel',form_category:'Kategorie',form_servings:'Portionen',form_prep:'Vorbereitungszeit (Min.)',form_cook:'Kochzeit (Min.)',form_ingredients:'Zutaten',form_ing_hint:'Eine Zutat pro Zeile, z.B. 200g Mehl',form_steps:'Zubereitung',form_steps_hint:'Einen Schritt pro Zeile',form_tags:'Tags',form_tag_add:'Tag hinzufügen…',form_photo:'Foto',form_photo_change:'📷 Foto ändern',form_photo_add:'📷 Foto hinzufügen',form_photo_remove:'Foto entfernen',form_nutrition:'Nährwerte (pro Portion)',form_nut_auto:'Werden automatisch anhand der Zutaten geschätzt',form_notes:'Notizen / Tipps (optional)',form_notes_hint:'Schmeckt am nächsten Tag noch besser!',form_favorite:'Favorit',form_cooked:'Zubereitet',
     flt_title:'Filter',flt_reset:'Zurücksetzen',flt_close:'Schließen',flt_favs:'❤️ Favoriten',flt_favs_only:'Nur Favoriten',flt_rating:'★ Mindestbewertung',flt_all:'Alle',flt_status:'🍽 Status',flt_not_cooked:'Noch nicht zubereitet',flt_cooked:'Schon zubereitet',flt_time:'⏱ Gesamtzeit',flt_cats:'📂 Kategorien',flt_tags:'🏷 Tags',flt_tag_search:'Tag suchen…',
     sh_empty:'Einkaufsliste ist leer.',sh_add_ph:'Produkt hinzufügen…',sh_copy:'📋 Kopieren',sh_clear_done:'Erledigte löschen',sh_clear_all:'Alle löschen',sh_from:'aus:',sh_open:'offen',sh_done_lbl:'Erledigt',sh_pick_title:'Zutaten zur Einkaufsliste',sh_pick_confirm:'Hinzufügen',sh_edit_title:'Eintrag bearbeiten',sh_auto_detect:'↺ Automatisch erkennen',
-    set_tags:'🏷 Tags',set_tags_hint:'Tippe einen Tag um ihn umzubenennen. ✕ zum Löschen.',set_no_tags:'Noch keine Tags vorhanden.',set_cats:'📂 Kategorien',set_cats_hint:'Ziehen zum Sortieren · Farbe tippen · ✕ zum Löschen',set_display:'Darstellung',set_dark:'🌙 Dark Mode',set_wakelock:'💡 Bildschirm aktiv halten',set_wakelock_hint:'Verhindert das Ausschalten beim Kochen',set_lang:'🌐 Sprache / Language',set_ai:'KI-Import (Foto & Link)',set_api_key:'Anthropic API Key',set_api_hint:'Benötigt für Foto- und Link-Import',set_api_local:'Key wird nur lokal auf diesem Gerät gespeichert.',set_edamam:'Edamam Nährwert-Datenbank',set_edamam_hint:'Kostenfrei bis 400 Anfragen/Monat. Keys werden nur lokal gespeichert.',set_data:'Daten',set_compress:'🗜 Fotos komprimieren',set_compress_hint:'Spart Speicherplatz – Qualität bleibt gut',set_backup:'📦 Vollständiges Backup',set_backup_hint:'Rezepte + Einstellungen + Kategorien',set_shop_cats:'🏷 Einkaufskategorien',set_shop_cats_hint:'Alle Zuweisungen exportieren / importieren',set_delete_all:'🗑 Alle Rezepte löschen',set_delete_hint:'Nicht rückgängig zu machen',set_footer:'Meine Rezepte · Alle Daten lokal gespeichert',
+    set_tags:'🏷 Tags',set_tags_hint:'Tippe einen Tag um ihn umzubenennen. ✕ zum Löschen.',set_no_tags:'Noch keine Tags vorhanden.',set_cats:'📂 Kategorien',set_cats_hint:'Ziehen zum Sortieren · Farbe tippen · ✕ zum Löschen',set_display:'Darstellung',set_dark:'🌙 Dark Mode',set_wakelock:'💡 Bildschirm aktiv halten',set_wakelock_hint:'Verhindert das Ausschalten beim Kochen',set_lang:'🌐 Sprache / Language',set_ai:'KI-Import (Foto & Link)',set_api_key:'Anthropic API Key',set_api_hint:'Benötigt für Foto- und Link-Import',set_api_local:'Key wird nur lokal auf diesem Gerät gespeichert.',set_data:'Daten',set_compress:'🗜 Fotos komprimieren',set_compress_hint:'Spart Speicherplatz – Qualität bleibt gut',set_backup:'📦 Vollständiges Backup',set_backup_hint:'Rezepte + Einstellungen + Kategorien',set_shop_cats:'🏷 Einkaufskategorien',set_shop_cats_hint:'Alle Zuweisungen exportieren / importieren',set_delete_all:'🗑 Alle Rezepte löschen',set_delete_hint:'Nicht rückgängig zu machen',set_footer:'Meine Rezepte · Alle Daten lokal gespeichert',
     list_search:'Titel oder Zutat…',list_filter:'🔽 Filter',list_sort:'⠿ Sortieren',list_sort_done:'⠿ Fertig',list_select:'☑ Auswählen',list_select_done:'✕ Fertig',list_empty:'Noch keine Rezepte. Tippe + um zu starten!',list_no_results:'Keine Rezepte gefunden.',
     ai_placeholder:'Was möchtest du kochen?',ai_search:'Suchen',ai_searching:'Suche läuft…',
     confirm_del:'Rezept wirklich löschen?',confirm_del_all:'Alle Rezepte wirklich löschen?',confirm_reset_cats:'Kategorien auf Standard zurücksetzen?',
-    toast_saved:'Gespeichert ✓',toast_deleted:'Gelöscht',toast_copied:'Kopiert ✓',toast_tags_saved:'Tags gespeichert ✓',toast_cats_saved:'Kategorien gespeichert ✓',toast_backup_ok:'Backup wiederhergestellt ✓',toast_keys_saved:'Edamam Keys gespeichert ✓',
+    toast_saved:'Gespeichert ✓',toast_deleted:'Gelöscht',toast_copied:'Kopiert ✓',toast_tags_saved:'Tags gespeichert ✓',toast_cats_saved:'Kategorien gespeichert ✓',toast_backup_ok:'Backup wiederhergestellt ✓',
     step_promote:'↑ Titel',step_demote:'↓ Schritt',
     no_photos:'Keine Fotos vorhanden.',photos_compressed:'Fotos komprimiert ✓',
     recipe_count_single:'Rezept',recipe_count_plural:'Rezepte',
@@ -1352,17 +1367,17 @@ const LANG={
   en:{
     nav_recipes:'Recipes',nav_favorites:'Favorites',nav_ai:'AI Search',nav_import:'Import',nav_list:'List',nav_more:'More',
     hdr_recipes:'🍳 My Recipes',hdr_new:'New Recipe',hdr_edit:'Edit',hdr_shopping:'🛒 Shopping List',hdr_ai:'✨ AI Recipe Search',hdr_import:'📥 Import',hdr_settings:'⚙️ Settings',hdr_saving:'Saving…',
-    btn_save:'Save',btn_cancel:'Cancel',btn_delete:'Delete',btn_export:'Export',btn_import:'Import',btn_close:'Close',btn_reset:'Reset',btn_compress:'Compress',btn_add_cat:'+ New Category',btn_default:'↺ Default',btn_save_key:'Save Key',btn_save_keys:'Save Keys',btn_save_tags:'Save',btn_manage:'🏷 Manage Assignments',btn_ai_est:'✨ AI Estimate',btn_edamam:'🥗 Edamam',
+    btn_save:'Save',btn_cancel:'Cancel',btn_delete:'Delete',btn_export:'Export',btn_import:'Import',btn_close:'Close',btn_reset:'Reset',btn_compress:'Compress',btn_add_cat:'+ New Category',btn_default:'↺ Default',btn_save_key:'Save Key',btn_save_keys:'Save Keys',btn_save_tags:'Save',btn_manage:'🏷 Manage Assignments',btn_ai_est:'✨ AI Estimate',
     det_portions:'Servings',det_portion:'Serving',det_portions_pl:'Servings',det_ingredients:'Ingredients',det_steps:'Instructions',det_notes:'📝 Notes',det_experiences:'📓 Experiences',det_no_exp:'No experiences recorded yet.',det_nutrition:'Nutrition per Serving',det_not_cooked:'🍽 Not yet cooked',det_cooked:'✅ Already cooked',det_prep:'🔪 Prep',det_cook:'🍳 Cook time',det_total:'⏱ Total',det_min:'min.',det_reset_steps:'Reset',det_selected:'selected',det_shop_arrow:'🛒 Add to Shopping List →',
     nut_kcal:'kcal',nut_protein:'Protein',nut_carbs:'Carbs',nut_fat:'Fat',nut_fiber:'Fiber',nut_salt:'Salt',
     form_title:'Title',form_category:'Category',form_servings:'Servings',form_prep:'Prep time (min)',form_cook:'Cook time (min)',form_ingredients:'Ingredients',form_ing_hint:'One ingredient per line, e.g. 200g flour',form_steps:'Instructions',form_steps_hint:'One step per line',form_tags:'Tags',form_tag_add:'Add tag…',form_photo:'Photo',form_photo_change:'📷 Change photo',form_photo_add:'📷 Add photo',form_photo_remove:'Remove photo',form_nutrition:'Nutrition (per serving)',form_nut_auto:'Estimated automatically from ingredients',form_notes:'Notes / Tips (optional)',form_notes_hint:'Tastes even better the next day!',form_favorite:'Favorite',form_cooked:'Cooked',
     flt_title:'Filter',flt_reset:'Reset',flt_close:'Close',flt_favs:'❤️ Favorites',flt_favs_only:'Favorites only',flt_rating:'★ Min. rating',flt_all:'All',flt_status:'🍽 Status',flt_not_cooked:'Not yet cooked',flt_cooked:'Already cooked',flt_time:'⏱ Total time',flt_cats:'📂 Categories',flt_tags:'🏷 Tags',flt_tag_search:'Search tags…',
     sh_empty:'Shopping list is empty.',sh_add_ph:'Add product…',sh_copy:'📋 Copy',sh_clear_done:'Remove done',sh_clear_all:'Clear all',sh_from:'from:',sh_open:'open',sh_done_lbl:'Done',sh_pick_title:'Add Ingredients to List',sh_pick_confirm:'Add',sh_edit_title:'Edit item',sh_auto_detect:'↺ Auto detect',
-    set_tags:'🏷 Tags',set_tags_hint:'Tap a tag to rename it. ✕ to delete.',set_no_tags:'No tags yet.',set_cats:'📂 Categories',set_cats_hint:'Drag to sort · Tap color · ✕ to delete',set_display:'Display',set_dark:'🌙 Dark Mode',set_wakelock:'💡 Keep screen awake',set_wakelock_hint:'Prevents screen off while cooking',set_lang:'🌐 Language / Sprache',set_ai:'AI Import (Photo & Link)',set_api_key:'Anthropic API Key',set_api_hint:'Required for photo and link import',set_api_local:'Key is stored locally on this device only.',set_edamam:'Edamam Nutrition Database',set_edamam_hint:'Free up to 400 requests/month. Keys stored locally only.',set_data:'Data',set_compress:'🗜 Compress photos',set_compress_hint:'Saves storage – quality stays good',set_backup:'📦 Full Backup',set_backup_hint:'Recipes + Settings + Categories',set_shop_cats:'🏷 Shopping Categories',set_shop_cats_hint:'Export / import all assignments',set_delete_all:'🗑 Delete all recipes',set_delete_hint:'Cannot be undone',set_footer:'My Recipes · All data stored locally',
+    set_tags:'🏷 Tags',set_tags_hint:'Tap a tag to rename it. ✕ to delete.',set_no_tags:'No tags yet.',set_cats:'📂 Categories',set_cats_hint:'Drag to sort · Tap color · ✕ to delete',set_display:'Display',set_dark:'🌙 Dark Mode',set_wakelock:'💡 Keep screen awake',set_wakelock_hint:'Prevents screen off while cooking',set_lang:'🌐 Language / Sprache',set_ai:'AI Import (Photo & Link)',set_api_key:'Anthropic API Key',set_api_hint:'Required for photo and link import',set_api_local:'Key is stored locally on this device only.',set_data:'Data',set_compress:'🗜 Compress photos',set_compress_hint:'Saves storage – quality stays good',set_backup:'📦 Full Backup',set_backup_hint:'Recipes + Settings + Categories',set_shop_cats:'🏷 Shopping Categories',set_shop_cats_hint:'Export / import all assignments',set_delete_all:'🗑 Delete all recipes',set_delete_hint:'Cannot be undone',set_footer:'My Recipes · All data stored locally',
     list_search:'Title or ingredient…',list_filter:'🔽 Filter',list_sort:'⠿ Sort',list_sort_done:'⠿ Done',list_select:'☑ Select',list_select_done:'✕ Done',list_empty:'No recipes yet. Tap + to get started!',list_no_results:'No recipes found.',
     ai_placeholder:'What do you want to cook?',ai_search:'Search',ai_searching:'Searching…',
     confirm_del:'Really delete this recipe?',confirm_del_all:'Delete all recipes? This cannot be undone.',confirm_reset_cats:'Reset categories to default?',
-    toast_saved:'Saved ✓',toast_deleted:'Deleted',toast_copied:'Copied ✓',toast_tags_saved:'Tags saved ✓',toast_cats_saved:'Categories saved ✓',toast_backup_ok:'Backup restored ✓',toast_keys_saved:'Edamam keys saved ✓',
+    toast_saved:'Saved ✓',toast_deleted:'Deleted',toast_copied:'Copied ✓',toast_tags_saved:'Tags saved ✓',toast_cats_saved:'Categories saved ✓',toast_backup_ok:'Backup restored ✓',
     step_promote:'↑ Header',step_demote:'↓ Step',
     no_photos:'No photos found.',photos_compressed:'Photos compressed ✓',
     recipe_count_single:'Recipe',recipe_count_plural:'Recipes',
@@ -1371,9 +1386,11 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.4.2';
+const APP_VERSION = '3.5.0';
 const APP_DATE = '2026-07-18';
 const VERSION_HISTORY = [
+  { version:'3.5.0', date:'2026-07-18', de:['Neu: "Passwort vergessen?" auf dem Anmelde-Bildschirm (verschickt Reset-Mail über Firebase Auth)','Fix/Sicherheit: KI-Nutzungsstatistik zeigt normalen Nutzern nur noch die eigenen Daten, nicht mehr die aller Nutzer','Admin-Nutzerverwaltung zeigt jetzt zusätzlich "Zuletzt online" und KI-Aufrufe pro Nutzer','Neu: Geteilte Rezepte/Einkaufsliste zeigen jetzt die E-Mail-Adressen der Mitglieder statt nur die Anzahl'], en:['New: "Forgot password?" on the sign-in screen (sends a reset email via Firebase Auth)','Fix/security: AI usage stats now only show regular users their own data, not everyone\\u2019s','Admin user management now also shows "last online" and AI calls per user','New: shared recipes/shopping list now show member email addresses instead of just a count'] },
+  { version:'3.4.3', date:'2026-07-18', de:['Edamam Nährwert-Datenbank komplett entfernt (nicht genutzt, kostenpflichtig)'], en:['Removed Edamam nutrition database entirely (unused, paid service)'] },
   { version:'3.4.2', date:'2026-07-18', de:['Fix: Einladungscode einlösen schlug mit "Missing or insufficient permissions" fehl – App versuchte Rezepte in die Zielgruppe zu kopieren, bevor die Mitgliedschaft dort bestand. Reihenfolge korrigiert (erst beitreten, dann Daten mitnehmen)','Fix: Alte Fehlermeldung beim Einladungscode-Erzeugen blieb nach erfolgreichem Versuch stehen'], en:['Fix: Redeeming an invite code failed with "Missing or insufficient permissions" – app tried to copy recipes into the target group before membership existed there. Fixed order (join first, then bring data)','Fix: stale error message when generating an invite code stuck around after a successful attempt'] },
   { version:'3.4.1', date:'2026-07-18', de:['Neu: E-Mail-Benachrichtigung an den Admin bei jeder Neuregistrierung (via Firebase "Trigger Email" Extension)'], en:['New: email notification to the admin on every new registration (via Firebase "Trigger Email" extension)'] },
   { version:'3.4.0', date:'2026-07-18', de:['Neu: Admin-Rolle – neue Registrierungen brauchen jetzt Freischaltung durch den Admin, bevor sie die App nutzen können','Admin kann pro Nutzer separat die KI-Funktionen erlauben/sperren','Neuer Bereich in den Einstellungen (nur für Admin sichtbar): Nutzerverwaltung mit Freischalt- und KI-Schaltern','Bestandskonten bleiben automatisch freigeschaltet, keine Unterbrechung'], en:['New: admin role – new registrations now require approval by the admin before they can use the app','Admin can separately allow/block AI features per user','New section in settings (admin-only): user management with approval and AI toggles','Existing accounts remain approved automatically, no disruption'] },
@@ -1677,13 +1694,27 @@ function renderAuthScreen(){
       <input type="email" id="authEmail" placeholder="E-Mail" autocomplete="email" style="width:100%;padding:.7rem .9rem;margin-bottom:.6rem;border:1px solid var(--border2);border-radius:10px;background:var(--surface);color:var(--text);font-family:var(--ui);font-size:.95rem;outline:none">
       <input type="password" id="authPw" placeholder="Passwort (min. 6 Zeichen)" autocomplete="${isSignup?'new-password':'current-password'}" style="width:100%;padding:.7rem .9rem;margin-bottom:.9rem;border:1px solid var(--border2);border-radius:10px;background:var(--surface);color:var(--text);font-family:var(--ui);font-size:.95rem;outline:none">
       ${S.authError?`<div style="color:var(--danger);font-size:.8rem;margin-bottom:.7rem;font-family:var(--ui)">⚠ ${esc(S.authError)}</div>`:''}
+      ${S.authResetSent?`<div style="color:var(--ok);font-size:.8rem;margin-bottom:.7rem;font-family:var(--ui)">✓ E-Mail zum Zurücksetzen wurde verschickt (falls das Konto existiert).</div>`:''}
       <button id="authSubmit" ${S.authBusy?'disabled':''} style="width:100%;padding:.75rem;border:none;border-radius:10px;background:var(--accent);color:#fff;font-family:var(--ui);font-weight:700;font-size:.95rem;cursor:pointer;opacity:${S.authBusy?.6:1}">${S.authBusy?'…':(isSignup?'Konto erstellen':'Anmelden')}</button>
+      ${!isSignup?`<button id="authForgotPw" style="width:100%;background:none;border:none;color:var(--muted);font-family:var(--ui);font-size:.8rem;margin-top:.7rem;cursor:pointer;text-decoration:underline">Passwort vergessen?</button>`:''}
     </div>
   </div>`;
-  document.getElementById('authTabSignin').onclick=()=>{S.authMode='signin';S.authError='';render();};
-  document.getElementById('authTabSignup').onclick=()=>{S.authMode='signup';S.authError='';render();};
+  document.getElementById('authTabSignin').onclick=()=>{S.authMode='signin';S.authError='';S.authResetSent=false;render();};
+  document.getElementById('authTabSignup').onclick=()=>{S.authMode='signup';S.authError='';S.authResetSent=false;render();};
   document.getElementById('authSubmit').onclick=submitAuth;
   document.getElementById('authPw').addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth();});
+  document.getElementById('authForgotPw')?.addEventListener('click',async()=>{
+    const email=(document.getElementById('authEmail')?.value||'').trim();
+    if(!email){S.authError='Bitte zuerst deine E-Mail-Adresse oben eintragen.';render();return;}
+    S.authBusy=true;S.authError='';S.authResetSent=false;render();
+    try{
+      await fbAuth.sendPasswordResetEmail(email);
+      S.authResetSent=true;
+    }catch(e){
+      S.authError=authErrorMsg(e);
+    }
+    S.authBusy=false;render();
+  });
 }
 
 async function submitAuth(){
@@ -2878,7 +2909,7 @@ function renderForm(app){
         <div class="fl" style="display:flex;align-items:center;justify-content:space-between">
           <span>${t('form_nutrition')}</span>
           <div style="display:flex;gap:.4rem">
-            ${S.edamamEnabled?`<button id="nutritionEdamamBtn" class="btn bg sm" style="font-size:.72rem" title="Edamam Nährwert-Datenbank">${t('btn_edamam')}</button>`:''}
+            
             <button id="nutritionAiBtn" class="btn bp sm" style="font-size:.72rem">${t('btn_ai_est')}</button>
           </div>
         </div>
@@ -2928,51 +2959,6 @@ Alle Werte gerundete Ganzzahlen außer Salz (eine Dezimalstelle).`,
       document.getElementById('nutritionStatus').style.color='var(--danger)';
     }
     btn.textContent='✨ KI schätzen';btn.disabled=false;
-  });
-
-  // ── Edamam Nährwert-Button ──
-  document.getElementById('nutritionEdamamBtn')?.addEventListener('click', async()=>{
-    const btn=document.getElementById('nutritionEdamamBtn');
-    const status=document.getElementById('nutritionStatus');
-    const ingredients=(document.getElementById('f-ing')?.value||'').trim();
-    const servings=parseInt(document.getElementById('f-srv')?.value||'1')||1;
-    if(!ingredients){status.textContent='⚠ Bitte zuerst Zutaten eingeben.';return;}
-    if(!S.edamamAppId||!S.edamamAppKey){
-      status.textContent='⚠ Edamam App ID & Key in den Einstellungen hinterlegen.';
-      status.style.color='var(--danger)';return;
-    }
-    btn.textContent='⏳ Lädt…';btn.disabled=true;
-    status.textContent='';
-    try{
-      const ingLines=ingredients.split('\n').map(l=>l.trim()).filter(Boolean);
-      const body={title:document.getElementById('f-ti')?.value||'Rezept',ingr:ingLines};
-      const url=`https://api.edamam.com/api/nutrition-details?app_id=${encodeURIComponent(S.edamamAppId)}&app_key=${encodeURIComponent(S.edamamAppKey)}`;
-      const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      if(!resp.ok){
-        const err=await resp.json().catch(()=>({}));
-        throw new Error(err.message||'Edamam Fehler '+resp.status);
-      }
-      const d=await resp.json();
-      const tot=d.totalNutrients||{};
-      const cal=Math.round((d.calories||0)/servings);
-      const prot=Math.round((tot.PROCNT?.quantity||0)/servings);
-      const carb=Math.round((tot.CHOCDF?.quantity||0)/servings);
-      const fat=Math.round((tot.FAT?.quantity||0)/servings);
-      const fiber=Math.round((tot.FIBTG?.quantity||0)/servings);
-      const salt=Math.round((tot.NA?.quantity||0)/servings*0.00254*10)/10; // mg Na → g Salz
-      document.getElementById('f-kcal').value=cal||'';
-      document.getElementById('f-prot').value=prot||'';
-      document.getElementById('f-carb').value=carb||'';
-      document.getElementById('f-fat').value=fat||'';
-      document.getElementById('f-fiber').value=fiber||'';
-      document.getElementById('f-salt').value=salt||'';
-      status.textContent='✓ Edamam-Datenbank – exakte Berechnung.';
-      status.style.color='var(--ok)';
-    }catch(e){
-      status.textContent='⚠ '+e.message;
-      status.style.color='var(--danger)';
-    }
-    btn.textContent='🥗 Edamam';btn.disabled=false;
   });
 
   document.getElementById('boldBtn')?.addEventListener('click',()=>{
@@ -3237,17 +3223,6 @@ function renderSettings(app){
         </div>
       </div>
     </div>`:''}
-    <div class="ss"><div class="st2">${t('set_edamam')}</div>
-      <div class="sr2">
-        <div><div class="sl">${t('set_edamam')}</div><div class="ss2">${S.lang==='en'?'Paid subscription required (from $49/month) · <a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a>':'Kostenpflichtiges Abo (ab $49/Monat) · <a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a>'}</div></div>
-        <button class="tgl${S.edamamEnabled?' on':''}" id="edamamtgl"></button>
-      </div>
-      ${S.edamamEnabled?`<div class="sr2" style="flex-direction:column;align-items:flex-start;margin-top:.3rem">
-        <input class="aki" type="text" id="edamamId" value="${esc(S.edamamAppId)}" placeholder="App ID" style="width:100%">
-        <input class="aki" type="password" id="edamamKey" value="${esc(S.edamamAppKey)}" placeholder="App Key" style="margin-top:.4rem;width:100%">
-        <button class="btn bg sm" style="margin-top:.5rem" onclick="saveEdamam()">${t('btn_save_keys')}</button>
-      </div>`:''}
-    </div>
     <div class="ss"><div class="st2">🔄 ${S.lang==='en'?'Account & Sync':'Konto & Synchronisation'}</div>
       <div class="sr2" style="margin-bottom:.3rem">
         <div>
@@ -3429,11 +3404,6 @@ function renderSettings(app){
 
   document.getElementById('dtgl').addEventListener('click',()=>{S.dark=!S.dark;saveDark();applyTheme();renderApp();});
   document.getElementById('wltgl')?.addEventListener('click',()=>toggleWakeLock());
-  document.getElementById('edamamtgl')?.addEventListener('click',()=>{
-    S.edamamEnabled=!S.edamamEnabled;
-    try{localStorage.setItem('mredamen',S.edamamEnabled?'1':'0');}catch{}
-    renderApp();
-  });
   document.getElementById('backupImportBtn')?.addEventListener('click',()=>document.getElementById('backupFile')?.click());
   document.getElementById('shopCatsImportBtn')?.addEventListener('click',()=>document.getElementById('shopCatsFile')?.click());
   document.getElementById('shopCatsFile')?.addEventListener('change',async e=>{
@@ -3480,8 +3450,6 @@ function renderSettings(app){
         if(data.settings.apiKey){S.apiKey=data.settings.apiKey;saveKey();}
         if(data.settings.customCats!==undefined){S.customCats=data.settings.customCats;S.customCatColors=data.settings.customCatColors||{};saveCats();}
         if(data.settings.customShopCats){S.customShopCats=data.settings.customShopCats;try{localStorage.setItem('mrcatcol',JSON.stringify(S.customShopCats));}catch{}}
-        if(data.settings.edamamAppId){S.edamamAppId=data.settings.edamamAppId;try{localStorage.setItem('mredid',S.edamamAppId);}catch{}}
-        if(data.settings.edamamAppKey){S.edamamAppKey=data.settings.edamamAppKey;try{localStorage.setItem('mredk',S.edamamAppKey);}catch{}}
       }
       toast('Backup wiederhergestellt ✓');render();
     }catch(err){alert('⚠ Fehler: '+err.message);}
@@ -3500,10 +3468,10 @@ function renderSettings(app){
       box.innerHTML=`
         <div style="background:var(--surface2);border-radius:8px;padding:.7rem;font-family:var(--ui)">
           <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Gesamt: <strong>${stats.total}</strong> · Letzte 7 Tage: <strong>${stats.last7d}</strong> · Letzte 30 Tage: <strong>${stats.last30d}</strong></div>
-          <div style="font-weight:700;font-size:.78rem;margin-bottom:.2rem">Pro Nutzer</div>
-          ${userRows||'<div style="font-size:.78rem;color:var(--muted)">Noch keine Daten.</div>'}
-          <div style="font-weight:700;font-size:.78rem;margin:.6rem 0 .2rem">Pro Funktion</div>
-          ${featRows}
+          ${stats.isAdminUser?`<div style="font-weight:700;font-size:.78rem;margin-bottom:.2rem">Pro Nutzer</div>
+          ${userRows||'<div style="font-size:.78rem;color:var(--muted)">Noch keine Daten.</div>'}`:''}
+          <div style="font-weight:700;font-size:.78rem;margin:.6rem 0 .2rem">Pro Funktion${stats.isAdminUser?'':' (deine Nutzung)'}</div>
+          ${featRows||'<div style="font-size:.78rem;color:var(--muted)">Noch keine Daten.</div>'}
         </div>`;
     }catch(e){
       box.innerHTML=`<div class="ierr">⚠️ Fehler beim Laden: ${esc(e.message)}</div>`;
@@ -3515,21 +3483,38 @@ function renderSettings(app){
   }
 }
 
+function formatLastSeen(ts){
+  if(!ts)return 'nie';
+  const diff=Date.now()-ts;
+  if(diff<60000)return 'gerade eben';
+  if(diff<3600000)return 'vor '+Math.floor(diff/60000)+' Min.';
+  if(diff<86400000)return 'vor '+Math.floor(diff/3600000)+' Std.';
+  if(diff<7*86400000)return 'vor '+Math.floor(diff/86400000)+' Tagen';
+  return new Date(ts).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+
 async function loadAdminUsers(){
   const box=document.getElementById('adminUsersBox');
   if(!box)return;
   try{
-    const snap=await fbDb.collection('users').get();
+    const [usersSnap,aiSnap]=await Promise.all([
+      fbDb.collection('users').get(),
+      fbDb.collection('aiUsage').get()
+    ]);
+    const aiCountByUid={};
+    aiSnap.forEach(doc=>{const uid=doc.data().uid;aiCountByUid[uid]=(aiCountByUid[uid]||0)+1;});
     const users=[];
-    snap.forEach(doc=>users.push({uid:doc.id,...doc.data()}));
+    usersSnap.forEach(doc=>users.push({uid:doc.id,...doc.data()}));
     users.sort((a,b)=>(a.email||'').localeCompare(b.email||''));
     if(!users.length){box.innerHTML='<div style="font-family:var(--ui);font-size:.82rem;color:var(--muted)">Keine Nutzer gefunden.</div>';return;}
     box.innerHTML=users.map(u=>{
       const isSelf=u.uid===ADMIN_UID;
       const approved=u.approved!==false; // fehlt = als freigeschaltet behandelt (Bestandskonten)
       const aiEnabled=u.aiEnabled!==false;
+      const aiCount=aiCountByUid[u.uid]||0;
       return `<div style="border:1px solid var(--border2);border-radius:10px;padding:.6rem .8rem;margin-bottom:.5rem;width:100%">
-        <div style="font-weight:700;font-size:.85rem;margin-bottom:.4rem;font-family:var(--ui)">${esc(u.email||u.uid)}${isSelf?' <span style="font-weight:400;color:var(--muted)">(du, Admin)</span>':''}</div>
+        <div style="font-weight:700;font-size:.85rem;margin-bottom:.2rem;font-family:var(--ui)">${esc(u.email||u.uid)}${isSelf?' <span style="font-weight:400;color:var(--muted)">(du, Admin)</span>':''}</div>
+        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-bottom:.4rem">Zuletzt online: ${formatLastSeen(u.lastSeen)} · KI-Aufrufe gesamt: ${aiCount}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0">
           <span style="font-size:.8rem;font-family:var(--ui)">Freigeschaltet</span>
           <button class="tgl${approved?' on':''}" data-uid="${esc(u.uid)}" data-field="approved" ${isSelf?'disabled style="opacity:.4"':''}></button>
@@ -3977,7 +3962,7 @@ async function exportFullBackup(){
     const backup={
       __backup:true, version:1, exportedAt:Date.now(),
       recipes:S.recipes,
-      settings:{dark:S.dark, customCats:S.customCats, customCatColors:S.customCatColors, customShopCats:S.customShopCats, edamamAppId:S.edamamAppId, edamamAppKey:S.edamamAppKey}
+      settings:{dark:S.dark, customCats:S.customCats, customCatColors:S.customCatColors, customShopCats:S.customShopCats}
     };
     doSave(filename, JSON.stringify(backup,null,2));
   });

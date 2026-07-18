@@ -86,10 +86,9 @@ service cloud.firestore {
     }
 
     // KI-Nutzungsstatistik: jeder eingeloggte Nutzer darf eigene Einträge anlegen (nie ändern/löschen)
-    // und alle Einträge lesen (für die Statistik-Ansicht in den Einstellungen – bewusst offen,
-    // da aktuell nur wenige, einander bekannte Nutzer die App teilen).
+    // und NUR seine eigenen Einträge lesen. Der Admin darf alle lesen (Nutzerverwaltungs-Dashboard).
     match /aiUsage/{logId} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && (isAdmin() || resource.data.uid == request.auth.uid);
       allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
