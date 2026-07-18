@@ -1,15 +1,19 @@
 rules_version = '2';
 
 // ══════════════════════════════════════════════════════════
-// Security Rules für die Rezept-App – Gruppen-Modell
+// Security Rules für die Rezept-App – Gruppen-Modell + Freischaltung
 //
 // Jeder Nutzer hat eine eigene Rezept-Gruppe und eine eigene
 // Einkaufslisten-Gruppe (Standard: privat, nur er selbst).
 // Über einen Einladungscode kann man einer bestehenden Gruppe
 // beitreten und teilt sich dann die Daten mit deren Mitgliedern.
 //
+// Neue Registrierungen sind standardmäßig NICHT freigeschaltet (approved:false)
+// und haben KI-Funktionen deaktiviert (aiEnabled:false), bis der Admin sie freischaltet.
+// Bestandskonten ohne diese Felder gelten als freigeschaltet (Abwärtskompatibilität).
+//
 // Struktur:
-//   /users/{uid}                     → { email, recipeGroupId, shoppingGroupId }
+//   /users/{uid}                     → { email, recipeGroupId, shoppingGroupId, approved, aiEnabled }
 //   /groups/{groupId}                → { type: 'recipes'|'shopping', members: [uid,...], ownerId }
 //   /groups/{groupId}/recipes/{id}
 //   /groups/{groupId}/meta/categories
@@ -20,6 +24,15 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == 'bgDIU86EH1T2CLYB7e3TrSN06rr1';
+    }
+    function isApproved() {
+      return isAdmin() || (
+        request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('approved', true) == true
+      );
+    }
     function isMember(data) {
       return request.auth != null && data != null && request.auth.uid in data.members;
     }
@@ -32,31 +45,44 @@ service cloud.firestore {
              && after.diff(before).affectedKeys().hasOnly(['members']);
     }
 
-    // Eigener Nutzer-Datensatz: nur der Nutzer selbst
+    // Eigener Nutzer-Datensatz: nur der Nutzer selbst (oder Admin) darf lesen.
+    // Neuanlage: approved/aiEnabled müssen false sein (kein Selbst-Freischalten).
+    // Update: der Nutzer selbst darf approved/aiEnabled NICHT ändern – nur der Admin.
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow create: if request.auth != null && request.auth.uid == userId
+                    && request.resource.data.approved == false
+                    && request.resource.data.aiEnabled == false;
+      allow update: if isAdmin()
+                    || (request.auth != null && request.auth.uid == userId
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['approved','aiEnabled']));
+      allow delete: if isAdmin();
     }
 
-    // Gruppen: lesen/schreiben nur für Mitglieder; beitreten/verlassen nur die eigene Mitgliedschaft
+    // Gruppen: lesen/schreiben nur für freigeschaltete Mitglieder.
+    // Anlegen bleibt ungated (nötig für den Signup-Flow, bevor der User-Doc mit approved:false existiert;
+    // erzeugt nur eine leere, private Gruppe – ohne Freischaltung kommt man nicht an Inhalte/Sync).
     match /groups/{groupId} {
-      allow read: if isMember(resource.data);
+      allow read: if isApproved() && isMember(resource.data);
       allow create: if request.auth != null && request.resource.data.members == [request.auth.uid];
-      allow update: if isMember(resource.data)
-                    || addingSelfOnly(resource.data, request.resource.data)
-                    || removingSelfOnly(resource.data, request.resource.data);
-      allow delete: if isMember(resource.data);
+      allow update: if isApproved() && (
+                      isMember(resource.data)
+                      || addingSelfOnly(resource.data, request.resource.data)
+                      || removingSelfOnly(resource.data, request.resource.data)
+                    );
+      allow delete: if isApproved() && isMember(resource.data);
 
-      // Rezepte, Kategorien, Einkaufsliste: nur für Gruppenmitglieder
+      // Rezepte, Kategorien, Einkaufsliste: nur für freigeschaltete Gruppenmitglieder
       match /{document=**} {
-        allow read, write: if isMember(get(/databases/$(database)/documents/groups/$(groupId)).data);
+        allow read, write: if isApproved() && isMember(get(/databases/$(database)/documents/groups/$(groupId)).data);
       }
     }
 
-    // Einladungscodes: jeder eingeloggte Nutzer darf lesen (zum Einlösen) und eigene erstellen
+    // Einladungscodes: jeder freigeschaltete Nutzer darf lesen (zum Einlösen) und eigene erstellen
     match /invites/{code} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.createdBy == request.auth.uid;
-      allow delete: if request.auth != null;
+      allow read: if isApproved();
+      allow create: if isApproved() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if isApproved();
     }
 
     // KI-Nutzungsstatistik: jeder eingeloggte Nutzer darf eigene Einträge anlegen (nie ändern/löschen)

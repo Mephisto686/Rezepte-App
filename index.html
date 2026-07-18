@@ -392,6 +392,17 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
       }catch{}
     }
 
+    // Wirft einen Fehler, falls der aktuelle Nutzer keine KI-Berechtigung hat (vom Admin gesetzt).
+    // Admin selbst ist immer erlaubt; fehlt das Feld ganz (ältere Konten), gilt es als erlaubt.
+    function checkAIAllowed(){
+      if(typeof S==='undefined')return;
+      const isAdminUser=S.user&&typeof ADMIN_UID!=='undefined'&&S.user.uid===ADMIN_UID;
+      if(isAdminUser)return;
+      if(S.userDoc&&S.userDoc.aiEnabled===false){
+        throw new Error('KI-Funktionen sind für deinen Account nicht freigeschaltet. Bitte einen Admin fragen.');
+      }
+    }
+
     // Lädt alle Nutzungs-Logs und aggregiert sie (für die Statistik-Ansicht in den Einstellungen)
     window.geminiUsageStats = async function(){
       const snap = await fbDb.collection('aiUsage').get();
@@ -411,6 +422,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 
     // Reiner Chat-Text (System-Prompt + Verlauf) – für Rezept-Chat & KI-Suche-Rückfragen
     window.geminiText = async function({system, messages, feature}){
+      checkAIAllowed();
       logAIUsage(feature);
       const model = getGenerativeModel(ai, {model:GEMINI_MODEL, systemInstruction:system||undefined});
       const contents = messages.map(m=>({role: m.role==='user'?'user':'model', parts:[{text:m.content}]}));
@@ -420,6 +432,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 
     // Reines JSON-Ergebnis – für Extraktion (Foto/Link/PDF), Nährwerte, Kochsession-Zeitplan
     window.geminiJSON = async function({system, contentParts, temperature, feature}){
+      checkAIAllowed();
       logAIUsage(feature);
       const model = getGenerativeModel(ai, {
         model:GEMINI_MODEL,
@@ -432,6 +445,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 
     // Freitext + optionaler <rezepte>-JSON-Block – für "Rezept generieren"
     window.geminiRecipeBlock = async function({system, contentParts, feature}){
+      checkAIAllowed();
       logAIUsage(feature);
       const model = getGenerativeModel(ai, {model:GEMINI_MODEL, systemInstruction:system||undefined});
       const result = await model.generateContent(toParts(contentParts));
@@ -444,6 +458,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 
     // Websuche mit Grounding (Vertex AI, nutzt Blaze-Guthaben) – für "Im Internet suchen"
     window.geminiSearch = async function({system, contentParts, feature}){
+      checkAIAllowed();
       logAIUsage(feature);
       const model = getGenerativeModel(ai, {
         model:GEMINI_MODEL,
@@ -626,6 +641,8 @@ function getCatIcon(cat){return S.customCatIcons[cat]||DEFAULT_CAT_ICONS[cat]||'
 function saveCatIcons(){try{localStorage.setItem('mrcatico',JSON.stringify(S.customCatIcons));}catch{}touchCats();}
 function getCats(){return S.customCats&&S.customCats.length?S.customCats:DEFAULT_CATS;}
 function getCatColor(cat){return CLR[cat]||(S.customCatColors&&S.customCatColors[cat])||COLOR_POOL[Math.abs(cat.split('').reduce((a,c)=>a+c.charCodeAt(0),0))%COLOR_POOL.length];}
+const ADMIN_UID='bgDIU86EH1T2CLYB7e3TrSN06rr1';
+function isAdmin(){return S.user&&S.user.uid===ADMIN_UID;}
 const SAMPLE=[{"cooked":false,"rating":0,"experiences":[],"title":"Spaghetti Bolognese","category":"Pasta","servings":4,"prepTime":"20","cookTime":"40","ingredients":"500 g Hackfleisch\n400 g Spaghetti\n1 Zwiebel\n2 Knoblauchzehen\n400 g gehackte Tomaten\n2 EL Tomatenmark\n2 EL Olivenöl\nSalz und Pfeffer\nfrisches Basilikum","steps":"1. Zwiebel und Knoblauch fein hacken, in Olivenöl bei mittlerer Hitze andünsten.\n2. Hackfleisch dazugeben und krümelig anbraten.\n3. Tomatenmark einrühren und kurz mitrösten.\n4. Mit gehackten Tomaten ablöschen, mit Salz und Pfeffer würzen und 30 Minuten köcheln lassen.\n5. Spaghetti nach Packungsanweisung al dente kochen.\n6. Sauce über die Nudeln geben, mit frischem Basilikum garnieren.","notes":"Schmeckt am nächsten Tag noch besser! Mit Parmesan servieren.","favorite":false,"tags":["Klassiker"],"nutrition":{"kcal":"620","protein":"36","carbs":"72","fat":"19","fiber":"5","salt":"1.8"},"id":"sample001","createdAt":1000000000000}];
 
 const S={
@@ -635,6 +652,7 @@ const S={
   scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, sessions:[], activeSession:null, lang:'de', apiKey:'', edamamAppId:'', edamamAppKey:'', edamamEnabled:false,  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
   user:null, authReady:false, authError:'', authMode:'signin', authBusy:false,
   recipeGroupId:null, shoppingGroupId:null, groupsReady:false,
+  userDoc:null, userDocReady:false,
   shareBusy:false, shareError:{recipes:'',shopping:''}, lastInviteCode:{recipes:'',shopping:''},
   groupMemberCount:{recipes:1,shopping:1}, joinCodeInput:{recipes:'',shopping:''},
 };
@@ -1025,18 +1043,22 @@ async function ensureUserGroups(){
       const data=userDoc.data();
       S.recipeGroupId=data.recipeGroupId;
       S.shoppingGroupId=data.shoppingGroupId;
+      S.userDoc=data;
     } else {
-      // Neuer Nutzer: zwei private Gruppen anlegen
+      // Neuer Nutzer: zwei private Gruppen anlegen, standardmäßig NICHT freigeschaltet
       const recipeGroupId=fbDb.collection('groups').doc().id;
       const shoppingGroupId=fbDb.collection('groups').doc().id;
       await fsGroupRef(recipeGroupId).set({type:'recipes',members:[fsUid()],ownerId:fsUid(),createdAt:Date.now()});
       await fsGroupRef(shoppingGroupId).set({type:'shopping',members:[fsUid()],ownerId:fsUid(),createdAt:Date.now()});
-      await fsUserRef().set({email:S.user.email,recipeGroupId,shoppingGroupId,createdAt:Date.now()});
+      const newUserData={email:S.user.email,recipeGroupId,shoppingGroupId,createdAt:Date.now(),approved:false,aiEnabled:false};
+      await fsUserRef().set(newUserData);
       S.recipeGroupId=recipeGroupId;
       S.shoppingGroupId=shoppingGroupId;
+      S.userDoc=newUserData;
     }
     S.groupsReady=true;
   }catch(e){console.warn('ensureUserGroups failed:',e);}
+  S.userDocReady=true;
 }
 
 function groupIdField(type){return type==='shopping'?'shoppingGroupId':'recipeGroupId';}
@@ -1336,9 +1358,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.3.2';
+const APP_VERSION = '3.4.0';
 const APP_DATE = '2026-07-18';
 const VERSION_HISTORY = [
+  { version:'3.4.0', date:'2026-07-18', de:['Neu: Admin-Rolle – neue Registrierungen brauchen jetzt Freischaltung durch den Admin, bevor sie die App nutzen können','Admin kann pro Nutzer separat die KI-Funktionen erlauben/sperren','Neuer Bereich in den Einstellungen (nur für Admin sichtbar): Nutzerverwaltung mit Freischalt- und KI-Schaltern','Bestandskonten bleiben automatisch freigeschaltet, keine Unterbrechung'], en:['New: admin role – new registrations now require approval by the admin before they can use the app','Admin can separately allow/block AI features per user','New section in settings (admin-only): user management with approval and AI toggles','Existing accounts remain approved automatically, no disruption'] },
   { version:'3.3.2', date:'2026-07-18', de:['Fix: "Prepayment credits depleted" Fehler – Google hat die Gemini Developer API im März 2026 auf ein separates Prepaid-Modell umgestellt, das bei aktiviertem Billing keinen Gratis-Modus mehr bietet','Alle KI-Funktionen laufen jetzt einheitlich über Vertex AI Gemini API und buchen gegen das vorhandene Blaze-Guthaben statt gegen ein leeres Prepay-Wallet'], en:['Fix: "Prepayment credits depleted" error – Google switched the Gemini Developer API to a separate prepaid model in March 2026 that no longer offers a free mode once billing is enabled','All AI features now uniformly use the Vertex AI Gemini API and bill against the existing Blaze credit instead of an empty prepay wallet'] },
   { version:'3.3.1', date:'2026-07-18', de:['Fix: KI-Funktionen warfen "No Firebase App has been created" – Compat- und Modul-Skript teilten sich fälschlich keine gemeinsame App-Registrierung, jetzt eigene initializeApp() im AI-Modul'], en:['Fix: AI features threw "No Firebase App has been created" – compat and module script did not actually share an app registry, now uses its own initializeApp() in the AI module'] },
   { version:'3.3.0', date:'2026-07-18', de:['Neu: In-App-Kochtimer – Zeit-Badge bei Zubereitungsschritten antippen startet einen Timer','Timer läuft als schwebendes Widget weiter, übersteht App-Wechsel/Minimieren und sogar Neuladen der Seite','Bei Ablauf: Sound, Vibration, Systembenachrichtigung und In-App-Hinweis','Vorbereitet für native Android-Benachrichtigungen (Local Notifications), falls das Plugin später ergänzt wird'], en:['New: in-app cooking timer – tap a step\'s time badge to start a timer','Timer keeps running as a floating widget, survives app switching/minimizing and even page reloads','On completion: sound, vibration, system notification and in-app alert','Prepared for native Android notifications (Local Notifications) if the plugin is added later'] },
@@ -1597,9 +1620,24 @@ function defForm(){return{title:'',category:getCats()[getCats().length-1]||'Sons
 function render(){
   if(!S.authReady){renderAuthLoading();return;}
   if(!S.user){renderAuthScreen();return;}
+  if(!S.userDocReady){renderAuthLoading();return;}
+  if(S.userDoc&&S.userDoc.approved===false&&!isAdmin()){renderPendingApproval();return;}
   document.getElementById('hdr').style.display='';
   document.getElementById('bnav').style.display='flex';
   renderHdr();renderApp();renderNav();
+}
+
+function renderPendingApproval(){
+  document.getElementById('hdr').style.display='none';
+  document.getElementById('bnav').style.display='none';
+  document.getElementById('app').innerHTML=`
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:85dvh;padding:1.5rem;text-align:center">
+    <div style="font-size:3rem;margin-bottom:1rem">⏳</div>
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:.6rem;font-family:var(--font)">Warte auf Freischaltung</div>
+    <div style="color:var(--muted);font-size:.9rem;font-family:var(--ui);max-width:320px;margin-bottom:1.5rem">Dein Konto (${esc(S.user.email)}) wurde erstellt, muss aber erst von einem Admin freigeschaltet werden. Schau später nochmal vorbei.</div>
+    <button id="pendingSignOut" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:10px;padding:.6rem 1.4rem;font-family:var(--ui);font-weight:700;cursor:pointer">Abmelden</button>
+  </div>`;
+  document.getElementById('pendingSignOut').onclick=doSignOut;
 }
 
 function renderAuthLoading(){
@@ -3176,6 +3214,14 @@ function renderSettings(app){
         <div id="aiStatsBox" style="width:100%;margin-top:.6rem"></div>
       </div>
     </div>
+    ${isAdmin()?`<div class="ss"><div class="st2">👑 Admin: Nutzerverwaltung</div>
+      <div class="sr2" style="flex-direction:column;align-items:flex-start">
+        <div class="ss2" style="margin-bottom:.6rem">Neue Registrierungen brauchen Freischaltung. Du (Admin) bist davon nicht betroffen.</div>
+        <div id="adminUsersBox" style="width:100%">
+          <div style="font-family:var(--ui);font-size:.78rem;color:var(--muted)">⏳ Lädt…</div>
+        </div>
+      </div>
+    </div>`:''}
     <div class="ss"><div class="st2">${t('set_edamam')}</div>
       <div class="sr2">
         <div><div class="sl">${t('set_edamam')}</div><div class="ss2">${S.lang==='en'?'Paid subscription required (from $49/month) · <a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a>':'Kostenpflichtiges Abo (ab $49/Monat) · <a href="https://developer.edamam.com" target="_blank" style="color:var(--accent)">developer.edamam.com</a>'}</div></div>
@@ -3448,6 +3494,54 @@ function renderSettings(app){
       box.innerHTML=`<div class="ierr">⚠️ Fehler beim Laden: ${esc(e.message)}</div>`;
     }
   });
+
+  if(isAdmin()){
+    loadAdminUsers();
+  }
+}
+
+async function loadAdminUsers(){
+  const box=document.getElementById('adminUsersBox');
+  if(!box)return;
+  try{
+    const snap=await fbDb.collection('users').get();
+    const users=[];
+    snap.forEach(doc=>users.push({uid:doc.id,...doc.data()}));
+    users.sort((a,b)=>(a.email||'').localeCompare(b.email||''));
+    if(!users.length){box.innerHTML='<div style="font-family:var(--ui);font-size:.82rem;color:var(--muted)">Keine Nutzer gefunden.</div>';return;}
+    box.innerHTML=users.map(u=>{
+      const isSelf=u.uid===ADMIN_UID;
+      const approved=u.approved!==false; // fehlt = als freigeschaltet behandelt (Bestandskonten)
+      const aiEnabled=u.aiEnabled!==false;
+      return `<div style="border:1px solid var(--border2);border-radius:10px;padding:.6rem .8rem;margin-bottom:.5rem;width:100%">
+        <div style="font-weight:700;font-size:.85rem;margin-bottom:.4rem;font-family:var(--ui)">${esc(u.email||u.uid)}${isSelf?' <span style="font-weight:400;color:var(--muted)">(du, Admin)</span>':''}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0">
+          <span style="font-size:.8rem;font-family:var(--ui)">Freigeschaltet</span>
+          <button class="tgl${approved?' on':''}" data-uid="${esc(u.uid)}" data-field="approved" ${isSelf?'disabled style="opacity:.4"':''}></button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0">
+          <span style="font-size:.8rem;font-family:var(--ui)">KI-Funktionen erlaubt</span>
+          <button class="tgl${aiEnabled?' on':''}" data-uid="${esc(u.uid)}" data-field="aiEnabled" ${isSelf?'disabled style="opacity:.4"':''}></button>
+        </div>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('.tgl[data-uid]').forEach(btn=>{
+      btn.addEventListener('click',async()=>{
+        const uid=btn.dataset.uid, field=btn.dataset.field;
+        const nowOn=!btn.classList.contains('on');
+        btn.classList.toggle('on',nowOn);
+        try{
+          await fbDb.collection('users').doc(uid).update({[field]:nowOn});
+          toast((nowOn?'✓ Aktiviert':'✗ Deaktiviert'));
+        }catch(e){
+          btn.classList.toggle('on',!nowOn); // zurückrollen bei Fehler
+          toast('Fehler: '+e.message,'err');
+        }
+      });
+    });
+  }catch(e){
+    box.innerHTML=`<div class="ierr">⚠️ Fehler beim Laden: ${esc(e.message)}</div>`;
+  }
 }
 
 // ══════════════ ACTIONS ══════════════
@@ -6130,11 +6224,16 @@ function loadSession(){
     S.user=user?{uid:user.uid,email:user.email}:null;
     S.authReady=true;
     S.authBusy=false;
+    S.userDocReady=false;
+    S.userDoc=null;
     render();
     if(user){
       await ensureUserGroups();
-      fsInitialSync();
-      refreshMemberCounts();
+      render();
+      if(isAdmin()||!(S.userDoc&&S.userDoc.approved===false)){
+        fsInitialSync();
+        refreshMemberCounts();
+      }
     } else {
       S.groupsReady=false;S.recipeGroupId=null;S.shoppingGroupId=null;
       stopFsSync();
