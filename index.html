@@ -492,7 +492,7 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
   <button class="nb" data-nav="list"><div class="ic">🍳</div><span id="navLblRecipes">Rezepte</span></button>
   <button class="nb" data-nav="shopping"><div class="ic">🛒</div><span id="shopLbl">Liste</span></button>
   <button class="nb" data-nav="planner"><div class="ic">📅</div><span id="navLblPlanner">Speiseplan</span></button>
-  <button class="nb" data-nav="newrecipe"><div class="ic">✨</div><span id="navLblNewRecipe">Neues Rezept</span></button>
+  <button class="nb" data-nav="pantry"><div class="ic">📦</div><span id="pantryLbl">Vorrat</span></button>
   <button class="nb" data-nav="settings"><div class="ic">⚙️</div><span id="navLblMore">Einstellungen</span></button>
 </nav>
 
@@ -647,7 +647,7 @@ function isAdmin(){return S.user&&S.user.uid===ADMIN_UID;}
 const SAMPLE=[{"cooked":false,"rating":0,"experiences":[],"title":"Spaghetti Bolognese","category":"Pasta","servings":4,"prepTime":"20","cookTime":"40","ingredients":"500 g Hackfleisch\n400 g Spaghetti\n1 Zwiebel\n2 Knoblauchzehen\n400 g gehackte Tomaten\n2 EL Tomatenmark\n2 EL Olivenöl\nSalz und Pfeffer\nfrisches Basilikum","steps":"1. Zwiebel und Knoblauch fein hacken, in Olivenöl bei mittlerer Hitze andünsten.\n2. Hackfleisch dazugeben und krümelig anbraten.\n3. Tomatenmark einrühren und kurz mitrösten.\n4. Mit gehackten Tomaten ablöschen, mit Salz und Pfeffer würzen und 30 Minuten köcheln lassen.\n5. Spaghetti nach Packungsanweisung al dente kochen.\n6. Sauce über die Nudeln geben, mit frischem Basilikum garnieren.","notes":"Schmeckt am nächsten Tag noch besser! Mit Parmesan servieren.","favorite":false,"tags":["Klassiker"],"nutrition":{"kcal":"620","protein":"36","carbs":"72","fat":"19","fiber":"5","salt":"1.8"},"id":"sample001","createdAt":1000000000000}];
 
 const S={
-  view:'list', recipes:[], shopping:[], pantry:[], shopTab:'shopping', pantryScanPending:null, pantryEditIdx:null, selId:null, editId:null, delId:null,
+  view:'list', recipes:[], shopping:[], pantry:[], shopDoneSuggest:[], shopTab:'shopping', pantryScanPending:null, pantryEditIdx:null, selId:null, editId:null, delId:null,
   filterCat:'Alle', filterTag:'', search:'', formData:{}, formTags:[], formPhoto:null,
   filters:{cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false},
   scaleFactor:1, scaleFactors:{}, lastSelId:null, scrollPositions:{}, mealPlan:{}, plannerView:'today', ingSecState:{}, detTab:{}, sessions:[], activeSession:null, lang:'de', apiKey:'',  dark:false, saving:false, stepsDone:{}, aiSearchResults:undefined, aiSearchQuery:'', recipeChats:{}, collapsedCats:null, ingSelected:{}, stepSections:{}, customCats:null, customCatColors:{}, customCatIcons:{}, customShopCats:{}, selectMode:false, selected:new Set(), tagSearch:'', catAccOpen:false, sortMode:false, tagAccOpen:false, wakeLock:true, wakeLockSentinel:null,
@@ -952,21 +952,21 @@ async function fsPushCats(){
 async function fsPushShopping(){
   if(!fsReady())return;
   try{
-    _fsPushingShopping=true;
-    await fsMetaDoc('shopping').set({items:S.shopping,_updatedAt:Date.now()});
+    const ts=Date.now();
+    S._shopSyncTs=ts;
+    await fsMetaDoc('shopping').set({items:S.shopping,_updatedAt:ts});
   }catch(e){console.warn('Firestore shopping push failed:',e);}
 }
-let _fsPushingShopping=false;
 
 // ── Vorratskammer ──
 async function fsPushPantry(){
   if(!fsReady())return;
   try{
-    _fsPushingPantry=true;
-    await fsMetaDoc('pantry').set({items:S.pantry,_updatedAt:Date.now()});
+    const ts=Date.now();
+    S._pantrySyncTs=ts;
+    await fsMetaDoc('pantry').set({items:S.pantry,_updatedAt:ts});
   }catch(e){console.warn('Firestore pantry push failed:',e);}
 }
-let _fsPushingPantry=false;
 
 // ── Echtzeit-Listener (ersetzt Polling komplett) ──
 function startFsSync(){
@@ -978,7 +978,14 @@ function startFsSync(){
     let changed=false;
     for(const change of snap.docChanges()){
       const id=change.doc.id;
-      if(_fsPushingRecipeIds.has(id)){ _fsPushingRecipeIds.delete(id); continue; } // Echo unseres eigenen Writes
+      if(_fsPushingRecipeIds.has(id)){
+        // Firestore feuert für jeden eigenen Write zweimal: erst optimistisch (lokaler Cache,
+        // hasPendingWrites=true), dann nochmal nach Server-Bestätigung (hasPendingWrites=false).
+        // Den Guard erst beim zweiten (bestätigten) Event löschen, sonst wird das Server-Echo
+        // fälschlich als fremde Änderung verarbeitet.
+        if(!change.doc.metadata.hasPendingWrites) _fsPushingRecipeIds.delete(id);
+        continue;
+      }
       if(change.type==='removed'){
         const before=S.recipes.length;
         S.recipes=S.recipes.filter(r=>r.id!==id);
@@ -1027,12 +1034,12 @@ function startFsSync(){
 
   // Einkaufsliste
   _unsubShopping=fsMetaDoc('shopping').onSnapshot(doc=>{
-    if(_fsPushingShopping){_fsPushingShopping=false;return;} // Echo unseres eigenen Writes
     if(!doc.exists)return;
     const data=doc.data();
-    const incoming=data.items||[];
-    if(JSON.stringify(incoming)===JSON.stringify(S.shopping))return;
-    S.shopping=incoming;
+    const remoteTs=data._updatedAt||0;
+    if(remoteTs<=(S._shopSyncTs||0))return; // eigener Write (Echo) oder veralteter/überholter Stand
+    S._shopSyncTs=remoteTs;
+    S.shopping=data.items||[];
     saveSh_local();
     if(S.view==='shopping')renderApp();
     renderNav();
@@ -1040,14 +1047,14 @@ function startFsSync(){
 
   // Vorratskammer
   _unsubPantry=fsMetaDoc('pantry').onSnapshot(doc=>{
-    if(_fsPushingPantry){_fsPushingPantry=false;return;} // Echo unseres eigenen Writes
     if(!doc.exists)return;
     const data=doc.data();
-    const incoming=data.items||[];
-    if(JSON.stringify(incoming)===JSON.stringify(S.pantry))return;
-    S.pantry=incoming;
+    const remoteTs=data._updatedAt||0;
+    if(remoteTs<=(S._pantrySyncTs||0))return; // eigener Write (Echo) oder veralteter/überholter Stand
+    S._pantrySyncTs=remoteTs;
+    S.pantry=data.items||[];
     savePantry_local();
-    if(S.view==='shopping')renderApp();
+    if(S.view==='pantry')renderApp();
     renderNav();
   },err=>console.warn('Firestore pantry listener error:',err));
 }
@@ -1329,7 +1336,7 @@ async function fsInitialSync(){
     if(shopDoc.exists){
       const data=shopDoc.data();
       if(data.items&&data.items.length&&!S.shopping.length){
-        S.shopping=data.items;saveSh_local();
+        S.shopping=data.items;S._shopSyncTs=data._updatedAt||0;saveSh_local();
       } else if(S.shopping.length){ await fsPushShopping(); }
     } else if(S.shopping.length){ await fsPushShopping(); }
     render();
@@ -1383,7 +1390,7 @@ const uid=()=>'r'+Date.now()+Math.random().toString(36).slice(2,5);
 // ══════════════ TRANSLATIONS ══════════════
 const LANG={
   de:{
-    nav_recipes:'Rezepte',nav_favorites:'Favoriten',nav_ai:'KI-Suche',nav_import:'Import',nav_newrecipe:'Neues Rezept',nav_list:'Liste',nav_more:'Einstellungen',
+    nav_recipes:'Rezepte',nav_favorites:'Favoriten',nav_ai:'KI-Suche',nav_import:'Import',nav_newrecipe:'Neues Rezept',nav_list:'Liste',nav_pantry:'Vorrat',nav_more:'Einstellungen',
     hdr_recipes:'🍳 Meine Rezepte',hdr_new:'Neues Rezept',hdr_edit:'Bearbeiten',hdr_shopping:'🛒 Einkaufsliste',hdr_ai:'✨ KI-Rezeptsuche',hdr_import:'📥 Importieren',hdr_settings:'⚙️ Einstellungen',hdr_saving:'Speichern…',
     btn_save:'Speichern',btn_cancel:'Abbrechen',btn_delete:'Löschen',btn_export:'Export',btn_import:'Import',btn_close:'Schließen',btn_reset:'Zurücksetzen',btn_compress:'Komprimieren',btn_add_cat:'+ Neue Kategorie',btn_default:'↺ Standard',btn_save_key:'Key speichern',btn_save_keys:'Keys speichern',btn_save_tags:'Speichern',btn_manage:'🏷 Zuweisungen verwalten',btn_ai_est:'✨ KI schätzen',
     det_portions:'Portionen',det_portion:'Portion',det_portions_pl:'Portionen',det_ingredients:'Zutaten',det_steps:'Zubereitung',det_notes:'📝 Notizen',det_experiences:'📓 Erfahrungen',det_no_exp:'Noch keine Erfahrungen eingetragen.',det_nutrition:'Nährwerte pro Portion',det_not_cooked:'🍽 Noch nicht zubereitet',det_cooked:'✅ Schon zubereitet',det_prep:'🔪 Vorbereitung',det_cook:'🍳 Kochzeit',det_total:'⏱ Gesamt',det_min:'Min.',det_reset_steps:'Zurücksetzen',det_selected:'ausgewählt',det_shop_arrow:'🛒 In Einkaufsliste →',
@@ -1437,7 +1444,7 @@ const LANG={
     no_photos:'Keine Fotos vorhanden.',photos_compressed:'Fotos komprimiert ✓',
     recipe_count_single:'Rezept',recipe_count_plural:'Rezepte',
     hdr_pantry:'📦 Vorratskammer',tab_shopping:'Einkaufsliste',tab_pantry:'Vorratskammer',
-    pantry_items:'Artikel',pantry_expired:'abgelaufen',pantry_soon:'bald fällig',
+    pantry_items:'Artikel',pantry_expired:'kritisch',pantry_soon:'bald knapp',
     pantry_scan:'Smart-Scan',pantry_add:'Hinzufügen',pantry_empty:'Vorratskammer ist leer.',
     pantry_confirm_del:'Diesen Vorrats-Eintrag wirklich löschen?',
     pantry_edit_title:'Eintrag bearbeiten',pantry_add_title:'Neuer Vorrats-Eintrag',
@@ -1448,6 +1455,15 @@ const LANG={
     pantry_scan_choose:'Ein oder mehrere Bilder auswählen',pantry_scan_images_sg:'Bild ausgewählt',pantry_scan_images_pl:'Bilder ausgewählt',
     pantry_scan_analyze:'KI analysieren',pantry_scan_analyzing:'KI analysiert…',pantry_scan_none:'Keine Produkte erkannt.',
     pantry_scan_found:'{n} Produkte erkannt – prüfe und ergänze bei Bedarf:',pantry_scan_add_all:'Alle hinzufügen',
+    pantry_kind:'Art',pantry_kind_vorrat:'📦 Vorrat',pantry_kind_frisch:'🥬 Frischware',
+    pantry_kind_hint_vorrat:'Konserven, Hygiene, Tiefkühl – wird mengenmäßig getrackt',
+    pantry_kind_hint_frisch:'Milch, Joghurt, Gemüse – nur Status statt genauer Menge',
+    pantry_ampel_da:'da',pantry_ampel_knapp:'knapp',pantry_ampel_leer:'leer',
+    pantry_min_qty:'Mindestbestand (optional)',pantry_min_qty_hint:'Wird rot markiert, sobald die Menge darunter fällt',
+    pantry_low:'Mindestbestand unterschritten',
+    pantry_suggest_hint:'{n} abgehakt(e) Artikel könnten in die Vorratskammer.',pantry_suggest_review:'Prüfen',
+    pantry_suggest_title:'Zur Vorratskammer hinzufügen?',pantry_suggest_desc:'Diese abgehakten Artikel als Vorrat erfassen. Einzelne mit ✕ überspringen, Art bei Bedarf umschalten.',
+    pantry_suggest_add:'Hinzufügen',
     auth_appname:'Meine Rezepte',auth_signin:'Anmelden',auth_signup:'Registrieren',
     auth_email_ph:'E-Mail',auth_pw_ph:'Passwort (min. 6 Zeichen)',
     auth_submit_signup:'Konto erstellen',auth_forgot:'Passwort vergessen?',
@@ -1468,7 +1484,7 @@ const LANG={
     auth_loading:'Laden…',
   },
   en:{
-    nav_recipes:'Recipes',nav_favorites:'Favorites',nav_ai:'AI Search',nav_import:'Import',nav_newrecipe:'New Recipe',nav_list:'List',nav_more:'Settings',
+    nav_recipes:'Recipes',nav_favorites:'Favorites',nav_ai:'AI Search',nav_import:'Import',nav_newrecipe:'New Recipe',nav_list:'List',nav_pantry:'Pantry',nav_more:'Settings',
     hdr_recipes:'🍳 My Recipes',hdr_new:'New Recipe',hdr_edit:'Edit',hdr_shopping:'🛒 Shopping List',hdr_ai:'✨ AI Recipe Search',hdr_import:'📥 Import',hdr_settings:'⚙️ Settings',hdr_saving:'Saving…',
     btn_save:'Save',btn_cancel:'Cancel',btn_delete:'Delete',btn_export:'Export',btn_import:'Import',btn_close:'Close',btn_reset:'Reset',btn_compress:'Compress',btn_add_cat:'+ New Category',btn_default:'↺ Default',btn_save_key:'Save Key',btn_save_keys:'Save Keys',btn_save_tags:'Save',btn_manage:'🏷 Manage Assignments',btn_ai_est:'✨ AI Estimate',
     det_portions:'Servings',det_portion:'Serving',det_portions_pl:'Servings',det_ingredients:'Ingredients',det_steps:'Instructions',det_notes:'📝 Notes',det_experiences:'📓 Experiences',det_no_exp:'No experiences recorded yet.',det_nutrition:'Nutrition per Serving',det_not_cooked:'🍽 Not yet cooked',det_cooked:'✅ Already cooked',det_prep:'🔪 Prep',det_cook:'🍳 Cook time',det_total:'⏱ Total',det_min:'min.',det_reset_steps:'Reset',det_selected:'selected',det_shop_arrow:'🛒 Add to Shopping List →',
@@ -1522,7 +1538,7 @@ const LANG={
     no_photos:'No photos found.',photos_compressed:'Photos compressed ✓',
     recipe_count_single:'Recipe',recipe_count_plural:'Recipes',
     hdr_pantry:'📦 Pantry',tab_shopping:'Shopping List',tab_pantry:'Pantry',
-    pantry_items:'items',pantry_expired:'expired',pantry_soon:'expiring soon',
+    pantry_items:'items',pantry_expired:'critical',pantry_soon:'running low',
     pantry_scan:'Smart Scan',pantry_add:'Add',pantry_empty:'Pantry is empty.',
     pantry_confirm_del:'Really delete this pantry item?',
     pantry_edit_title:'Edit item',pantry_add_title:'New pantry item',
@@ -1533,6 +1549,15 @@ const LANG={
     pantry_scan_choose:'Select one or more images',pantry_scan_images_sg:'image selected',pantry_scan_images_pl:'images selected',
     pantry_scan_analyze:'Analyze with AI',pantry_scan_analyzing:'AI analyzing…',pantry_scan_none:'No products recognized.',
     pantry_scan_found:'{n} products recognized – review and adjust if needed:',pantry_scan_add_all:'Add all',
+    pantry_kind:'Type',pantry_kind_vorrat:'📦 Stock',pantry_kind_frisch:'🥬 Fresh',
+    pantry_kind_hint_vorrat:'Canned goods, hygiene, frozen – tracked by quantity',
+    pantry_kind_hint_frisch:'Milk, yogurt, veggies – simple status instead of exact quantity',
+    pantry_ampel_da:'have it',pantry_ampel_knapp:'running low',pantry_ampel_leer:'out',
+    pantry_min_qty:'Minimum stock (optional)',pantry_min_qty_hint:'Marked red once quantity drops below this',
+    pantry_low:'Below minimum stock',
+    pantry_suggest_hint:'{n} checked-off item(s) could go into the pantry.',pantry_suggest_review:'Review',
+    pantry_suggest_title:'Add to pantry?',pantry_suggest_desc:'Add these checked-off items as stock. Skip individual ones with ✕, switch type if needed.',
+    pantry_suggest_add:'Add',
     auth_appname:'My Recipes',auth_signin:'Sign in',auth_signup:'Register',
     auth_email_ph:'Email',auth_pw_ph:'Password (min. 6 characters)',
     auth_submit_signup:'Create account',auth_forgot:'Forgot password?',
@@ -1935,7 +1960,7 @@ function renderHdr(){
   back.style.display=inDetail?'block':'none';
   if(icon)icon.style.display=(S.view==='list'||S.view==='favorites')?'block':'none';
   fab.style.display=(S.view==='list'||S.view==='favorites')?'flex':'none';
-  if(S.saving){acts.innerHTML=`<span class="svg">${t('hdr_saving')}</span>`;return;}
+  if(S.saving&&(S.view==='list'||S.view==='favorites')){acts.innerHTML=`<span class="svg">${t('hdr_saving')}</span>`;return;}
   if(S.view==='list'||S.view==='favorites'){
     tit.textContent=S.lang==='en'?'My Recipes':'Meine Rezepte';sub.textContent=S.recipes.length+' '+(S.recipes.length!==1?t('recipe_count_plural'):t('recipe_count_single'));
     acts.innerHTML='';
@@ -1944,7 +1969,8 @@ function renderHdr(){
     acts.innerHTML=`<button class="btn bo sm" onclick="shareR()">📤</button><button class="btn bo sm" onclick="exportRecipeJSON('${S.selId}')">JSON</button><button class="btn bo sm" onclick="exportRecipePDF('${S.selId}')">PDF</button><button class="btn bo sm" onclick="openEdit('${S.selId}')">✏️</button><button class="btn bdo sm" onclick="askDel('${S.selId}')">🗑</button>`;  } else if(S.view==='form'){
     tit.textContent=S.editId?t('hdr_edit'):t('hdr_new');sub.textContent='';
     acts.innerHTML=`<button class="btn bp" onclick="submitForm()">${t('btn_save')}</button>`;
-  } else if(S.view==='shopping'){tit.textContent=S.shopTab==='pantry'?t('hdr_pantry'):t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
+  } else if(S.view==='shopping'){tit.textContent=t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
+  else if(S.view==='pantry'){tit.textContent=t('hdr_pantry');sub.textContent='';acts.innerHTML='';}
   else if(S.view==='session'){
     const sess=S.sessions.find(s=>s.id===S.activeSession);
     tit.textContent='👨‍🍳 '+(sess?.name||'Kochsession');
@@ -1972,13 +1998,15 @@ function renderNav(){
     b.classList.toggle('on',S.view===n||(n==='list'&&(S.view==='detail'||S.view==='form'||S.view==='favorites')));
   });  const cnt=S.shopping.filter(x=>!x.done).length;
   document.getElementById('shopLbl').innerHTML=t('nav_list')+(cnt?`<span class="badge">${cnt}</span>`:'');
+  const pCnt=S.pantry.filter(x=>pantryStatus(x)==='expired').length;
+  document.getElementById('pantryLbl').innerHTML=t('nav_pantry')+(pCnt?`<span class="badge">${pCnt}</span>`:'');
   document.getElementById('bnav').style.display=S.view==='form'?'none':'flex';
   // Update static modal button texts for current language
   const _dc=document.getElementById('delCancel');if(_dc)_dc.textContent=t('btn_cancel');
   const _dd=document.getElementById('delConfirm');if(_dd)_dd.textContent=t('btn_delete');
   const _spc=document.getElementById('shopPickCancel');if(_spc)_spc.textContent=t('btn_cancel');
   // Update nav labels for language
-  const navMap={navLblRecipes:'nav_recipes',navLblNewRecipe:'nav_newrecipe',navLblMore:'nav_more'};
+  const navMap={navLblRecipes:'nav_recipes',navLblMore:'nav_more'};
   Object.entries(navMap).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.textContent=t(key);});
   const planLbl=document.getElementById('navLblPlanner');if(planLbl)planLbl.textContent=S.lang==='en'?'Speiseplan':'Meal Plan';
 }
@@ -1989,6 +2017,7 @@ function renderApp(){
   else if(S.view==='detail')renderDetail(app);
   else if(S.view==='form')renderForm(app);
   else if(S.view==='shopping')renderShop(app);
+  else if(S.view==='pantry')renderPantry(app);
   else if(S.view==='planner')renderPlanner(app);
   else if(S.view==='session')renderSession(app);
   else if(S.view==='newrecipe')renderNewRecipe(app);
@@ -3294,13 +3323,22 @@ function pantryDaysLeft(item){
   const exp=new Date(item.expiry+'T00:00:00');
   return Math.round((exp-today)/86400000);
 }
-// 'expired' | 'soon' | 'ok' | 'none'
+// 'expired' | 'soon' | 'ok' | 'none' – vereinheitlicht MHD, Mindestbestand und Ampel-Status
 function pantryStatus(item){
+  if(item.kind==='frisch'){
+    if(item.ampel==='leer')return 'expired';
+    if(item.ampel==='knapp')return 'soon';
+    return 'ok';
+  }
+  const qtyNum=item.qty!==''&&item.qty!=null?Number(item.qty):null;
+  if(qtyNum!==null&&!isNaN(qtyNum)&&qtyNum<=0)return 'expired';
   const d=pantryDaysLeft(item);
-  if(d===null)return 'none';
-  if(d<0)return 'expired';
-  if(d<=PANTRY_SOON_DAYS)return 'soon';
-  return 'ok';
+  const expStatus=d===null?'none':(d<0?'expired':(d<=PANTRY_SOON_DAYS?'soon':'ok'));
+  if(expStatus==='expired')return 'expired';
+  const minNum=item.minQty!==''&&item.minQty!=null?Number(item.minQty):null;
+  const low=minNum!==null&&!isNaN(minNum)&&qtyNum!==null&&!isNaN(qtyNum)&&qtyNum<=minNum;
+  if(low)return 'soon';
+  return expStatus;
 }
 function pantryStatusColor(status){
   if(status==='expired')return 'var(--danger)';
@@ -3316,14 +3354,39 @@ function fmtExpiry(item){
   if(d===0)return dateStr+' · '+t('pantry_today');
   return dateStr+' · '+t('pantry_in_days').replace('{n}',d);
 }
+// Mengenkritisch = knapper Vorrat (Mindestbestand/leer bzw. Ampel), NICHT MHD-Ablauf – nur das löst den Auto-Eintrag auf die Einkaufsliste aus.
+function pantryQtyCritical(item){
+  if(item.kind==='frisch')return item.ampel==='leer';
+  const qtyNum=item.qty!==''&&item.qty!=null?Number(item.qty):null;
+  if(qtyNum===null||isNaN(qtyNum))return false;
+  if(qtyNum<=0)return true;
+  const minNum=item.minQty!==''&&item.minQty!=null?Number(item.minQty):null;
+  return minNum!==null&&!isNaN(minNum)&&qtyNum<=minNum;
+}
+// Fügt den Artikel einmalig zur Einkaufsliste hinzu, sobald er kritisch wird; setzt den Guard zurück, sobald wieder aufgefüllt.
+function pantryAutoAddCheck(item){
+  const critical=pantryQtyCritical(item);
+  if(critical&&!item._autoAdded){
+    mergeIntoShopping(item.name,t('tab_pantry'));
+    item._autoAdded=true;
+    saveSh();
+    if(S.view==='shopping')renderApp();
+    renderNav();
+  }else if(!critical&&item._autoAdded){
+    item._autoAdded=false;
+  }
+}
 function addPantryItem(item){
-  S.pantry.push({id:uid(),name:'',category:15,qty:'',unit:'',expiry:'',note:'',addedAt:Date.now(),_updatedAt:Date.now(),...item});
+  const obj={id:uid(),name:'',category:15,kind:'vorrat',qty:'',unit:'',minQty:'',ampel:'da',expiry:'',note:'',addedAt:Date.now(),_updatedAt:Date.now(),_autoAdded:false,...item};
+  S.pantry.push(obj);
+  pantryAutoAddCheck(obj);
   savePantry();
 }
 function updatePantryItem(id,patch){
   const idx=S.pantry.findIndex(x=>x.id===id);
   if(idx===-1)return;
   S.pantry[idx]={...S.pantry[idx],...patch,_updatedAt:Date.now()};
+  pantryAutoAddCheck(S.pantry[idx]);
   savePantry();
 }
 function removePantryItem(id){
@@ -3331,50 +3394,51 @@ function removePantryItem(id){
   savePantry();
   renderApp();
 }
+function adjustPantryQty(id,delta){
+  const it=S.pantry.find(x=>x.id===id);if(!it)return;
+  const cur=Number(it.qty)||0;
+  const next=Math.max(0,cur+delta);
+  updatePantryItem(id,{qty:String(next)});
+  renderApp();
+}
+function setPantryAmpel(id,ampel){
+  updatePantryItem(id,{ampel});
+  renderApp();
+}
 
 function renderShop(app){
-  const pExpired=S.pantry.filter(x=>pantryStatus(x)==='expired').length;
-  const pSoon=S.pantry.filter(x=>pantryStatus(x)==='soon').length;
-  const pTotal=S.pantry.length;
-  const pantryBadge=pTotal?`<span style="font-size:.7rem;font-weight:700;opacity:.85;margin-left:.3rem">${pExpired?'⚠️ ':''}${pTotal}${pSoon?` · ${pSoon}⏳`:''}${pExpired?` · ${pExpired}❗`:''}</span>`:'';
-  app.innerHTML=`<div class="itabs" style="margin-bottom:1rem">
-    <button class="itab${S.shopTab!=='pantry'?' on':''}" data-shoptab="shopping">🛒 ${t('tab_shopping')}</button>
-    <button class="itab${S.shopTab==='pantry'?' on':''}" data-shoptab="pantry">📦 ${t('tab_pantry')}${pantryBadge}</button>
-  </div><div id="shopTabBody"></div>`;
-  app.querySelectorAll('[data-shoptab]').forEach(btn=>btn.addEventListener('click',()=>{
-    S.shopTab=btn.dataset.shoptab;renderHdr();renderApp();
-  }));
-  const body=document.getElementById('shopTabBody');
-  if(S.shopTab==='pantry')renderPantry(body);else renderShopList(body);
+  renderShopList(app);
 }
 
 function renderShopList(app){
-  const items=S.shopping,done=items.filter(x=>x.done).length;
+  const items=S.shopping,doneItems=items.map((it,i)=>({...it,idx:i})).filter(x=>x.done),done=doneItems.length;
+  const openItems=items.map((it,i)=>({...it,idx:i})).filter(x=>!x.done);
+  const rowHtml=it=>`
+    <div class="si-row" onclick="togSh(${it.idx})">
+      <div class="scb${it.done?' dn':''}">${it.done?'✓':''}</div>
+      <div style="flex:1;min-width:0">
+        <div class="stx${it.done?' dn':''}">${esc(it.text)}</div>
+        ${it.from?`<div class="ssrc">aus: ${esc(it.from)}</div>`:''}
+      </div>
+      <button onclick="event.stopPropagation();editShItem(${it.idx})" style="background:none;border:none;font-size:.8rem;color:var(--faint);cursor:pointer;padding:.2rem .35rem;flex-shrink:0" title="Bearbeiten">✏️</button>
+      <button onclick="event.stopPropagation();showShopCatPicker(${it.idx})" style="background:none;border:none;font-size:.8rem;color:var(--faint);cursor:pointer;padding:.2rem .35rem;flex-shrink:0" title="Kategorie ändern">📂</button>
+      <button class="srm" onclick="event.stopPropagation();rmSh(${it.idx})">✕</button>
+    </div>`;
   const grouped={};
-  items.forEach((it,i)=>{
+  openItems.forEach(it=>{
     const cat=getShopCat(it.text);
     if(!grouped[cat])grouped[cat]=[];
-    grouped[cat].push({...it,idx:i});
+    grouped[cat].push(it);
   });
   const sortedCats=Object.keys(grouped).sort((a,b)=>Number(a)-Number(b));
-  const groupedHtml=sortedCats.map(cat=>{
-    const catItems=grouped[cat];
-    const allItems=[...catItems.filter(x=>!x.done),...catItems.filter(x=>x.done)];
-    return `<div style="margin-bottom:1rem">
+  const groupedHtml=sortedCats.map(cat=>`<div style="margin-bottom:1rem">
       <div style="font-size:.72rem;font-weight:700;color:var(--muted);font-family:var(--font);text-transform:uppercase;letter-spacing:1.5px;padding:.4rem 0 .3rem;border-bottom:1px solid var(--border);margin-bottom:.3rem">${SHOP_CATS[cat]}</div>
-      ${allItems.map(it=>`
-        <div class="si-row" onclick="togSh(${it.idx})">
-          <div class="scb${it.done?' dn':''}">${it.done?'✓':''}</div>
-          <div style="flex:1;min-width:0">
-            <div class="stx${it.done?' dn':''}">${esc(it.text)}</div>
-            ${it.from?`<div class="ssrc">aus: ${esc(it.from)}</div>`:''}
-          </div>
-          <button onclick="event.stopPropagation();editShItem(${it.idx})" style="background:none;border:none;font-size:.8rem;color:var(--faint);cursor:pointer;padding:.2rem .35rem;flex-shrink:0" title="Bearbeiten">✏️</button>
-          <button onclick="event.stopPropagation();showShopCatPicker(${it.idx})" style="background:none;border:none;font-size:.8rem;color:var(--faint);cursor:pointer;padding:.2rem .35rem;flex-shrink:0" title="Kategorie ändern">📂</button>
-          <button class="srm" onclick="event.stopPropagation();rmSh(${it.idx})">✕</button>
-        </div>`).join('')}
-    </div>`;
-  }).join('');
+      ${grouped[cat].map(rowHtml).join('')}
+    </div>`).join('');
+  const doneHtml=done>0?`<div style="margin-bottom:1rem">
+      <div style="font-size:.72rem;font-weight:700;color:var(--muted);font-family:var(--font);text-transform:uppercase;letter-spacing:1.5px;padding:.4rem 0 .3rem;border-bottom:1px solid var(--border);margin-bottom:.3rem">✓ ${t('sh_done_lbl')} (${done})</div>
+      ${doneItems.map(rowHtml).join('')}
+    </div>`:'';
   app.innerHTML=`
     <div class="shop-hdr">
       <h2 style="font-size:1rem">${t('tab_shopping')} <small style="color:var(--muted);font-family:var(--font);font-size:.78rem">${items.length-done} ${t('sh_open')}</small></h2>
@@ -3384,7 +3448,11 @@ function renderShopList(app){
         ${items.length>0?`<button class="btn bdo sm" onclick="clearAllSh()">${t('sh_clear_all')}</button>`:''}
       </div>
     </div>
-    ${items.length===0?`<div class="empty"><div class="ei">🛒</div><p>${t('sh_empty')}</p></div>`:groupedHtml}
+    ${S.shopDoneSuggest.length>0?`<div style="display:flex;align-items:center;gap:.6rem;background:var(--surface2);border-radius:10px;padding:.6rem .8rem;margin-bottom:.9rem">
+      <div style="flex:1;font-size:.82rem;font-family:var(--ui);color:var(--text)">📦 ${t('pantry_suggest_hint').replace('{n}',S.shopDoneSuggest.length)}</div>
+      <button class="btn bp sm" onclick="openPantrySuggestModal()">${t('pantry_suggest_review')}</button>
+    </div>`:''}
+    ${items.length===0?`<div class="empty"><div class="ei">🛒</div><p>${t('sh_empty')}</p></div>`:groupedHtml+doneHtml}
     <div class="sadd">
       <input class="sadd-i" id="saddi" placeholder="${t('sh_add_ph')}">
       <button class="btn bp" onclick="addShM()">+</button>
@@ -3392,7 +3460,57 @@ function renderShopList(app){
   document.getElementById('saddi')?.addEventListener('keydown',e=>{if(e.key==='Enter')addShM();});
 }
 
-function showShopCatPicker(idx){
+function openPantrySuggestModal(){
+  if(!S.shopDoneSuggest.length)return;
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:200';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem;width:100%;max-width:560px;max-height:85dvh;overflow-y:auto;font-family:var(--font)';
+  md.innerHTML=`
+    <div style="font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:.4rem">📦 ${t('pantry_suggest_title')}</div>
+    <p style="font-size:.8rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('pantry_suggest_desc')}</p>
+    <div id="pantrySuggestRows" style="display:flex;flex-direction:column;gap:.5rem"></div>
+    <div style="display:flex;gap:.6rem;margin-top:1rem">
+      <button class="btn bp" id="pantrySuggestConfirm" style="flex:1">+ ${t('pantry_suggest_add')}</button>
+      <button class="btn bg" id="pantrySuggestClose" style="flex:1">${t('btn_close')}</button>
+    </div>`;
+  ov.appendChild(md);document.body.appendChild(ov);
+  const close=()=>document.body.removeChild(ov);
+  document.getElementById('pantrySuggestClose').addEventListener('click',close);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  const rowsEl=document.getElementById('pantrySuggestRows');
+  rowsEl.innerHTML=S.shopDoneSuggest.map((s,i)=>`
+    <div style="background:var(--surface2);border-radius:10px;padding:.55rem .65rem;display:flex;flex-direction:column;gap:.4rem" data-psgrow="${i}">
+      <input class="fi" style="width:100%;padding:.4rem .55rem;font-size:.92rem;font-weight:600" value="${esc(s.text)}" data-psgfield="name">
+      <div style="display:flex;gap:.35rem;align-items:center">
+        <button type="button" data-psgkind="vorrat" class="btn bp sm" style="padding:.3rem .6rem;font-size:.75rem">📦 ${t('pantry_kind_vorrat')}</button>
+        <button type="button" data-psgkind="frisch" class="btn bg sm" style="padding:.3rem .6rem;font-size:.75rem">🥬 ${t('pantry_kind_frisch')}</button>
+        <button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1rem;padding:.15rem .3rem;flex-shrink:0;margin-left:auto" data-psgremove="${i}" title="${t('btn_delete')}">✕</button>
+      </div>
+    </div>`).join('');
+  rowsEl.querySelectorAll('[data-psgkind]').forEach(btn=>btn.addEventListener('click',()=>{
+    const rowEl=btn.closest('[data-psgrow]');
+    rowEl.querySelectorAll('[data-psgkind]').forEach(b=>b.className='btn '+(b===btn?'bp':'bg')+' sm');
+    rowEl.dataset.psgkind=btn.dataset.psgkind;
+  }));
+  rowsEl.querySelectorAll('[data-psgremove]').forEach(btn=>btn.addEventListener('click',()=>{
+    const rowEl=btn.closest('[data-psgrow]');
+    const i=Number(rowEl.dataset.psgrow);
+    S.shopDoneSuggest.splice(i,1);
+    close();openPantrySuggestModal();
+  }));
+  document.getElementById('pantrySuggestConfirm').addEventListener('click',()=>{
+    rowsEl.querySelectorAll('[data-psgrow]').forEach(rowEl=>{
+      const name=rowEl.querySelector('[data-psgfield="name"]').value.trim();
+      if(!name)return;
+      const kind=rowEl.dataset.psgkind==='frisch'?'frisch':'vorrat';
+      addPantryItem({name,kind,category:getShopCat(name)});
+    });
+    S.shopDoneSuggest=[];
+    toast(t('toast_saved'));
+    close();renderApp();renderNav();
+  });
+}
   const it=S.shopping[idx];if(!it)return;
   const current=getShopCat(it.text);
   const ov=document.createElement('div');
@@ -3449,14 +3567,25 @@ function renderPantry(app){
       ${catItems.map(it=>{
         const status=pantryStatus(it);
         const col=pantryStatusColor(status);
-        return `<div class="si-row" style="cursor:pointer" onclick="openPantryForm('${it.id}')">
-          <div style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;margin-top:.5rem"></div>
-          <div style="flex:1;min-width:0">
-            <div class="stx">${esc(it.name)}${it.qty?` <span style="color:var(--muted);font-weight:400">· ${esc(String(it.qty))}${esc(it.unit||'')}</span>`:''}</div>
-            ${it.expiry?`<div style="font-size:.72rem;font-family:var(--ui);color:${col};font-weight:${status==='expired'||status==='soon'?'700':'400'}">${fmtExpiry(it)}</div>`:''}
+        const isFrisch=it.kind==='frisch';
+        const low=!isFrisch&&status==='soon'&&it.minQty!==''&&it.minQty!=null&&Number(it.qty)<=Number(it.minQty);
+        return `<div class="si-row" style="align-items:center">
+          <div style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0"></div>
+          <div style="flex:1;min-width:0;cursor:pointer" onclick="openPantryForm('${it.id}')">
+            <div class="stx">${esc(it.name)}${!isFrisch&&it.qty?` <span style="color:var(--muted);font-weight:400">· ${esc(String(it.qty))}${esc(it.unit||'')}</span>`:''}</div>
+            ${low?`<div style="font-size:.72rem;font-family:var(--ui);color:#e6a700;font-weight:700">⚠️ ${t('pantry_low')}</div>`:''}
+            ${!isFrisch&&it.expiry?`<div style="font-size:.72rem;font-family:var(--ui);color:${col};font-weight:${status==='expired'||status==='soon'?'700':'400'}">${fmtExpiry(it)}</div>`:''}
             ${it.note?`<div class="ssrc">${esc(it.note)}</div>`:''}
           </div>
-          <button class="srm" onclick="event.stopPropagation();askDelPantry('${it.id}')" title="${t('btn_delete')}">✕</button>
+          ${isFrisch?`<div style="display:flex;gap:.25rem;flex-shrink:0" onclick="event.stopPropagation()">
+            <button onclick="setPantryAmpel('${it.id}','da')" title="${t('pantry_ampel_da')}" style="width:26px;height:26px;border-radius:50%;border:2px solid ${it.ampel==='da'?'#2e7d32':'var(--border2)'};background:${it.ampel==='da'?'#2e7d32':'none'};cursor:pointer"></button>
+            <button onclick="setPantryAmpel('${it.id}','knapp')" title="${t('pantry_ampel_knapp')}" style="width:26px;height:26px;border-radius:50%;border:2px solid ${it.ampel==='knapp'?'#e6a700':'var(--border2)'};background:${it.ampel==='knapp'?'#e6a700':'none'};cursor:pointer"></button>
+            <button onclick="setPantryAmpel('${it.id}','leer')" title="${t('pantry_ampel_leer')}" style="width:26px;height:26px;border-radius:50%;border:2px solid ${it.ampel==='leer'?'var(--danger)':'var(--border2)'};background:${it.ampel==='leer'?'var(--danger)':'none'};cursor:pointer"></button>
+          </div>`:`<div style="display:flex;align-items:center;gap:.3rem;flex-shrink:0" onclick="event.stopPropagation()">
+            <button onclick="adjustPantryQty('${it.id}',-1)" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:1rem;cursor:pointer">−</button>
+            <button onclick="adjustPantryQty('${it.id}',1)" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:1rem;cursor:pointer">+</button>
+          </div>`}
+          <button class="srm" onclick="askDelPantry('${it.id}')" title="${t('btn_delete')}">✕</button>
         </div>`;
       }).join('')}
     </div>`;
@@ -3481,33 +3610,53 @@ function askDelPantry(id){
 // ── Manuelles Hinzufügen / Bearbeiten ──
 function openPantryForm(id){
   const existing=id?S.pantry.find(x=>x.id===id):null;
+  const kind=existing?.kind==='frisch'?'frisch':'vorrat';
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:200';
   const md=document.createElement('div');
   md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem;width:100%;max-width:500px;max-height:85dvh;overflow-y:auto;font-family:var(--font)';
   md.innerHTML=`
     <div style="font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:.9rem">${existing?t('pantry_edit_title'):t('pantry_add_title')}</div>
+    <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_kind')}</label>
+    <div style="display:flex;gap:.5rem;margin-bottom:.3rem">
+      <button type="button" id="pfKindVorrat" class="btn ${kind==='vorrat'?'bp':'bg'} sm" style="flex:1">${t('pantry_kind_vorrat')}</button>
+      <button type="button" id="pfKindFrisch" class="btn ${kind==='frisch'?'bp':'bg'} sm" style="flex:1">${t('pantry_kind_frisch')}</button>
+    </div>
+    <div id="pfKindHint" style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${kind==='frisch'?t('pantry_kind_hint_frisch'):t('pantry_kind_hint_vorrat')}</div>
     <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_name')}</label>
     <input class="fi" id="pfName" style="width:100%;margin-bottom:.7rem" value="${esc(existing?.name||'')}" placeholder="${t('pantry_name_ph')}">
     <label class="sl" style="display:block;margin-bottom:.3rem">${t('form_category')}</label>
     <select class="fi" id="pfCat" style="width:100%;margin-bottom:.7rem">
       ${SHOP_CATS.map((c,i)=>`<option value="${i}" ${((existing?.category??15)===i)?'selected':''}>${c}</option>`).join('')}
     </select>
-    <div style="display:flex;gap:.6rem;margin-bottom:.7rem">
-      <div style="flex:1">
-        <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_qty')}</label>
-        <input class="fi" id="pfQty" type="text" inputmode="decimal" style="width:100%" value="${esc(existing?.qty??'')}">
+    <div id="pfVorratFields" style="display:${kind==='vorrat'?'block':'none'}">
+      <div style="display:flex;gap:.6rem;margin-bottom:.7rem">
+        <div style="flex:1">
+          <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_qty')}</label>
+          <input class="fi" id="pfQty" type="text" inputmode="decimal" style="width:100%" value="${esc(existing?.qty??'')}">
+        </div>
+        <div style="flex:1">
+          <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_unit')}</label>
+          <select class="fi" id="pfUnit" style="width:100%">
+            <option value="">–</option>
+            ${PANTRY_UNITS.map(u=>`<option value="${u}" ${existing?.unit===u?'selected':''}>${u}</option>`).join('')}
+          </select>
+        </div>
       </div>
-      <div style="flex:1">
-        <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_unit')}</label>
-        <select class="fi" id="pfUnit" style="width:100%">
-          <option value="">–</option>
-          ${PANTRY_UNITS.map(u=>`<option value="${u}" ${existing?.unit===u?'selected':''}>${u}</option>`).join('')}
-        </select>
+      <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_min_qty')}</label>
+      <input class="fi" id="pfMinQty" type="text" inputmode="decimal" style="width:100%;margin-bottom:.2rem" value="${esc(existing?.minQty??'')}">
+      <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('pantry_min_qty_hint')}</div>
+      <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_expiry')}</label>
+      <input class="fi" id="pfExpiry" type="date" style="width:100%;margin-bottom:.7rem" value="${esc(existing?.expiry||'')}">
+    </div>
+    <div id="pfFrischFields" style="display:${kind==='frisch'?'block':'none'};margin-bottom:.7rem">
+      <label class="sl" style="display:block;margin-bottom:.3rem">Status</label>
+      <div style="display:flex;gap:.5rem">
+        <button type="button" data-ampel="da" class="btn ${(existing?.ampel||'da')==='da'?'bp':'bg'} sm" style="flex:1">🟢 ${t('pantry_ampel_da')}</button>
+        <button type="button" data-ampel="knapp" class="btn ${existing?.ampel==='knapp'?'bp':'bg'} sm" style="flex:1">🟡 ${t('pantry_ampel_knapp')}</button>
+        <button type="button" data-ampel="leer" class="btn ${existing?.ampel==='leer'?'bp':'bg'} sm" style="flex:1">🔴 ${t('pantry_ampel_leer')}</button>
       </div>
     </div>
-    <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_expiry')}</label>
-    <input class="fi" id="pfExpiry" type="date" style="width:100%;margin-bottom:.7rem" value="${esc(existing?.expiry||'')}">
     <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_note')}</label>
     <input class="fi" id="pfNote" style="width:100%;margin-bottom:1rem" value="${esc(existing?.note||'')}" placeholder="${t('pantry_note_ph')}">
     <div style="display:flex;gap:.6rem">
@@ -3516,6 +3665,20 @@ function openPantryForm(id){
     </div>`;
   ov.appendChild(md);document.body.appendChild(ov);
   document.getElementById('pfName').focus();
+  let curKind=kind,curAmpel=existing?.ampel||'da';
+  const syncKindUI=()=>{
+    document.getElementById('pfVorratFields').style.display=curKind==='vorrat'?'block':'none';
+    document.getElementById('pfFrischFields').style.display=curKind==='frisch'?'block':'none';
+    document.getElementById('pfKindHint').textContent=curKind==='frisch'?t('pantry_kind_hint_frisch'):t('pantry_kind_hint_vorrat');
+    document.getElementById('pfKindVorrat').className='btn '+(curKind==='vorrat'?'bp':'bg')+' sm';
+    document.getElementById('pfKindFrisch').className='btn '+(curKind==='frisch'?'bp':'bg')+' sm';
+  };
+  document.getElementById('pfKindVorrat').addEventListener('click',()=>{curKind='vorrat';syncKindUI();});
+  document.getElementById('pfKindFrisch').addEventListener('click',()=>{curKind='frisch';syncKindUI();});
+  md.querySelectorAll('[data-ampel]').forEach(btn=>btn.addEventListener('click',()=>{
+    curAmpel=btn.dataset.ampel;
+    md.querySelectorAll('[data-ampel]').forEach(b=>b.className='btn '+(b.dataset.ampel===curAmpel?'bp':'bg')+' sm');
+  }));
   const close=()=>document.body.removeChild(ov);
   document.getElementById('pfCancel').addEventListener('click',close);
   ov.addEventListener('click',e=>{if(e.target===ov)close();});
@@ -3525,11 +3688,18 @@ function openPantryForm(id){
     const patch={
       name,
       category:Number(document.getElementById('pfCat').value),
-      qty:document.getElementById('pfQty').value.trim(),
-      unit:document.getElementById('pfUnit').value,
-      expiry:document.getElementById('pfExpiry').value,
+      kind:curKind,
       note:document.getElementById('pfNote').value.trim(),
     };
+    if(curKind==='vorrat'){
+      patch.qty=document.getElementById('pfQty').value.trim();
+      patch.unit=document.getElementById('pfUnit').value;
+      patch.minQty=document.getElementById('pfMinQty').value.trim();
+      patch.expiry=document.getElementById('pfExpiry').value;
+    }else{
+      patch.ampel=curAmpel;
+      patch.qty='';patch.unit='';patch.expiry='';patch.minQty='';
+    }
     if(existing)updatePantryItem(existing.id,patch);else addPantryItem(patch);
     close();renderApp();
   });
@@ -3596,9 +3766,11 @@ MENGEN: Lies "qty" ausschließlich aus der Spalte "Menge" DERSELBEN Zeile – ve
 
 Produktname ("name"): kurz und generisch, OHNE Handelsmarken- oder Eigenmarken-Präfixe wie "REWE Beste Wahl", "REWE Bio", "ja!", "Bio" oder Herstellernamen (z.B. "Wilhelm Brandenburg"). Behalte nur die Kernbezeichnung plus relevante Sorte/Variante, z.B. "Erdnüsse" statt "REWE Beste Wahl Erdnüsse grosse Kerne", "Rindfleischsalami" statt "Wilhelm Brandenburg Rindfleischsalami", "Apfelsaft naturtrüb" statt "REWE Beste Wahl Apfelsaft naturtrüb". Wenn du dir bei einem Wort im Namen unsicher bist, nimm die naheliegendste sinnvolle Lesart (z.B. ein Fisch-/Fleischprodukt in Tomatensauce statt eines Fantasieworts) – aber erfinde keine neuen Produkte.
 
+ART ("kind"): Klassifiziere jedes Produkt als "vorrat" (lang haltbar: Konserven, Tiefkühl, Trockenware, Hygieneartikel, Putzmittel, Getränke in Flaschen/Kästen) oder "frisch" (kurz haltbar: Milchprodukte, frisches Obst/Gemüse, frisches Fleisch/Wurst/Fisch, Brot, Salate). Im Zweifel "vorrat" wählen.
+
 VORSICHT BEI UNSICHERHEIT: Ersetze ein schwer lesbares Wort NIEMALS durch ein anderes, aber ähnlich aussehendes oder plausibel klingendes Produkt (z.B. nicht "Apfelmark" zu "Kaffee Mark" machen, nicht "Weidemilch" zu "Weidekäse Joghurt" machen, nicht ein Produkt durch eine bekannte Marke wie "Fanta Zero" ersetzen, nur weil die Form der Verpackung ähnlich aussieht). Wenn du dir bei einem Wort unsicher bist, gib lieber den Teil wieder, den du sicher lesen kannst (z.B. nur "Milch" statt eines erfundenen Produkts), oder lasse die Zeile weg.
 
-Antworte NUR mit einem JSON-Array. Jedes Element: {"name":"string","qty":"Zahl als String, z.B. 1 oder 500","unit":"Stück|g|kg|ml|l|Packung|Dose|Glas|Bund oder leer","expiry":"YYYY-MM-DD falls auf dem Bild ein MHD/Verfallsdatum erkennbar ist, sonst leerer String"}.
+Antworte NUR mit einem JSON-Array. Jedes Element: {"name":"string","kind":"vorrat oder frisch","qty":"Zahl als String, z.B. 1 oder 500","unit":"Stück|g|kg|ml|l|Packung|Dose|Glas|Bund oder leer","expiry":"YYYY-MM-DD falls auf dem Bild ein MHD/Verfallsdatum erkennbar ist, sonst leerer String"}.
 Bei einem Kassenbon steht meist kein MHD drauf – dann "expiry":"" lassen.`,
     contentParts,
     temperature:0
@@ -3617,19 +3789,33 @@ function showPantryScanResults(products,closeModal){
     <div id="pantryScanRows" style="display:flex;flex-direction:column;gap:.5rem;margin-top:.6rem"></div>
     <button class="btn bp" id="pantryScanConfirm" style="width:100%;margin-top:.9rem">+ ${t('pantry_scan_add_all')}</button>`;
   const rowsEl=document.getElementById('pantryScanRows');
-  rowsEl.innerHTML=rows.map((p,i)=>`
-    <div style="background:var(--surface2);border-radius:10px;padding:.55rem .65rem;display:flex;flex-direction:column;gap:.4rem" data-psrow="${i}">
+  rowsEl.innerHTML=rows.map((p,i)=>{
+    const rowKind=p.kind==='frisch'?'frisch':'vorrat';
+    return `
+    <div style="background:var(--surface2);border-radius:10px;padding:.55rem .65rem;display:flex;flex-direction:column;gap:.4rem" data-psrow="${i}" data-pskind="${rowKind}">
       <input class="fi" style="width:100%;padding:.4rem .55rem;font-size:.92rem;font-weight:600" value="${esc(p.name||'')}" data-psfield="name" placeholder="${t('pantry_name')}">
       <div style="display:flex;gap:.35rem;align-items:center">
-        <input class="fi" style="width:46px;flex-shrink:0;padding:.35rem .3rem;font-size:.85rem;text-align:center" value="${esc(p.qty??'')}" data-psfield="qty" placeholder="${t('pantry_qty')}">
-        <select class="fi" style="width:76px;flex-shrink:0;padding:.35rem .25rem;font-size:.8rem" data-psfield="unit">
-          <option value="">–</option>
-          ${PANTRY_UNITS.map(u=>`<option value="${u}" ${p.unit===u?'selected':''}>${u}</option>`).join('')}
-        </select>
-        <input class="fi" type="date" style="flex:1;min-width:0;padding:.35rem .35rem;font-size:.78rem" value="${esc(p.expiry||'')}" data-psfield="expiry">
-        <button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1rem;padding:.15rem .3rem;flex-shrink:0" data-psremove="${i}" title="${t('btn_delete')}">✕</button>
+        <button type="button" data-pskindbtn="vorrat" class="btn ${rowKind==='vorrat'?'bp':'bg'} sm" style="padding:.3rem .5rem;font-size:.72rem">📦</button>
+        <button type="button" data-pskindbtn="frisch" class="btn ${rowKind==='frisch'?'bp':'bg'} sm" style="padding:.3rem .5rem;font-size:.72rem">🥬</button>
+        <div data-psvorrat style="display:${rowKind==='vorrat'?'flex':'none'};gap:.35rem;align-items:center;flex:1;min-width:0">
+          <input class="fi" style="width:44px;flex-shrink:0;padding:.35rem .3rem;font-size:.85rem;text-align:center" value="${esc(p.qty??'')}" data-psfield="qty" placeholder="${t('pantry_qty')}">
+          <select class="fi" style="width:70px;flex-shrink:0;padding:.35rem .2rem;font-size:.78rem" data-psfield="unit">
+            <option value="">–</option>
+            ${PANTRY_UNITS.map(u=>`<option value="${u}" ${p.unit===u?'selected':''}>${u}</option>`).join('')}
+          </select>
+          <input class="fi" type="date" style="flex:1;min-width:0;padding:.35rem .3rem;font-size:.75rem" value="${esc(p.expiry||'')}" data-psfield="expiry">
+        </div>
+        <button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1rem;padding:.15rem .3rem;flex-shrink:0;margin-left:auto" data-psremove="${i}" title="${t('btn_delete')}">✕</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  rowsEl.querySelectorAll('[data-pskindbtn]').forEach(btn=>btn.addEventListener('click',()=>{
+    const rowEl=btn.closest('[data-psrow]');
+    const kind=btn.dataset.pskindbtn;
+    rowEl.dataset.pskind=kind;
+    rowEl.querySelectorAll('[data-pskindbtn]').forEach(b=>b.className='btn '+(b.dataset.pskindbtn===kind?'bp':'bg')+' sm');
+    rowEl.querySelector('[data-psvorrat]').style.display=kind==='vorrat'?'flex':'none';
+  }));
   rowsEl.querySelectorAll('[data-psremove]').forEach(btn=>btn.addEventListener('click',()=>{
     btn.closest('[data-psrow]').remove();
   }));
@@ -3638,10 +3824,15 @@ function showPantryScanResults(products,closeModal){
       const i=Number(rowEl.dataset.psrow);
       const name=rowEl.querySelector('[data-psfield="name"]').value.trim();
       if(!name)return;
-      const qty=rowEl.querySelector('[data-psfield="qty"]').value.trim();
-      const unit=rowEl.querySelector('[data-psfield="unit"]').value;
-      const expiry=rowEl.querySelector('[data-psfield="expiry"]').value;
-      addPantryItem({name,qty,unit,expiry,category:rows[i].category});
+      const kind=rowEl.dataset.pskind==='frisch'?'frisch':'vorrat';
+      if(kind==='vorrat'){
+        const qty=rowEl.querySelector('[data-psfield="qty"]').value.trim();
+        const unit=rowEl.querySelector('[data-psfield="unit"]').value;
+        const expiry=rowEl.querySelector('[data-psfield="expiry"]').value;
+        addPantryItem({name,kind,qty,unit,expiry,category:rows[i].category});
+      }else{
+        addPantryItem({name,kind,ampel:'da',category:rows[i].category});
+      }
     });
     toast(t('toast_saved'));
     closeModal();renderApp();
@@ -4281,7 +4472,16 @@ function addToShop(id){
 }
 function togPick(i){window._shopChecks[i].checked=!window._shopChecks[i].checked;window._renderPicker();}
 
-function togSh(i){S.shopping[i].done=!S.shopping[i].done;saveSh();renderApp();renderNav();}
+function togSh(i){
+  const it=S.shopping[i];
+  it.done=!it.done;
+  if(it.done){
+    if(!S.shopDoneSuggest.some(x=>x.text.toLowerCase()===it.text.toLowerCase()))S.shopDoneSuggest.push({text:it.text});
+  }else{
+    S.shopDoneSuggest=S.shopDoneSuggest.filter(x=>x.text.toLowerCase()!==it.text.toLowerCase());
+  }
+  saveSh();renderApp();renderNav();
+}
 function rmSh(i){S.shopping.splice(i,1);saveSh();renderApp();}
 
 function editShItem(idx){
@@ -6662,7 +6862,9 @@ document.getElementById('backBtn').onclick=()=>{
   if(S.view==='form'){S.editId?openDetail(S.editId):goList();}
   else goList();
 };
-document.getElementById('fab').addEventListener('click',openNew);
+document.getElementById('fab').addEventListener('click',()=>{
+  saveScroll();S.view='newrecipe';S.selId=null;S.aiSearchChat=[];render();restoreScroll('newrecipe');
+});
 document.querySelectorAll('.nb').forEach(b=>b.addEventListener('click',()=>{
   const n=b.dataset.nav;
   // Tapping Rezepte while in detail → remember and return to recipe
@@ -6790,7 +6992,7 @@ function loadSession(){
   initDetSwipe(); // Detail tab swipe – runs once for entire app lifetime
   // ══ Swipe navigation ══
   (()=>{
-    const NAV_ORDER=['list','shopping','planner','newrecipe','settings'];
+    const NAV_ORDER=['list','shopping','planner','pantry','settings'];
     let tx=0,ty=0;
     const appEl=document.getElementById('app');
     appEl.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
