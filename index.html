@@ -798,6 +798,7 @@ async function load(){
     // No sample fallback – empty list is fine
     S.shopping = shopping || [];
     S.pantry = pantry || [];
+    consolidatePantryDuplicates();
     // mealPlan: {date: {date:'2026-05-12', meals:[{id,recipeId}]}}
     S.mealPlan = {};
     (mealplan||[]).forEach(row => { S.mealPlan[row.date] = row.meals||[]; });
@@ -1053,6 +1054,7 @@ function startFsSync(){
     if(remoteTs<=(S._pantrySyncTs||0))return; // eigener Write (Echo) oder veralteter/überholter Stand
     S._pantrySyncTs=remoteTs;
     S.pantry=data.items||[];
+    consolidatePantryDuplicates();
     savePantry_local();
     if(S.view==='pantry')renderApp();
     renderNav();
@@ -1448,7 +1450,7 @@ const LANG={
     pantry_scan:'Smart-Scan',pantry_add:'Hinzufügen',pantry_empty:'Vorratskammer ist leer.',
     pantry_confirm_del:'Diesen Vorrats-Eintrag wirklich löschen?',
     pantry_edit_title:'Eintrag bearbeiten',pantry_add_title:'Neuer Vorrats-Eintrag',
-    pantry_name:'Produkt',pantry_name_ph:'z.B. Milch',pantry_qty:'Menge',pantry_unit:'Einheit',
+    pantry_name:'Produkt',pantry_name_ph:'z.B. Milch',pantry_qty:'Anzahl',
     pantry_expiry:'MHD / Verfallsdatum',pantry_note:'Notiz (optional)',pantry_note_ph:'z.B. angebrochen',
     pantry_expired_since:'seit {n} Tag(en) abgelaufen',pantry_today:'läuft heute ab',pantry_in_days:'noch {n} Tag(e)',
     pantry_scan_title:'📷 Smart-Scan',pantry_scan_hint:'Foto vom Einkauf oder Kassenbon hochladen – die KI erkennt automatisch die Produkte. MHDs stehen selten auf Bons, ergänze sie bei Bedarf danach.',
@@ -1462,6 +1464,8 @@ const LANG={
     pantry_kind_hint_frisch:'Milch, Joghurt, Gemüse – nur Status statt genauer Menge',
     pantry_ampel_da:'da',pantry_ampel_knapp:'knapp',pantry_ampel_leer:'leer',
     pantry_min_qty:'Mindestbestand (optional)',pantry_min_qty_hint:'Wird rot markiert, sobald die Menge darunter fällt',
+    pantry_batches_short:'Chargen',pantry_add_batch:'Neue Charge (eigenes MHD)',pantry_no_batches:'Keine Chargen erfasst.',
+    pantry_total_qty:'{n}× insgesamt',pantry_edit_product:'Produkt bearbeiten',pantry_edit_product_hint:'Menge & MHD über die Chargen-Ansicht verwalten',
     pantry_low:'Mindestbestand unterschritten',
     pantry_suggest_hint:'{n} abgehakt(e) Artikel könnten in die Vorratskammer.',pantry_suggest_review:'Prüfen',
     pantry_suggest_title:'Zur Vorratskammer hinzufügen?',pantry_suggest_desc:'Diese abgehakten Artikel als Vorrat erfassen. Einzelne mit ✕ überspringen, Art bei Bedarf umschalten.',
@@ -1544,7 +1548,7 @@ const LANG={
     pantry_scan:'Smart Scan',pantry_add:'Add',pantry_empty:'Pantry is empty.',
     pantry_confirm_del:'Really delete this pantry item?',
     pantry_edit_title:'Edit item',pantry_add_title:'New pantry item',
-    pantry_name:'Product',pantry_name_ph:'e.g. Milk',pantry_qty:'Quantity',pantry_unit:'Unit',
+    pantry_name:'Product',pantry_name_ph:'e.g. Milk',pantry_qty:'Count',
     pantry_expiry:'Best-before / expiry date',pantry_note:'Note (optional)',pantry_note_ph:'e.g. opened',
     pantry_expired_since:'expired {n} day(s) ago',pantry_today:'expires today',pantry_in_days:'{n} day(s) left',
     pantry_scan_title:'📷 Smart Scan',pantry_scan_hint:'Upload a photo of your groceries or a receipt – AI will automatically recognize the products. Expiry dates are rarely printed on receipts, so add them afterwards if needed.',
@@ -1558,6 +1562,8 @@ const LANG={
     pantry_kind_hint_frisch:'Milk, yogurt, veggies – simple status instead of exact quantity',
     pantry_ampel_da:'have it',pantry_ampel_knapp:'running low',pantry_ampel_leer:'out',
     pantry_min_qty:'Minimum stock (optional)',pantry_min_qty_hint:'Marked red once quantity drops below this',
+    pantry_batches_short:'batches',pantry_add_batch:'New batch (own expiry)',pantry_no_batches:'No batches recorded.',
+    pantry_total_qty:'{n}× total',pantry_edit_product:'Edit product',pantry_edit_product_hint:'Manage quantity & expiry in the batch view',
     pantry_low:'Below minimum stock',
     pantry_suggest_hint:'{n} checked-off item(s) could go into the pantry.',pantry_suggest_review:'Review',
     pantry_suggest_title:'Add to pantry?',pantry_suggest_desc:'Add these checked-off items as stock. Skip individual ones with ✕, switch type if needed.',
@@ -3327,7 +3333,7 @@ function pantryLocation(item){
   if(item.location)return item.location;
   return item.kind==='frisch'?'kuehlschrank':'vorrat';
 }
-// Trackingart je Standort: Kühlschrank läuft nur über die Ampel, Vorrat & Gefrierschrank über Menge+MHD
+// Trackingart je Standort: Kühlschrank läuft nur über die Ampel, Vorrat & Gefrierschrank über Stückzahl+MHD
 function pantryTrackMode(loc){
   return loc==='kuehlschrank'?'ampel':'qty';
 }
@@ -3338,23 +3344,42 @@ function guessPantryLocation(name){
   if(cat===2||cat===8||cat===0)return 'kuehlschrank'; // Kühltheke, Milch & Eier, Obst & Gemüse
   return 'vorrat';
 }
-
-// Tage bis zum Ablaufdatum (negativ = bereits abgelaufen). null = kein Datum gesetzt.
 function pantryLocButtonsHtml(dataAttr,activeLoc){
   return PANTRY_LOCS.map(l=>`<button type="button" data-${dataAttr}="${l}" class="btn ${activeLoc===l?'bp':'bg'} sm" style="padding:.4rem .55rem;font-size:.78rem;display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap">${PANTRY_LOC_ICON[l]}${l!=='vorrat'?`<span>${t('pantry_loc_short_'+l)}</span>`:''}</button>`).join('');
 }
+// Eindeutiger Schlüssel zum Zusammenfassen gleicher Produkte (Name + Standort)
+function pantryProductKey(name,loc){
+  return loc+'|'+(name||'').trim().toLowerCase();
+}
 
-// Tage bis zum Ablaufdatum (negativ = bereits abgelaufen). null = kein Datum gesetzt.
-function pantryDaysLeft(item){
-  if(!item.expiry)return null;
+// Chargen eines Artikels (je eine pro Kauf/MHD). Legacy-Artikel ohne batches-Array werden aus qty/expiry synthetisiert.
+function pantryBatches(item){
+  if(Array.isArray(item.batches))return item.batches;
+  if(item.qty!==''&&item.qty!=null)return [{id:item.id+'_legacy',qty:Number(item.qty)||0,expiry:item.expiry||''}];
+  return [];
+}
+function pantryTotalQty(item){
+  return pantryBatches(item).reduce((sum,b)=>sum+(Number(b.qty)||0),0);
+}
+// Charge mit dem nächsten MHD (nur Chargen mit gesetztem Datum)
+function pantryEarliestBatch(item){
+  const withExpiry=pantryBatches(item).filter(b=>b.expiry);
+  if(!withExpiry.length)return null;
+  return withExpiry.reduce((a,b)=>a.expiry<b.expiry?a:b);
+}
+
+// Tage bis zu einem Datum (negativ = bereits abgelaufen). null = kein Datum gesetzt.
+function pantryDaysLeft(expiry){
+  if(!expiry)return null;
   const today=new Date();today.setHours(0,0,0,0);
-  const exp=new Date(item.expiry+'T00:00:00');
+  const exp=new Date(expiry+'T00:00:00');
   return Math.round((exp-today)/86400000);
 }
-// 'expired' | 'soon' | 'ok' | 'none' – ausschließlich MHD-basiert (Mengen-Warnungen laufen separat über pantryQtyCritical → Einkaufsliste, ohne eigenes Icon)
+// 'expired' | 'soon' | 'ok' | 'none' – ausschließlich MHD-basiert, anhand der am nächsten fälligen Charge (Mengen-Warnungen laufen separat über pantryQtyCritical → Einkaufsliste, ohne eigenes Icon)
 function pantryStatus(item){
   if(pantryTrackMode(pantryLocation(item))==='ampel')return 'none'; // Kühlschrank wird per Ampel getrackt, nicht per MHD
-  const d=pantryDaysLeft(item);
+  const eb=pantryEarliestBatch(item);
+  const d=eb?pantryDaysLeft(eb.expiry):null;
   if(d===null)return 'none';
   if(d<0)return 'expired';
   if(d<=PANTRY_SOON_DAYS)return 'soon';
@@ -3365,11 +3390,11 @@ function pantryStatusColor(status){
   if(status==='soon')return '#e6a700';
   return 'var(--muted)';
 }
-function fmtExpiry(item){
-  if(!item.expiry)return '';
-  const d=pantryDaysLeft(item);
+function fmtExpiry(expiry){
+  if(!expiry)return '';
+  const d=pantryDaysLeft(expiry);
   const locale=S.lang==='en'?'en-GB':'de-DE';
-  const dateStr=new Date(item.expiry+'T00:00:00').toLocaleDateString(locale,{day:'2-digit',month:'2-digit',year:'numeric'});
+  const dateStr=new Date(expiry+'T00:00:00').toLocaleDateString(locale,{day:'2-digit',month:'2-digit',year:'numeric'});
   if(d<0)return dateStr+' · '+t('pantry_expired_since').replace('{n}',Math.abs(d));
   if(d===0)return dateStr+' · '+t('pantry_today');
   return dateStr+' · '+t('pantry_in_days').replace('{n}',d);
@@ -3377,8 +3402,7 @@ function fmtExpiry(item){
 // Mengenkritisch = knapper Vorrat (Mindestbestand/leer bzw. Ampel), NICHT MHD-Ablauf – nur das löst den Auto-Eintrag auf die Einkaufsliste aus.
 function pantryQtyCritical(item){
   if(pantryTrackMode(pantryLocation(item))==='ampel')return item.ampel==='leer';
-  const qtyNum=item.qty!==''&&item.qty!=null?Number(item.qty):null;
-  if(qtyNum===null||isNaN(qtyNum))return false;
+  const qtyNum=pantryTotalQty(item);
   if(qtyNum<=0)return true;
   const minNum=item.minQty!==''&&item.minQty!=null?Number(item.minQty):null;
   return minNum!==null&&!isNaN(minNum)&&qtyNum<=minNum;
@@ -3396,11 +3420,78 @@ function pantryAutoAddCheck(item){
     item._autoAdded=false;
   }
 }
+// Einmalige Bereinigung: fasst mehrere alte Einzel-Einträge mit gleichem Namen+Standort zu einem Produkt mit mehreren Chargen zusammen.
+function consolidatePantryDuplicates(){
+  const byKey={};
+  const result=[];
+  let changed=false;
+  const ampelRank={leer:0,knapp:1,da:2};
+  for(const it of S.pantry){
+    const loc=pantryLocation(it);
+    const key=pantryProductKey(it.name,loc);
+    if(pantryTrackMode(loc)==='ampel'){
+      if(byKey[key]){
+        changed=true;
+        if((ampelRank[it.ampel]??2)<(ampelRank[byKey[key].ampel]??2))byKey[key].ampel=it.ampel;
+        if(it.note&&!byKey[key].note)byKey[key].note=it.note;
+      }else{
+        byKey[key]={...it,location:loc,batches:[]};
+        result.push(byKey[key]);
+      }
+    }else{
+      const batches=pantryBatches(it);
+      if(byKey[key]){
+        changed=true;
+        byKey[key].batches=[...byKey[key].batches,...batches];
+        if(it.minQty&&!byKey[key].minQty)byKey[key].minQty=it.minQty;
+        if(it.note&&!byKey[key].note)byKey[key].note=it.note;
+      }else{
+        if(!Array.isArray(it.batches))changed=true; // Legacy-Format wird normalisiert
+        const {qty,unit,expiry,...rest}=it;
+        byKey[key]={...rest,location:loc,batches};
+        result.push(byKey[key]);
+      }
+    }
+  }
+  S.pantry=result;
+  if(changed)savePantry();
+}
+// Findet ein bestehendes Produkt mit gleichem Namen+Standort (Groß/Kleinschreibung egal)
+function findPantryProduct(name,loc){
+  const key=pantryProductKey(name,loc);
+  return S.pantry.find(x=>pantryProductKey(x.name,pantryLocation(x))===key);
+}
+// Legt einen Artikel an oder fügt ihn – falls Name+Standort schon existieren – als neue Charge zum bestehenden Produkt hinzu
 function addPantryItem(item){
-  const obj={id:uid(),name:'',location:'vorrat',qty:'',unit:'',minQty:'',ampel:'da',expiry:'',note:'',addedAt:Date.now(),_updatedAt:Date.now(),_autoAdded:false,...item};
-  S.pantry.push(obj);
-  pantryAutoAddCheck(obj);
-  savePantry();
+  const location=item.location||'vorrat';
+  const name=(item.name||'').trim();
+  if(!name)return;
+  const existing=findPantryProduct(name,location);
+  if(pantryTrackMode(location)==='ampel'){
+    if(existing){
+      updatePantryItem(existing.id,{ampel:item.ampel||existing.ampel,note:item.note||existing.note||''});
+    }else{
+      const obj={id:uid(),name,location,ampel:item.ampel||'da',note:item.note||'',minQty:'',batches:[],addedAt:Date.now(),_updatedAt:Date.now(),_autoAdded:false};
+      S.pantry.push(obj);
+      pantryAutoAddCheck(obj);
+      savePantry();
+    }
+    return;
+  }
+  const qty=item.qty!==''&&item.qty!=null?Number(item.qty):1;
+  const batch={id:uid(),qty:isNaN(qty)?1:qty,expiry:item.expiry||''};
+  if(existing){
+    const batches=[...pantryBatches(existing),batch];
+    const patch={batches};
+    if(item.minQty&&!existing.minQty)patch.minQty=item.minQty;
+    if(item.note&&!existing.note)patch.note=item.note;
+    updatePantryItem(existing.id,patch);
+  }else{
+    const obj={id:uid(),name,location,batches:[batch],minQty:item.minQty||'',note:item.note||'',ampel:'da',addedAt:Date.now(),_updatedAt:Date.now(),_autoAdded:false};
+    S.pantry.push(obj);
+    pantryAutoAddCheck(obj);
+    savePantry();
+  }
 }
 function updatePantryItem(id,patch){
   const idx=S.pantry.findIndex(x=>x.id===id);
@@ -3414,11 +3505,49 @@ function removePantryItem(id){
   savePantry();
   renderApp();
 }
+// Fügt eine neue Charge (z.B. Nachkauf mit eigenem MHD) zu einem bestehenden Produkt hinzu
+function addPantryBatch(id,opts){
+  const it=S.pantry.find(x=>x.id===id);if(!it)return;
+  const n=Number(opts.qty);
+  const batches=[...pantryBatches(it),{id:uid(),qty:isNaN(n)||n<=0?1:n,expiry:opts.expiry||''}];
+  updatePantryItem(id,{batches});
+}
+function updatePantryBatch(id,batchId,patch){
+  const it=S.pantry.find(x=>x.id===id);if(!it)return;
+  const batches=pantryBatches(it).map(b=>b.id===batchId?{...b,...patch}:b);
+  updatePantryItem(id,{batches});
+}
+function removePantryBatch(id,batchId){
+  const it=S.pantry.find(x=>x.id===id);if(!it)return;
+  const batches=pantryBatches(it).filter(b=>b.id!==batchId);
+  updatePantryItem(id,{batches});
+}
+// Schneller +/- Stepper: + legt bei der chargenlosen Menge drauf (bzw. legt eine neue chargenlose Charge an),
+// − verbraucht zuerst die Charge mit dem nächsten MHD (First-Expired-First-Out).
 function adjustPantryQty(id,delta){
   const it=S.pantry.find(x=>x.id===id);if(!it)return;
-  const cur=Number(it.qty)||0;
-  const next=Math.max(0,cur+delta);
-  updatePantryItem(id,{qty:String(next)});
+  let batches=pantryBatches(it).map(b=>({...b}));
+  if(delta>0){
+    const b=batches.find(x=>!x.expiry);
+    if(b)b.qty=(Number(b.qty)||0)+delta;
+    else batches.push({id:uid(),qty:delta,expiry:''});
+  }else{
+    let remaining=-delta;
+    const order=[...batches].sort((a,b)=>{
+      if(!a.expiry&&!b.expiry)return 0;
+      if(!a.expiry)return 1;
+      if(!b.expiry)return -1;
+      return a.expiry<b.expiry?-1:1;
+    });
+    for(const b of order){
+      if(remaining<=0)break;
+      const take=Math.min(remaining,Number(b.qty)||0);
+      b.qty=(Number(b.qty)||0)-take;
+      remaining-=take;
+    }
+    batches=batches.filter(b=>Number(b.qty)>0);
+  }
+  updatePantryItem(id,{batches});
   renderApp();
 }
 function setPantryAmpel(id,ampel){
@@ -3510,13 +3639,9 @@ function openPantrySuggestModal(){
       </div>
       <div style="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap">
         ${pantryLocButtonsHtml('psglocbtn',guessLoc)}
-        <div data-psgvorrat style="display:${pantryTrackMode(guessLoc)==='qty'?'flex':'none'};gap:.3rem;align-items:center;flex:1;min-width:0">
-          <input class="fi" style="width:38px;flex-shrink:0;padding:.35rem .2rem;font-size:.85rem;text-align:center" data-psgfield="qty" placeholder="${t('pantry_qty')}">
-          <select class="fi" style="width:56px;flex-shrink:0;padding:.35rem .1rem;font-size:.74rem" data-psgfield="unit">
-            <option value="">–</option>
-            ${PANTRY_UNITS.map(u=>`<option value="${u}">${u}</option>`).join('')}
-          </select>
-          <input class="fi" type="date" style="width:98px;flex-shrink:0;padding:.35rem .2rem;font-size:.68rem" data-psgfield="expiry" title="${t('pantry_expiry')}">
+        <div data-psgvorrat style="display:${pantryTrackMode(guessLoc)==='qty'?'flex':'none'};gap:.4rem;align-items:center;flex:1;min-width:0">
+          <input class="fi" style="width:50px;flex-shrink:0;padding:.35rem .2rem;font-size:.85rem;text-align:center" value="1" data-psgfield="qty" placeholder="${t('pantry_qty')}">
+          <input class="fi" type="date" style="flex:1;min-width:0;padding:.35rem .3rem;font-size:.72rem" data-psgfield="expiry" title="${t('pantry_expiry')}">
         </div>
       </div>
     </div>`;
@@ -3541,9 +3666,8 @@ function openPantrySuggestModal(){
       const location=rowEl.dataset.psgloc;
       if(pantryTrackMode(location)==='qty'){
         const qty=rowEl.querySelector('[data-psgfield="qty"]').value.trim();
-        const unit=rowEl.querySelector('[data-psgfield="unit"]').value;
         const expiry=rowEl.querySelector('[data-psgfield="expiry"]').value;
-        addPantryItem({name,location,qty,unit,expiry});
+        addPantryItem({name,location,qty,expiry});
       }else{
         addPantryItem({name,location});
       }
@@ -3586,7 +3710,6 @@ function showShopCatPicker(idx){
 }
 
 // VORRATSKAMMER
-const PANTRY_UNITS=['Stück','g','kg','ml','l','Packung','Dose','Glas','Bund'];
 
 function renderPantry(app){
   const items=S.pantry;
@@ -3602,7 +3725,8 @@ function renderPantry(app){
     const locItems=grouped[loc].sort((a,b)=>{
       const r=sortRank(a)-sortRank(b);
       if(r!==0)return r;
-      return (pantryDaysLeft(a)??9999)-(pantryDaysLeft(b)??9999);
+      const ea=pantryEarliestBatch(a),eb=pantryEarliestBatch(b);
+      return (ea?pantryDaysLeft(ea.expiry):9999)-(eb?pantryDaysLeft(eb.expiry):9999);
     });
     return `<div style="margin-bottom:1rem">
       <div style="font-size:.72rem;font-weight:700;color:var(--muted);font-family:var(--font);text-transform:uppercase;letter-spacing:1.5px;padding:.4rem 0 .3rem;border-bottom:1px solid var(--border);margin-bottom:.3rem">${PANTRY_LOC_ICON[loc]} ${t('pantry_loc_'+loc)}</div>
@@ -3610,11 +3734,15 @@ function renderPantry(app){
         const status=pantryStatus(it);
         const isAmpel=pantryTrackMode(loc)==='ampel';
         const col=isAmpel?ampelColor(it.ampel):pantryStatusColor(status);
+        const total=isAmpel?0:pantryTotalQty(it);
+        const batches=isAmpel?[]:pantryBatches(it);
+        const earliest=isAmpel?null:pantryEarliestBatch(it);
+        const openFn=isAmpel?`openPantryForm('${it.id}')`:`openPantryBatches('${it.id}')`;
         return `<div class="si-row" style="align-items:center">
           <div style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0"></div>
-          <div style="flex:1;min-width:0;cursor:pointer" onclick="openPantryForm('${it.id}')">
-            <div class="stx">${esc(it.name)}${!isAmpel&&it.qty?` <span style="color:var(--muted);font-weight:400">· ${esc(String(it.qty))}${esc(it.unit||'')}</span>`:''}</div>
-            ${!isAmpel&&it.expiry?`<div style="font-size:.72rem;font-family:var(--ui);color:${pantryStatusColor(status)};font-weight:${status==='expired'||status==='soon'?'700':'400'}">${fmtExpiry(it)}</div>`:''}
+          <div style="flex:1;min-width:0;cursor:pointer" onclick="${openFn}">
+            <div class="stx">${esc(it.name)}${!isAmpel?` <span style="color:var(--muted);font-weight:400">· ${total}×${batches.length>1?` <span style="font-size:.7rem">(${batches.length} ${t('pantry_batches_short')})</span>`:''}</span>`:''}</div>
+            ${!isAmpel&&earliest?`<div style="font-size:.72rem;font-family:var(--ui);color:${pantryStatusColor(status)};font-weight:${status==='expired'||status==='soon'?'700':'400'}">${fmtExpiry(earliest.expiry)}</div>`:''}
             ${it.note?`<div class="ssrc">${esc(it.note)}</div>`:''}
           </div>
           ${isAmpel?`<div style="display:flex;gap:.25rem;flex-shrink:0" onclick="event.stopPropagation()">
@@ -3647,10 +3775,63 @@ function askDelPantry(id){
   if(confirm(t('pantry_confirm_del')))removePantryItem(id);
 }
 
+// ── Chargen-Detailansicht (mehrere MHDs pro Produkt) ──
+function openPantryBatches(id){
+  const it=S.pantry.find(x=>x.id===id);if(!it)return;
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:200';
+  const md=document.createElement('div');
+  md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem;width:100%;max-width:500px;max-height:85dvh;overflow-y:auto;font-family:var(--font)';
+  const render=()=>{
+    const cur=S.pantry.find(x=>x.id===id);
+    if(!cur){document.body.contains(ov)&&document.body.removeChild(ov);return;}
+    const batches=pantryBatches(cur);
+    const total=pantryTotalQty(cur);
+    md.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem;margin-bottom:.2rem">
+        <div style="font-size:1rem;font-weight:700;color:var(--text)">${esc(cur.name)}</div>
+        <button id="pbEditBtn" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem">✏️ ${t('pantry_edit_product')}</button>
+      </div>
+      <div style="font-size:.78rem;color:var(--muted);font-family:var(--ui);margin-bottom:.9rem">${PANTRY_LOC_ICON[pantryLocation(cur)]} ${t('pantry_loc_'+pantryLocation(cur))} · ${t('pantry_total_qty').replace('{n}',total)}</div>
+      <div id="pbRows" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.9rem"></div>
+      <button class="btn bg" id="pbAddBatch" style="width:100%;margin-bottom:.6rem">+ ${t('pantry_add_batch')}</button>
+      <button class="btn bp" id="pbClose" style="width:100%">${t('btn_close')}</button>`;
+    const rowsEl=md.querySelector('#pbRows');
+    rowsEl.innerHTML=batches.length?batches.slice().sort((a,b)=>(a.expiry||'9999')<(b.expiry||'9999')?-1:1).map(b=>`
+      <div style="background:var(--surface2);border-radius:10px;padding:.5rem .6rem;display:flex;gap:.4rem;align-items:center" data-pbrow="${b.id}">
+        <input class="fi" type="text" inputmode="numeric" style="width:48px;flex-shrink:0;padding:.35rem .3rem;font-size:.85rem;text-align:center" value="${esc(String(b.qty))}" data-pbfield="qty">
+        <input class="fi" type="date" style="flex:1;min-width:0;padding:.35rem .35rem;font-size:.78rem" value="${esc(b.expiry||'')}" data-pbfield="expiry">
+        <button class="srm" data-pbdel="${b.id}" title="${t('btn_delete')}">🗑️</button>
+      </div>`).join(''):`<div style="font-size:.8rem;color:var(--muted);font-family:var(--ui)">${t('pantry_no_batches')}</div>`;
+    rowsEl.querySelectorAll('[data-pbfield]').forEach(inp=>inp.addEventListener('change',()=>{
+      const bid=inp.closest('[data-pbrow]').dataset.pbrow;
+      const field=inp.dataset.pbfield;
+      const val=field==='qty'?(Number(inp.value)||0):inp.value;
+      updatePantryBatch(id,bid,{[field]:val});
+      render();
+    }));
+    rowsEl.querySelectorAll('[data-pbdel]').forEach(btn=>btn.addEventListener('click',()=>{
+      removePantryBatch(id,btn.dataset.pbdel);
+      render();
+    }));
+    md.querySelector('#pbAddBatch').addEventListener('click',()=>{
+      addPantryBatch(id,{qty:1,expiry:''});
+      render();
+    });
+    md.querySelector('#pbClose').addEventListener('click',close);
+    md.querySelector('#pbEditBtn').addEventListener('click',()=>{close();openPantryForm(id);});
+  };
+  ov.appendChild(md);document.body.appendChild(ov);
+  const close=()=>{if(document.body.contains(ov))document.body.removeChild(ov);renderApp();};
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  render();
+}
+
 // ── Manuelles Hinzufügen / Bearbeiten ──
 function openPantryForm(id){
   const existing=id?S.pantry.find(x=>x.id===id):null;
   const loc=existing?pantryLocation(existing):'vorrat';
+  const isNew=!existing;
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:200';
   const md=document.createElement('div');
@@ -3664,24 +3845,19 @@ function openPantryForm(id){
     <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_name')}</label>
     <input class="fi" id="pfName" style="width:100%;margin-bottom:.7rem" value="${esc(existing?.name||'')}" placeholder="${t('pantry_name_ph')}">
     <div id="pfVorratFields" style="display:${pantryTrackMode(loc)==='qty'?'block':'none'}">
-      <div style="display:flex;gap:.6rem;margin-bottom:.7rem">
+      ${isNew?`<div style="display:flex;gap:.6rem;margin-bottom:.7rem">
         <div style="flex:1">
           <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_qty')}</label>
-          <input class="fi" id="pfQty" type="text" inputmode="decimal" style="width:100%" value="${esc(existing?.qty??'')}">
+          <input class="fi" id="pfQty" type="text" inputmode="numeric" style="width:100%" value="1">
         </div>
         <div style="flex:1">
-          <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_unit')}</label>
-          <select class="fi" id="pfUnit" style="width:100%">
-            <option value="">–</option>
-            ${PANTRY_UNITS.map(u=>`<option value="${u}" ${existing?.unit===u?'selected':''}>${u}</option>`).join('')}
-          </select>
+          <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_expiry')}</label>
+          <input class="fi" id="pfExpiry" type="date" style="width:100%">
         </div>
-      </div>
+      </div>`:`<div style="font-size:.78rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('pantry_total_qty').replace('{n}',pantryTotalQty(existing))} · ${t('pantry_edit_product_hint')}</div>`}
       <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_min_qty')}</label>
-      <input class="fi" id="pfMinQty" type="text" inputmode="decimal" style="width:100%;margin-bottom:.2rem" value="${esc(existing?.minQty??'')}">
+      <input class="fi" id="pfMinQty" type="text" inputmode="numeric" style="width:100%;margin-bottom:.2rem" value="${esc(existing?.minQty??'')}">
       <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('pantry_min_qty_hint')}</div>
-      <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_expiry')}</label>
-      <input class="fi" id="pfExpiry" type="date" style="width:100%;margin-bottom:.7rem" value="${esc(existing?.expiry||'')}">
     </div>
     <div id="pfFrischFields" style="display:${pantryTrackMode(loc)==='ampel'?'block':'none'};margin-bottom:.7rem">
       <label class="sl" style="display:block;margin-bottom:.3rem">Status</label>
@@ -3729,13 +3905,13 @@ function openPantryForm(id){
       note:document.getElementById('pfNote').value.trim(),
     };
     if(pantryTrackMode(curLoc)==='qty'){
-      patch.qty=document.getElementById('pfQty').value.trim();
-      patch.unit=document.getElementById('pfUnit').value;
       patch.minQty=document.getElementById('pfMinQty').value.trim();
-      patch.expiry=document.getElementById('pfExpiry').value;
+      if(isNew){
+        patch.qty=document.getElementById('pfQty').value.trim();
+        patch.expiry=document.getElementById('pfExpiry').value;
+      }
     }else{
       patch.ampel=curAmpel;
-      patch.qty='';patch.unit='';patch.expiry='';patch.minQty='';
     }
     if(existing)updatePantryItem(existing.id,patch);else addPantryItem(patch);
     close();renderApp();
@@ -3799,7 +3975,7 @@ WICHTIGSTE REGEL: Erfasse NUR Produkte, die auf dem Bild eindeutig lesbar sind. 
 
 VOLLSTÄNDIGKEIT: Gehe bei einem Kassenbon Zeile für Zeile von oben nach unten durch und erfasse WIRKLICH JEDE Produktzeile, auch wenn dir das Ergebnis dadurch lang vorkommt. Überspringe keine Zeile, nur weil schon ähnliche Produkte erfasst wurden. Zähle am Ende gedanklich nach: Anzahl der Einträge im JSON muss der Anzahl der Produktzeilen auf dem Bon entsprechen (Preis-/MwSt-Spalten, Rabattzeilen, Pfand-Sammelzeile und die Summenzeile zählen nicht als Produktzeile und werden übersprungen). Bei mehreren Fotos (z.B. Seite 1 und Seite 2 eines Bons): jedes Foto vollständig einzeln durchgehen, dann alle Ergebnisse zusammenführen.
 
-MENGEN: Lies "qty" ausschließlich aus der Spalte "Menge" DERSELBEN Zeile – verwechsle sie nicht mit der Menge einer benachbarten Zeile. Zahlen, die Teil der Produktbezeichnung sind (z.B. "4 Stück" bei Limetten, "2,5kg" bei Kartoffeln, "750g" beim Sandwich), beschreiben nur die Packungsgröße und gehören NICHT in "qty" – dort steht dann meist 1. Prüfe bei jedem Produkt einzeln und unabhängig von den Nachbarzeilen, welche Zahl in der Menge-Spalte auf gleicher Höhe steht.
+MENGEN: "qty" ist die Anzahl gekaufter Packungen/Einheiten dieses Produkts aus der Spalte "Menge" DERSELBEN Zeile – KEINE Gewichts- oder Volumenangabe. Zahlen, die Teil der Produktbezeichnung sind (z.B. "4 Stück" bei Limetten, "2,5kg" bei Kartoffeln, "750g" beim Sandwich, "1l" beim Saft), beschreiben nur die Packungsgröße und gehören NICHT in "qty" – dort steht dann meist 1. Prüfe bei jedem Produkt einzeln und unabhängig von den Nachbarzeilen, welche Zahl in der Menge-Spalte auf gleicher Höhe steht.
 
 Produktname ("name"): kurz und generisch, OHNE Handelsmarken- oder Eigenmarken-Präfixe wie "REWE Beste Wahl", "REWE Bio", "ja!", "Bio" oder Herstellernamen (z.B. "Wilhelm Brandenburg"). Behalte nur die Kernbezeichnung plus relevante Sorte/Variante, z.B. "Erdnüsse" statt "REWE Beste Wahl Erdnüsse grosse Kerne", "Rindfleischsalami" statt "Wilhelm Brandenburg Rindfleischsalami", "Apfelsaft naturtrüb" statt "REWE Beste Wahl Apfelsaft naturtrüb". Wenn du dir bei einem Wort im Namen unsicher bist, nimm die naheliegendste sinnvolle Lesart (z.B. ein Fisch-/Fleischprodukt in Tomatensauce statt eines Fantasieworts) – aber erfinde keine neuen Produkte.
 
@@ -3807,7 +3983,7 @@ STANDORT ("location"): Klassifiziere jedes Produkt nach dem typischen Lagerort a
 
 VORSICHT BEI UNSICHERHEIT: Ersetze ein schwer lesbares Wort NIEMALS durch ein anderes, aber ähnlich aussehendes oder plausibel klingendes Produkt (z.B. nicht "Apfelmark" zu "Kaffee Mark" machen, nicht "Weidemilch" zu "Weidekäse Joghurt" machen, nicht ein Produkt durch eine bekannte Marke wie "Fanta Zero" ersetzen, nur weil die Form der Verpackung ähnlich aussieht). Wenn du dir bei einem Wort unsicher bist, gib lieber den Teil wieder, den du sicher lesen kannst (z.B. nur "Milch" statt eines erfundenen Produkts), oder lasse die Zeile weg.
 
-Antworte NUR mit einem JSON-Array. Jedes Element: {"name":"string","location":"vorrat, kuehlschrank oder gefrierschrank","qty":"Zahl als String, z.B. 1 oder 500","unit":"Stück|g|kg|ml|l|Packung|Dose|Glas|Bund oder leer","expiry":"YYYY-MM-DD falls auf dem Bild ein MHD/Verfallsdatum erkennbar ist, sonst leerer String"}.
+Antworte NUR mit einem JSON-Array. Jedes Element: {"name":"string","location":"vorrat, kuehlschrank oder gefrierschrank","qty":"Anzahl als String, z.B. 1 oder 3","expiry":"YYYY-MM-DD falls auf dem Bild ein MHD/Verfallsdatum erkennbar ist, sonst leerer String"}.
 Bei einem Kassenbon steht meist kein MHD drauf – dann "expiry":"" lassen.`,
     contentParts,
     temperature:0
@@ -3836,13 +4012,9 @@ function showPantryScanResults(products,closeModal){
       </div>
       <div style="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap">
         ${pantryLocButtonsHtml('pslocbtn',rowLoc)}
-        <div data-psvorrat style="display:${pantryTrackMode(rowLoc)==='qty'?'flex':'none'};gap:.3rem;align-items:center;flex:1;min-width:0">
-          <input class="fi" style="width:38px;flex-shrink:0;padding:.35rem .2rem;font-size:.85rem;text-align:center" value="${esc(p.qty??'')}" data-psfield="qty" placeholder="${t('pantry_qty')}">
-          <select class="fi" style="width:56px;flex-shrink:0;padding:.35rem .1rem;font-size:.74rem" data-psfield="unit">
-            <option value="">–</option>
-            ${PANTRY_UNITS.map(u=>`<option value="${u}" ${p.unit===u?'selected':''}>${u}</option>`).join('')}
-          </select>
-          <input class="fi" type="date" style="width:98px;flex-shrink:0;padding:.35rem .2rem;font-size:.68rem" value="${esc(p.expiry||'')}" data-psfield="expiry" title="${t('pantry_expiry')}">
+        <div data-psvorrat style="display:${pantryTrackMode(rowLoc)==='qty'?'flex':'none'};gap:.4rem;align-items:center;flex:1;min-width:0">
+          <input class="fi" style="width:50px;flex-shrink:0;padding:.35rem .2rem;font-size:.85rem;text-align:center" value="${esc(p.qty||'1')}" data-psfield="qty" placeholder="${t('pantry_qty')}">
+          <input class="fi" type="date" style="flex:1;min-width:0;padding:.35rem .3rem;font-size:.72rem" value="${esc(p.expiry||'')}" data-psfield="expiry" title="${t('pantry_expiry')}">
         </div>
       </div>
     </div>`;
@@ -3864,9 +4036,8 @@ function showPantryScanResults(products,closeModal){
       const location=rowEl.dataset.psloc;
       if(pantryTrackMode(location)==='qty'){
         const qty=rowEl.querySelector('[data-psfield="qty"]').value.trim();
-        const unit=rowEl.querySelector('[data-psfield="unit"]').value;
         const expiry=rowEl.querySelector('[data-psfield="expiry"]').value;
-        addPantryItem({name,location,qty,unit,expiry});
+        addPantryItem({name,location,qty,expiry});
       }else{
         addPantryItem({name,location,ampel:'da'});
       }
