@@ -1457,6 +1457,7 @@ const LANG={
     pantry_scan_found:'{n} Produkte erkannt – prüfe und ergänze bei Bedarf:',pantry_scan_add_all:'Alle hinzufügen',
     pantry_kind:'Art',pantry_kind_vorrat:'📦 Vorrat',pantry_kind_frisch:'🥬 Frischware',
     pantry_loc_vorrat:'Vorratskammer',pantry_loc_kuehlschrank:'Kühlschrank',pantry_loc_gefrierschrank:'Gefrierschrank',
+    pantry_loc_short_kuehlschrank:'Kühl',pantry_loc_short_gefrierschrank:'Gefr.',
     pantry_kind_hint_vorrat:'Konserven, Hygiene, Tiefkühl – wird mengenmäßig getrackt',
     pantry_kind_hint_frisch:'Milch, Joghurt, Gemüse – nur Status statt genauer Menge',
     pantry_ampel_da:'da',pantry_ampel_knapp:'knapp',pantry_ampel_leer:'leer',
@@ -1552,6 +1553,7 @@ const LANG={
     pantry_scan_found:'{n} products recognized – review and adjust if needed:',pantry_scan_add_all:'Add all',
     pantry_kind:'Type',pantry_kind_vorrat:'📦 Stock',pantry_kind_frisch:'🥬 Fresh',
     pantry_loc_vorrat:'Pantry',pantry_loc_kuehlschrank:'Fridge',pantry_loc_gefrierschrank:'Freezer',
+    pantry_loc_short_kuehlschrank:'Fridge',pantry_loc_short_gefrierschrank:'Frzr',
     pantry_kind_hint_vorrat:'Canned goods, hygiene, frozen – tracked by quantity',
     pantry_kind_hint_frisch:'Milk, yogurt, veggies – simple status instead of exact quantity',
     pantry_ampel_da:'have it',pantry_ampel_knapp:'running low',pantry_ampel_leer:'out',
@@ -3319,7 +3321,7 @@ function saveShopCats(){try{localStorage.setItem('mrshcats',JSON.stringify(S.cus
 const PANTRY_SOON_DAYS = 3; // Ab wie vielen Tagen vor Ablauf gelb markiert wird
 
 const PANTRY_LOCS=['vorrat','kuehlschrank','gefrierschrank'];
-const PANTRY_LOC_ICON={vorrat:'📦',kuehlschrank:'🧊',gefrierschrank:'❄️'};
+const PANTRY_LOC_ICON={vorrat:'📦',kuehlschrank:'🥛',gefrierschrank:'❄️'};
 // Standort eines Artikels, mit Fallback auf das alte kind-Feld (vorrat/frisch) für Bestandsdaten
 function pantryLocation(item){
   if(item.location)return item.location;
@@ -3335,6 +3337,11 @@ function guessPantryLocation(name){
   if(cat===3)return 'gefrierschrank'; // Tiefkühl
   if(cat===2||cat===8||cat===0)return 'kuehlschrank'; // Kühltheke, Milch & Eier, Obst & Gemüse
   return 'vorrat';
+}
+
+// Tage bis zum Ablaufdatum (negativ = bereits abgelaufen). null = kein Datum gesetzt.
+function pantryLocButtonsHtml(dataAttr,activeLoc){
+  return PANTRY_LOCS.map(l=>`<button type="button" data-${dataAttr}="${l}" class="btn ${activeLoc===l?'bp':'bg'} sm" style="padding:.4rem .55rem;font-size:.78rem;display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap">${PANTRY_LOC_ICON[l]}${l!=='vorrat'?`<span>${t('pantry_loc_short_'+l)}</span>`:''}</button>`).join('');
 }
 
 // Tage bis zum Ablaufdatum (negativ = bereits abgelaufen). null = kein Datum gesetzt.
@@ -3502,14 +3509,14 @@ function openPantrySuggestModal(){
         <button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1.05rem;padding:.2rem .3rem;flex-shrink:0" data-psgremove="${i}" title="${t('btn_delete')}">🗑️</button>
       </div>
       <div style="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap">
-        ${PANTRY_LOCS.map(l=>`<button type="button" data-psglocbtn="${l}" class="btn ${guessLoc===l?'bp':'bg'} sm" style="padding:.3rem .45rem;font-size:.72rem">${PANTRY_LOC_ICON[l]}</button>`).join('')}
+        ${pantryLocButtonsHtml('psglocbtn',guessLoc)}
         <div data-psgvorrat style="display:${pantryTrackMode(guessLoc)==='qty'?'flex':'none'};gap:.3rem;align-items:center;flex:1;min-width:0">
-          <input class="fi" style="width:40px;flex-shrink:0;padding:.35rem .25rem;font-size:.85rem;text-align:center" data-psgfield="qty" placeholder="${t('pantry_qty')}">
-          <select class="fi" style="width:62px;flex-shrink:0;padding:.35rem .15rem;font-size:.76rem" data-psgfield="unit">
+          <input class="fi" style="width:38px;flex-shrink:0;padding:.35rem .2rem;font-size:.85rem;text-align:center" data-psgfield="qty" placeholder="${t('pantry_qty')}">
+          <select class="fi" style="width:56px;flex-shrink:0;padding:.35rem .1rem;font-size:.74rem" data-psgfield="unit">
             <option value="">–</option>
             ${PANTRY_UNITS.map(u=>`<option value="${u}">${u}</option>`).join('')}
           </select>
-          <input class="fi" type="date" style="width:118px;flex-shrink:0;padding:.35rem .25rem;font-size:.72rem" data-psgfield="expiry" title="${t('pantry_expiry')}">
+          <input class="fi" type="date" style="width:98px;flex-shrink:0;padding:.35rem .2rem;font-size:.68rem" data-psgfield="expiry" title="${t('pantry_expiry')}">
         </div>
       </div>
     </div>`;
@@ -3828,14 +3835,14 @@ function showPantryScanResults(products,closeModal){
         <button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1.05rem;padding:.2rem .3rem;flex-shrink:0" data-psremove="${i}" title="${t('btn_delete')}">🗑️</button>
       </div>
       <div style="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap">
-        ${PANTRY_LOCS.map(l=>`<button type="button" data-pslocbtn="${l}" class="btn ${rowLoc===l?'bp':'bg'} sm" style="padding:.3rem .45rem;font-size:.72rem">${PANTRY_LOC_ICON[l]}</button>`).join('')}
+        ${pantryLocButtonsHtml('pslocbtn',rowLoc)}
         <div data-psvorrat style="display:${pantryTrackMode(rowLoc)==='qty'?'flex':'none'};gap:.3rem;align-items:center;flex:1;min-width:0">
-          <input class="fi" style="width:40px;flex-shrink:0;padding:.35rem .25rem;font-size:.85rem;text-align:center" value="${esc(p.qty??'')}" data-psfield="qty" placeholder="${t('pantry_qty')}">
-          <select class="fi" style="width:62px;flex-shrink:0;padding:.35rem .15rem;font-size:.76rem" data-psfield="unit">
+          <input class="fi" style="width:38px;flex-shrink:0;padding:.35rem .2rem;font-size:.85rem;text-align:center" value="${esc(p.qty??'')}" data-psfield="qty" placeholder="${t('pantry_qty')}">
+          <select class="fi" style="width:56px;flex-shrink:0;padding:.35rem .1rem;font-size:.74rem" data-psfield="unit">
             <option value="">–</option>
             ${PANTRY_UNITS.map(u=>`<option value="${u}" ${p.unit===u?'selected':''}>${u}</option>`).join('')}
           </select>
-          <input class="fi" type="date" style="width:118px;flex-shrink:0;padding:.35rem .25rem;font-size:.72rem" value="${esc(p.expiry||'')}" data-psfield="expiry" title="${t('pantry_expiry')}">
+          <input class="fi" type="date" style="width:98px;flex-shrink:0;padding:.35rem .2rem;font-size:.68rem" value="${esc(p.expiry||'')}" data-psfield="expiry" title="${t('pantry_expiry')}">
         </div>
       </div>
     </div>`;
