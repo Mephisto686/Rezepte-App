@@ -490,8 +490,8 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 
 <nav class="bnav" id="bnav">
   <button class="nb" data-nav="list"><div class="ic">🍳</div><span id="navLblRecipes">Rezepte</span></button>
-  <button class="nb" data-nav="shopping"><div class="ic">🛒</div><span id="shopLbl">Liste</span></button>
   <button class="nb" data-nav="planner"><div class="ic">📅</div><span id="navLblPlanner">Speiseplan</span></button>
+  <button class="nb" data-nav="shopping"><div class="ic">🛒</div><span id="shopLbl">Liste</span></button>
   <button class="nb" data-nav="pantry"><div class="ic">📦</div><span id="pantryLbl">Vorrat</span></button>
   <button class="nb" data-nav="settings"><div class="ic">⚙️</div><span id="navLblMore">Einstellungen</span></button>
 </nav>
@@ -1451,7 +1451,7 @@ const LANG={
     pantry_confirm_del:'Diesen Vorrats-Eintrag wirklich löschen?',
     pantry_edit_title:'Eintrag bearbeiten',pantry_add_title:'Neuer Vorrats-Eintrag',
     pantry_name:'Produkt',pantry_name_ph:'z.B. Milch',pantry_qty:'Anzahl',
-    pantry_expiry:'MHD / Verfallsdatum',pantry_note:'Notiz (optional)',pantry_note_ph:'z.B. angebrochen',
+    pantry_expiry:'MHD / Verfallsdatum',pantry_expiry_short:'MHD',pantry_note:'Notiz (optional)',pantry_note_ph:'z.B. angebrochen',
     pantry_expired_since:'seit {n} Tag(en) abgelaufen',pantry_today:'läuft heute ab',pantry_in_days:'noch {n} Tag(e)',
     pantry_scan_title:'📷 Smart-Scan',pantry_scan_hint:'Foto vom Einkauf oder Kassenbon hochladen – die KI erkennt automatisch die Produkte. MHDs stehen selten auf Bons, ergänze sie bei Bedarf danach.',
     pantry_scan_choose:'Ein oder mehrere Bilder auswählen',pantry_scan_images_sg:'Bild ausgewählt',pantry_scan_images_pl:'Bilder ausgewählt',
@@ -1549,7 +1549,7 @@ const LANG={
     pantry_confirm_del:'Really delete this pantry item?',
     pantry_edit_title:'Edit item',pantry_add_title:'New pantry item',
     pantry_name:'Product',pantry_name_ph:'e.g. Milk',pantry_qty:'Count',
-    pantry_expiry:'Best-before / expiry date',pantry_note:'Note (optional)',pantry_note_ph:'e.g. opened',
+    pantry_expiry:'Best-before / expiry date',pantry_expiry_short:'MHD',pantry_note:'Note (optional)',pantry_note_ph:'e.g. opened',
     pantry_expired_since:'expired {n} day(s) ago',pantry_today:'expires today',pantry_in_days:'{n} day(s) left',
     pantry_scan_title:'📷 Smart Scan',pantry_scan_hint:'Upload a photo of your groceries or a receipt – AI will automatically recognize the products. Expiry dates are rarely printed on receipts, so add them afterwards if needed.',
     pantry_scan_choose:'Select one or more images',pantry_scan_images_sg:'image selected',pantry_scan_images_pl:'images selected',
@@ -3344,8 +3344,9 @@ function guessPantryLocation(name){
   if(cat===2||cat===8||cat===0)return 'kuehlschrank'; // Kühltheke, Milch & Eier, Obst & Gemüse
   return 'vorrat';
 }
-function pantryLocButtonsHtml(dataAttr,activeLoc){
-  return PANTRY_LOCS.map(l=>`<button type="button" data-${dataAttr}="${l}" class="btn ${activeLoc===l?'bp':'bg'} sm" style="padding:.4rem .55rem;font-size:.78rem;display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap">${PANTRY_LOC_ICON[l]}${l!=='vorrat'?`<span>${t('pantry_loc_short_'+l)}</span>`:''}</button>`).join('');
+function pantryLocButtonsHtml(dataAttr,activeLoc,big){
+  const pad=big?'.5rem .7rem':'.4rem .55rem', fs=big?'.85rem':'.78rem';
+  return PANTRY_LOCS.map(l=>`<button type="button" data-${dataAttr}="${l}" class="btn ${activeLoc===l?'bp':'bg'} sm" style="padding:${pad};font-size:${fs};display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap">${PANTRY_LOC_ICON[l]}${l!=='vorrat'?`<span>${t('pantry_loc_short_'+l)}</span>`:''}</button>`).join('');
 }
 // Eindeutiger Schlüssel zum Zusammenfassen gleicher Produkte (Name + Standort)
 function pantryProductKey(name,loc){
@@ -3631,27 +3632,35 @@ function openPantrySuggestModal(){
   rowsEl.innerHTML=S.shopDoneSuggest.map((s,i)=>{
     const cleanName=parseIngLine(s.text).nameOrig;
     const guessLoc=guessPantryLocation(cleanName);
+    const isQty=pantryTrackMode(guessLoc)==='qty';
     return `
     <div style="background:var(--surface2);border-radius:10px;padding:.55rem .65rem;display:flex;flex-direction:column;gap:.4rem" data-psgrow="${i}" data-psgloc="${guessLoc}">
       <div style="display:flex;gap:.35rem;align-items:center">
+        <input class="fi" data-psgqty style="display:${isQty?'block':'none'};width:40px;flex-shrink:0;padding:.4rem .2rem;font-size:.92rem;font-weight:600;text-align:center;color:var(--muted)" value="1" data-psgfield="qty" placeholder="#">
         <input class="fi" style="flex:1;min-width:0;padding:.4rem .55rem;font-size:.92rem;font-weight:600" value="${esc(cleanName)}" data-psgfield="name">
         <button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1.05rem;padding:.2rem .3rem;flex-shrink:0" data-psgremove="${i}" title="${t('btn_delete')}">🗑️</button>
       </div>
-      <div style="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap">
-        ${pantryLocButtonsHtml('psglocbtn',guessLoc)}
-        <div data-psgvorrat style="display:${pantryTrackMode(guessLoc)==='qty'?'flex':'none'};gap:.4rem;align-items:center;flex:1;min-width:0">
-          <input class="fi" style="width:50px;flex-shrink:0;padding:.35rem .2rem;font-size:.85rem;text-align:center" value="1" data-psgfield="qty" placeholder="${t('pantry_qty')}">
-          <input class="fi" type="date" style="flex:1;min-width:0;padding:.35rem .3rem;font-size:.72rem" data-psgfield="expiry" title="${t('pantry_expiry')}">
+      <div style="display:flex;gap:.35rem;align-items:center">
+        ${pantryLocButtonsHtml('psglocbtn',guessLoc,true)}
+        <div data-psgdatewrap style="display:${isQty?'block':'none'};position:relative;flex:1;min-width:0">
+          <input class="fi" type="date" data-psgexpiryinput style="width:100%;padding:.35rem .3rem;font-size:.72rem;color:transparent" data-psgfield="expiry">
+          <span data-psgexpirylbl style="position:absolute;left:.5rem;top:50%;transform:translateY(-50%);font-size:.72rem;color:var(--muted);pointer-events:none">${t('pantry_expiry_short')}</span>
         </div>
       </div>
     </div>`;
   }).join('');
+  rowsEl.querySelectorAll('[data-psgexpiryinput]').forEach(inp=>{
+    const sync=()=>{ inp.style.color=inp.value?'var(--text)':'transparent'; inp.nextElementSibling.style.display=inp.value?'none':'block'; };
+    inp.addEventListener('input',sync); inp.addEventListener('change',sync); sync();
+  });
   rowsEl.querySelectorAll('[data-psglocbtn]').forEach(btn=>btn.addEventListener('click',()=>{
     const rowEl=btn.closest('[data-psgrow]');
     const loc=btn.dataset.psglocbtn;
     rowEl.dataset.psgloc=loc;
     rowEl.querySelectorAll('[data-psglocbtn]').forEach(b=>b.className='btn '+(b.dataset.psglocbtn===loc?'bp':'bg')+' sm');
-    rowEl.querySelector('[data-psgvorrat]').style.display=pantryTrackMode(loc)==='qty'?'flex':'none';
+    const isQty=pantryTrackMode(loc)==='qty';
+    rowEl.querySelector('[data-psgqty]').style.display=isQty?'block':'none';
+    rowEl.querySelector('[data-psgdatewrap]').style.display=isQty?'block':'none';
   }));
   rowsEl.querySelectorAll('[data-psgremove]').forEach(btn=>btn.addEventListener('click',()=>{
     const rowEl=btn.closest('[data-psgrow]');
@@ -7200,7 +7209,7 @@ function loadSession(){
   initDetSwipe(); // Detail tab swipe – runs once for entire app lifetime
   // ══ Swipe navigation ══
   (()=>{
-    const NAV_ORDER=['list','shopping','planner','pantry','settings'];
+    const NAV_ORDER=['list','planner','shopping','pantry','settings'];
     let tx=0,ty=0;
     const appEl=document.getElementById('app');
     appEl.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
