@@ -1463,9 +1463,10 @@ const LANG={
     pantry_scan_found:'{n} Produkte erkannt – prüfe und ergänze bei Bedarf:',pantry_scan_add_all:'Alle hinzufügen',
     pantry_kind:'Standort',pantry_kind_vorrat:'📦 Vorrat',pantry_kind_frisch:'🥬 Frischware',
     pantry_stock:'Bestand',pantry_use_qty_instead:'Stattdessen Menge erfassen',pantry_delete_product:'Produkt löschen',
+    pantry_mode_ampel:'Ampel',pantry_mode_qty:'Bestandsaufnahme',
     pantry_sort_location:'Standort',pantry_sort_mhd:'MHD',pantry_select:'Auswählen',pantry_select_done:'{n} ausgewählt · Fertig',
     pantry_loc_vorrat:'Vorratskammer',pantry_loc_kuehlschrank:'Frischware',pantry_loc_gefrierschrank:'Gefrierschrank',
-    pantry_loc_short_kuehlschrank:'Frisch',pantry_loc_short_gefrierschrank:'Gefr.',
+    pantry_loc_short_vorrat:'Vorrat',pantry_loc_short_kuehlschrank:'Frisch',pantry_loc_short_gefrierschrank:'Gefr.',
     pantry_kind_hint_vorrat:'Konserven, Hygiene, Tiefkühl – wird mengenmäßig getrackt',
     pantry_kind_hint_frisch:'Milch, Joghurt, Gemüse – nur Status statt genauer Menge',
     pantry_ampel_da:'da',pantry_ampel_knapp:'knapp',pantry_ampel_leer:'leer',
@@ -1568,9 +1569,10 @@ const LANG={
     pantry_scan_found:'{n} products recognized – review and adjust if needed:',pantry_scan_add_all:'Add all',
     pantry_kind:'Location',pantry_kind_vorrat:'📦 Stock',pantry_kind_frisch:'🥬 Fresh',
     pantry_stock:'Stock',pantry_use_qty_instead:'Track quantity instead',pantry_delete_product:'Delete product',
+    pantry_mode_ampel:'Traffic light',pantry_mode_qty:'Stock count',
     pantry_sort_location:'Location',pantry_sort_mhd:'Expiry',pantry_select:'Select',pantry_select_done:'{n} selected · Done',
     pantry_loc_vorrat:'Pantry',pantry_loc_kuehlschrank:'Fresh',pantry_loc_gefrierschrank:'Freezer',
-    pantry_loc_short_kuehlschrank:'Fresh',pantry_loc_short_gefrierschrank:'Frzr',
+    pantry_loc_short_vorrat:'Pantry',pantry_loc_short_kuehlschrank:'Fresh',pantry_loc_short_gefrierschrank:'Frzr',
     pantry_kind_hint_vorrat:'Canned goods, hygiene, frozen – tracked by quantity',
     pantry_kind_hint_frisch:'Milk, yogurt, veggies – simple status instead of exact quantity',
     pantry_ampel_da:'have it',pantry_ampel_knapp:'running low',pantry_ampel_leer:'out',
@@ -3359,9 +3361,9 @@ function guessPantryLocation(name){
   return 'vorrat';
 }
 function pantryLocButtonsHtml(dataAttr,activeLoc,big){
-  const pad=big?'.55rem .5rem':'.4rem .55rem', fs=big?'.9rem':'.78rem';
-  const flex=big?'flex:1;justify-content:center;':'';
-  return PANTRY_LOCS.map(l=>`<button type="button" data-${dataAttr}="${l}" class="btn ${activeLoc===l?'bp':'bg'} sm" style="padding:${pad};font-size:${fs};display:inline-flex;align-items:center;${flex}gap:.25rem;white-space:nowrap">${PANTRY_LOC_ICON[l]}${l!=='vorrat'?`<span>${t('pantry_loc_short_'+l)}</span>`:''}</button>`).join('');
+  const fsIcon=big?'1.15rem':'.95rem', fsLbl=big?'.68rem':'.6rem', pad=big?'.5rem .3rem':'.32rem .2rem';
+  const flex=big?'flex:1;':'';
+  return PANTRY_LOCS.map(l=>`<button type="button" data-${dataAttr}="${l}" class="btn ${activeLoc===l?'bp':'bg'} sm" style="padding:${pad};display:flex;flex-direction:column;align-items:center;justify-content:center;${flex}gap:.15rem"><span style="font-size:${fsIcon};line-height:1">${PANTRY_LOC_ICON[l]}</span><span style="font-size:${fsLbl};line-height:1.05;white-space:nowrap">${t('pantry_loc_short_'+l)}</span></button>`).join('');
 }
 // Eindeutiger Schlüssel zum Zusammenfassen gleicher Produkte (Name + Standort)
 function pantryProductKey(name,loc){
@@ -3391,6 +3393,13 @@ function pantryHasQty(item){
 function pantryAmpelColor(a){
   return a==='leer'?'var(--danger)':a==='knapp'?'#e6a700':'#2e7d32';
 }
+// Aktiv gewählter Tracking-Modus ('ampel' | 'qty') je Artikel. Bei Vorrat/Gefrierschrank immer 'qty'.
+// Bei Kühlschrank explizit umschaltbar (Toggle im Edit-Modal) – Daten der jeweils inaktiven Seite bleiben beim Umschalten erhalten.
+function pantryActiveMode(item){
+  if(pantryTrackMode(pantryLocation(item))!=='ampel')return 'qty';
+  if(item.trackMode==='qty'||item.trackMode==='ampel')return item.trackMode;
+  return pantryHasQty(item)?'qty':'ampel'; // Altdaten ohne explizites Feld
+}
 
 // Tage bis zu einem Datum (negativ = bereits abgelaufen). null = kein Datum gesetzt.
 function pantryDaysLeft(expiry){
@@ -3399,8 +3408,9 @@ function pantryDaysLeft(expiry){
   const exp=new Date(expiry+'T00:00:00');
   return Math.round((exp-today)/86400000);
 }
-// 'expired' | 'soon' | 'ok' | 'none' – ausschließlich MHD-basiert. Die Ampel fließt NICHT mit ein (eigenständiges, unabhängiges Signal).
+// 'expired' | 'soon' | 'ok' | 'none' – ausschließlich MHD-basiert, nur wenn "Bestandsaufnahme" aktiv ist. Die Ampel fließt NICHT mit ein (eigenständiges, unabhängiges Signal).
 function pantryStatus(item){
+  if(pantryActiveMode(item)!=='qty')return 'none';
   const eb=pantryEarliestBatch(item);
   if(!eb)return 'none';
   const d=pantryDaysLeft(eb.expiry);
@@ -3423,9 +3433,9 @@ function fmtExpiry(expiry){
   return dateStr+' · '+t('pantry_in_days').replace('{n}',d);
 }
 // Mengenkritisch = knapper Vorrat (Mindestbestand/leer bzw. Ampel), NICHT MHD-Ablauf – nur das löst den Auto-Eintrag auf die Einkaufsliste aus.
-// Ampel zählt nur, solange KEINE Menge erfasst wurde (0 ist bereits eine erfasste Menge).
+// Ampel zählt nur, solange sie der aktive Modus ist.
 function pantryQtyCritical(item){
-  if(!pantryHasQty(item)&&pantryTrackMode(pantryLocation(item))==='ampel')return item.ampel==='leer';
+  if(pantryActiveMode(item)==='ampel')return item.ampel==='leer';
   const qtyNum=pantryTotalQty(item);
   if(qtyNum<=0)return true;
   const minNum=item.minQty!==''&&item.minQty!=null?Number(item.minQty):null;
@@ -3497,9 +3507,11 @@ function addPantryItem(item){
   if(!hasAnyQtyInput&&pantryTrackMode(location)==='ampel'){
     // Reiner Ampel-Fall, keine Menge angegeben
     if(existing){
-      updatePantryItem(existing.id,{ampel:item.ampel||existing.ampel,note:item.note||existing.note||''});
+      const patch={ampel:item.ampel||existing.ampel,note:item.note||existing.note||''};
+      if(item.trackMode)patch.trackMode=item.trackMode;
+      updatePantryItem(existing.id,patch);
     }else{
-      const obj={id:uid(),name,location,ampel:item.ampel||'da',note:item.note||'',minQty:'',batches:[],addedAt:Date.now(),_updatedAt:Date.now(),_autoAdded:false};
+      const obj={id:uid(),name,location,ampel:item.ampel||'da',note:item.note||'',minQty:'',batches:[],trackMode:item.trackMode||'ampel',addedAt:Date.now(),_updatedAt:Date.now(),_autoAdded:false};
       S.pantry.push(obj);
       pantryAutoAddCheck(obj);
       savePantry();
@@ -3518,9 +3530,10 @@ function addPantryItem(item){
     const patch={batches};
     if(item.minQty&&!existing.minQty)patch.minQty=item.minQty;
     if(item.note&&!existing.note)patch.note=item.note;
+    if(item.trackMode)patch.trackMode=item.trackMode;
     updatePantryItem(existing.id,patch);
   }else{
-    const obj={id:uid(),name,location,batches:batchesToAdd,minQty:item.minQty||'',note:item.note||'',ampel:item.ampel||'da',addedAt:Date.now(),_updatedAt:Date.now(),_autoAdded:false};
+    const obj={id:uid(),name,location,batches:batchesToAdd,minQty:item.minQty||'',note:item.note||'',ampel:item.ampel||'da',trackMode:item.trackMode||'qty',addedAt:Date.now(),_updatedAt:Date.now(),_autoAdded:false};
     S.pantry.push(obj);
     pantryAutoAddCheck(obj);
     savePantry();
@@ -3765,7 +3778,7 @@ function renderPantry(app){
     const statusRank={expired:0,soon:1,ok:2,none:3};
     const ampelRank={leer:0,knapp:1,da:2};
     // Sortier-Hilfsrang je Zeile – rein für die Reihenfolge in der Liste, hat KEINEN Einfluss auf die abgelaufen/bald-fällig-Zählung oben.
-    const sortRank=it=>(!pantryHasQty(it)&&pantryTrackMode(pantryLocation(it))==='ampel')?(ampelRank[it.ampel]??2):statusRank[pantryStatus(it)];
+    const sortRank=it=>pantryActiveMode(it)==='ampel'?(ampelRank[it.ampel]??2):statusRank[pantryStatus(it)];
     bodyHtml=PANTRY_LOCS.filter(loc=>grouped[loc].length).map(loc=>{
       const locItems=grouped[loc].slice().sort((a,b)=>{
         const r=sortRank(a)-sortRank(b);
@@ -3820,10 +3833,9 @@ function pantryRowHtml(it){
   const loc=pantryLocation(it);
   const status=pantryStatus(it);
   const batches=pantryBatches(it);
-  const hasQty=batches.length>0;
-  const isAmpel=pantryTrackMode(loc)==='ampel'&&!hasQty;
+  const isAmpel=pantryActiveMode(it)==='ampel';
   const total=pantryTotalQty(it);
-  const earliest=pantryEarliestBatch(it);
+  const earliest=isAmpel?null:pantryEarliestBatch(it);
   const col=earliest?pantryStatusColor(status):(isAmpel?pantryAmpelColor(it.ampel):'var(--muted)');
   const selecting=!!S.pantrySelectMode;
   const selected=!!(S.pantrySelected&&S.pantrySelected.has(it.id));
@@ -3863,157 +3875,132 @@ function openPantryDetail(id){
   const md=document.createElement('div');
   md.style.cssText='background:var(--surface);border-radius:18px;padding:1.3rem;width:100%;max-width:440px;max-height:88dvh;overflow-y:auto;font-family:var(--font)';
   ov.appendChild(md);document.body.appendChild(ov);
-  const close=()=>{if(document.body.contains(ov))document.body.removeChild(ov);renderApp();};
+  const close=()=>{if(document.body.contains(ov))document.body.removeChild(ov);};
   ov.addEventListener('click',e=>{if(e.target===ov)close();});
 
+  // Alles wird lokal gepuffert und erst bei "Speichern" wirklich übernommen (Cancel verwirft alles folgenlos).
   let curLoc=existing?pantryLocation(existing):'vorrat';
-  let locTouched=!!existing;
   let curAmpel=existing?.ampel||'da';
-  // Nur für Neuanlage: lokal gepuffert, bis "Speichern" gedrückt wird. Direkt mit einer Standard-Charge vorbelegt (Standort 'vorrat' trackt immer über Menge).
-  let newBatches=isNew&&pantryTrackMode(curLoc)==='qty'?[{id:uid(),qty:1,expiry:''}]:[];
+  let curMode=existing?pantryActiveMode(existing):(curLoc==='kuehlschrank'?'ampel':'qty');
+  let batches=(existing?pantryBatches(existing):[{id:uid(),qty:1,expiry:''}]).map(b=>({...b}));
 
   const render=()=>{
-    const cur=isNew?null:S.pantry.find(x=>x.id===id);
-    if(!isNew&&!cur){close();return;}
-    const batches=isNew?newBatches:pantryBatches(cur);
-    const hasQty=batches.length>0;
-    const isAmpelMode=pantryTrackMode(curLoc)==='ampel'&&!hasQty;
+    const isKuehl=curLoc==='kuehlschrank';
+    const stockActive=!isKuehl||curMode==='qty'; // ob der Mengen-/Chargen-Bereich der aktive (nicht ausgegraute) ist
+    const ampelActive=isKuehl&&curMode==='ampel';
     const total=batches.reduce((s,b)=>s+(Number(b.qty)||0),0);
 
     md.innerHTML=`
       <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:1rem">${isNew?t('pantry_add_title'):t('pantry_edit_title')}</div>
       <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_kind')}</label>
       <div style="display:flex;gap:.5rem;margin-bottom:.8rem">
-        ${PANTRY_LOCS.map(l=>`<button type="button" data-pdloc="${l}" class="btn ${curLoc===l?'bp':'bg'} sm" style="flex:1">${PANTRY_LOC_ICON[l]} ${t('pantry_loc_'+l)}</button>`).join('')}
+        ${PANTRY_LOCS.map(l=>`<button type="button" data-pdloc="${l}" class="btn ${curLoc===l?'bp':'bg'} sm" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.25rem;padding:.65rem .3rem"><span style="font-size:1.35rem;line-height:1">${PANTRY_LOC_ICON[l]}</span><span style="font-size:.74rem;line-height:1.15">${t('pantry_loc_'+l)}</span></button>`).join('')}
       </div>
       <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_name')}</label>
       <input class="fi" id="pdName" style="width:100%;margin-bottom:1rem" value="${esc(existing?.name||'')}" placeholder="${t('pantry_name_ph')}">
 
       <label class="sl" style="display:block;margin-bottom:.4rem">${t('pantry_stock')}</label>
-      ${isAmpelMode?`
-        <div style="display:flex;gap:.5rem;margin-bottom:.6rem">
+      ${isKuehl?`<div style="display:flex;gap:.5rem;margin-bottom:.7rem">
+        <button type="button" data-pdmode="ampel" class="btn ${curMode==='ampel'?'bp':'bg'} sm" style="flex:1">🚦 ${t('pantry_mode_ampel')}</button>
+        <button type="button" data-pdmode="qty" class="btn ${curMode==='qty'?'bp':'bg'} sm" style="flex:1">🔢 ${t('pantry_mode_qty')}</button>
+      </div>`:''}
+
+      ${isKuehl?`<div style="opacity:${ampelActive?1:.35};pointer-events:${ampelActive?'auto':'none'};transition:opacity .15s;margin-bottom:.8rem">
+        <div style="display:flex;gap:.5rem">
           <button type="button" data-pdampel="da" class="btn ${curAmpel==='da'?'bp':'bg'} sm" style="flex:1">🟢 ${t('pantry_ampel_da')}</button>
           <button type="button" data-pdampel="knapp" class="btn ${curAmpel==='knapp'?'bp':'bg'} sm" style="flex:1">🟡 ${t('pantry_ampel_knapp')}</button>
           <button type="button" data-pdampel="leer" class="btn ${curAmpel==='leer'?'bp':'bg'} sm" style="flex:1">🔴 ${t('pantry_ampel_leer')}</button>
         </div>
-        <button class="btn bg sm" id="pdSwitchToQty" style="margin-bottom:1rem">🔢 ${t('pantry_use_qty_instead')}</button>
-      `:`
+      </div>`:''}
+
+      <div style="opacity:${stockActive?1:.35};pointer-events:${stockActive?'auto':'none'};transition:opacity .15s">
         ${batches.length?`<div style="font-size:.78rem;color:var(--muted);font-family:var(--ui);margin-bottom:.5rem">${t('pantry_total_qty').replace('{n}',total)}</div>`:`<div style="font-size:.8rem;color:var(--muted);font-family:var(--ui);margin-bottom:.5rem">${t('pantry_no_batches')}</div>`}
         <div id="pdBatchRows" style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:.6rem">
           ${batches.slice().sort((a,b)=>(a.expiry||'9999')<(b.expiry||'9999')?-1:1).map(b=>`
             <div style="background:var(--surface2);border-radius:10px;padding:.5rem .6rem;display:flex;gap:.4rem;align-items:center" data-pdbatch="${b.id}">
-              <input class="fi" type="text" inputmode="numeric" style="width:48px;flex-shrink:0;padding:.35rem .3rem;font-size:.85rem;text-align:center" value="${esc(String(b.qty))}" data-pdbfield="qty">
-              <input class="fi" type="date" style="flex:1;min-width:0;padding:.35rem .35rem;font-size:.78rem" value="${esc(b.expiry||'')}" data-pdbfield="expiry">
+              <input class="fi" type="text" inputmode="numeric" style="width:48px;flex-shrink:0;padding:.35rem .3rem;font-size:.85rem;text-align:center" value="${esc(String(b.qty))}" data-pdbfield="qty" ${stockActive?'':'tabindex="-1"'}>
+              <input class="fi" type="date" style="flex:1;min-width:0;padding:.35rem .35rem;font-size:.78rem" value="${esc(b.expiry||'')}" data-pdbfield="expiry" ${stockActive?'':'tabindex="-1"'}>
               <button class="srm" data-pdbdel="${b.id}" title="${t('btn_delete')}">🗑️</button>
             </div>`).join('')}
         </div>
         <button class="btn bg sm" id="pdAddBatch" style="margin-bottom:.8rem">+ ${t('pantry_add_batch')}</button>
-        ${pantryTrackMode(curLoc)==='qty'?`
         <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_min_qty')}</label>
-        <input class="fi" id="pdMinQty" type="text" inputmode="numeric" style="width:100%;margin-bottom:.2rem" value="${esc(existing?.minQty??'')}">
-        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-bottom:1rem">${t('pantry_min_qty_hint')}</div>`:''}
-      `}
+        <input class="fi" id="pdMinQty" type="text" inputmode="numeric" style="width:100%;margin-bottom:.2rem" value="${esc(existing?.minQty??'')}" ${stockActive?'':'tabindex="-1"'}>
+        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-bottom:1rem">${t('pantry_min_qty_hint')}</div>
+      </div>
 
       <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_note')}</label>
       <input class="fi" id="pdNote" style="width:100%;margin-bottom:1.2rem" value="${esc(existing?.note||'')}" placeholder="${t('pantry_note_ph')}">
 
-      ${isNew?`<div style="display:flex;gap:.6rem">
+      <div style="display:flex;gap:.6rem">
         <button class="btn bp" id="pdSave" style="flex:1">${t('btn_save')}</button>
         <button class="btn bg" id="pdCancel" style="flex:1">${t('btn_cancel')}</button>
-      </div>`:`
-        <button class="btn bp" id="pdClose" style="width:100%">${t('btn_close')}</button>
-        <button id="pdDelete" style="width:100%;background:none;border:none;color:var(--danger);font-family:var(--ui);font-size:.8rem;padding:.8rem 0 0;cursor:pointer">🗑️ ${t('pantry_delete_product')}</button>
-      `}`;
+      </div>
+      ${!isNew?`<button id="pdDelete" style="width:100%;background:none;border:none;color:var(--danger);font-family:var(--ui);font-size:.8rem;padding:.8rem 0 0;cursor:pointer">🗑️ ${t('pantry_delete_product')}</button>`:''}`;
 
-    // Standort umschalten
+    // Standort umschalten (rein lokal, wirkt erst nach "Speichern")
     md.querySelectorAll('[data-pdloc]').forEach(btn=>btn.addEventListener('click',()=>{
-      locTouched=true;
-      const newLoc=btn.dataset.pdloc;
-      if(isNew){
-        const pristine=newBatches.length===1&&newBatches[0].qty===1&&!newBatches[0].expiry;
-        if(newLoc==='kuehlschrank'&&pristine)newBatches=[];
-        else if(curLoc==='kuehlschrank'&&newLoc!=='kuehlschrank'&&newBatches.length===0)newBatches=[{id:uid(),qty:1,expiry:''}];
-        curLoc=newLoc;render();
-      }else{
-        curLoc=newLoc;
-        updatePantryItem(id,{location:newLoc});
-        render();
-      }
+      curLoc=btn.dataset.pdloc;
+      if(curLoc==='kuehlschrank'&&curMode!=='ampel'&&curMode!=='qty')curMode='ampel';
+      if(curLoc!=='kuehlschrank')curMode='qty';
+      render();
+    }));
+
+    // Modus-Umschalter (Ampel <-> Bestandsaufnahme) – Daten beider Seiten bleiben erhalten, nur die inaktive wird ausgegraut
+    md.querySelectorAll('[data-pdmode]').forEach(btn=>btn.addEventListener('click',()=>{
+      curMode=btn.dataset.pdmode;render();
     }));
 
     // Ampel
     md.querySelectorAll('[data-pdampel]').forEach(btn=>btn.addEventListener('click',()=>{
-      curAmpel=btn.dataset.pdampel;
-      if(isNew)render();
-      else{updatePantryItem(id,{ampel:curAmpel});render();}
+      if(!ampelActive)return;
+      curAmpel=btn.dataset.pdampel;render();
     }));
-    document.getElementById('pdSwitchToQty')?.addEventListener('click',()=>{
-      if(isNew){newBatches.push({id:uid(),qty:1,expiry:''});render();}
-      else{addPantryBatch(id,{qty:1,expiry:''});render();}
-    });
 
     // Chargen
     document.getElementById('pdAddBatch')?.addEventListener('click',()=>{
-      if(isNew){newBatches.push({id:uid(),qty:1,expiry:''});render();}
-      else{addPantryBatch(id,{qty:1,expiry:''});render();}
+      if(!stockActive)return;
+      batches.push({id:uid(),qty:1,expiry:''});render();
     });
     md.querySelectorAll('[data-pdbfield]').forEach(inp=>inp.addEventListener('change',()=>{
+      if(!stockActive)return;
       const bid=inp.closest('[data-pdbatch]').dataset.pdbatch;
       const field=inp.dataset.pdbfield;
       const val=field==='qty'?(Number(inp.value)||0):inp.value;
-      if(isNew){
-        const b=newBatches.find(x=>x.id===bid);
-        if(b)b[field]=val;
-      }else{
-        updatePantryBatch(id,bid,{[field]:val});
-      }
+      const b=batches.find(x=>x.id===bid);
+      if(b)b[field]=val;
       render();
     }));
     md.querySelectorAll('[data-pdbdel]').forEach(btn=>btn.addEventListener('click',()=>{
-      const bid=btn.dataset.pdbdel;
-      if(isNew)newBatches=newBatches.filter(x=>x.id!==bid);
-      else removePantryBatch(id,bid);
+      if(!stockActive)return;
+      batches=batches.filter(x=>x.id!==btn.dataset.pdbdel);
       render();
     }));
 
-    // Name/Notiz/Mindestbestand: bei bestehenden Artikeln sofort live speichern
-    if(!isNew){
-      document.getElementById('pdName').addEventListener('change',e=>updatePantryItem(id,{name:e.target.value.trim()}));
-      document.getElementById('pdNote').addEventListener('change',e=>updatePantryItem(id,{note:e.target.value.trim()}));
-      document.getElementById('pdMinQty')?.addEventListener('change',e=>updatePantryItem(id,{minQty:e.target.value.trim()}));
-    }
-
     // Footer
-    if(isNew){
-      document.getElementById('pdSave').addEventListener('click',()=>{
-        const name=document.getElementById('pdName').value.trim();
-        if(!name)return;
-        const note=document.getElementById('pdNote').value.trim();
-        const patch={name,location:curLoc,note};
-        if(newBatches.length>0){
-          patch.batches=newBatches;
-          const minQtyEl=document.getElementById('pdMinQty');
-          if(minQtyEl)patch.minQty=minQtyEl.value.trim();
-        }else{
-          patch.ampel=curAmpel;
-        }
-        addPantryItem(patch);
+    document.getElementById('pdSave').addEventListener('click',()=>{
+      const name=document.getElementById('pdName').value.trim();
+      if(!name)return;
+      const note=document.getElementById('pdNote').value.trim();
+      const minQty=document.getElementById('pdMinQty')?.value.trim()||'';
+      const patch={name,location:curLoc,note,batches,ampel:curAmpel,minQty};
+      if(curLoc==='kuehlschrank')patch.trackMode=curMode;
+      if(existing)updatePantryItem(existing.id,patch);else addPantryItem(patch);
+      close();renderApp();
+    });
+    document.getElementById('pdCancel').addEventListener('click',close);
+    document.getElementById('pdDelete')?.addEventListener('click',()=>{
+      if(confirm(t('pantry_confirm_del'))){
+        removePantryItem(id);
         close();
-      });
-      document.getElementById('pdCancel').addEventListener('click',close);
-    }else{
-      document.getElementById('pdClose').addEventListener('click',close);
-      document.getElementById('pdDelete').addEventListener('click',()=>{
-        if(confirm(t('pantry_confirm_del'))){
-          removePantryItem(id);
-          if(document.body.contains(ov))document.body.removeChild(ov);
-        }
-      });
-    }
+      }
+    });
   };
   render();
   if(isNew)setTimeout(()=>document.getElementById('pdName')?.focus(),50);
 }
+
+
 
 
 // ── Smart-Scan: Foto vom Einkauf oder Kassenbon → KI erkennt Produkte ──
