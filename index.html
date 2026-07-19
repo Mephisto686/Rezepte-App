@@ -1462,8 +1462,8 @@ const LANG={
     pantry_scan_analyze:'KI analysieren',pantry_scan_analyzing:'KI analysiert…',pantry_scan_none:'Keine Produkte erkannt.',
     pantry_scan_found:'{n} Produkte erkannt – prüfe und ergänze bei Bedarf:',pantry_scan_add_all:'Alle hinzufügen',
     pantry_kind:'Art',pantry_kind_vorrat:'📦 Vorrat',pantry_kind_frisch:'🥬 Frischware',
-    pantry_loc_vorrat:'Vorratskammer',pantry_loc_kuehlschrank:'Kühlschrank',pantry_loc_gefrierschrank:'Gefrierschrank',
-    pantry_loc_short_kuehlschrank:'Kühl',pantry_loc_short_gefrierschrank:'Gefr.',
+    pantry_loc_vorrat:'Vorratskammer',pantry_loc_kuehlschrank:'Frischware',pantry_loc_gefrierschrank:'Gefrierschrank',
+    pantry_loc_short_kuehlschrank:'Frisch',pantry_loc_short_gefrierschrank:'Gefr.',
     pantry_kind_hint_vorrat:'Konserven, Hygiene, Tiefkühl – wird mengenmäßig getrackt',
     pantry_kind_hint_frisch:'Milch, Joghurt, Gemüse – nur Status statt genauer Menge',
     pantry_ampel_da:'da',pantry_ampel_knapp:'knapp',pantry_ampel_leer:'leer',
@@ -1565,8 +1565,8 @@ const LANG={
     pantry_scan_analyze:'Analyze with AI',pantry_scan_analyzing:'AI analyzing…',pantry_scan_none:'No products recognized.',
     pantry_scan_found:'{n} products recognized – review and adjust if needed:',pantry_scan_add_all:'Add all',
     pantry_kind:'Type',pantry_kind_vorrat:'📦 Stock',pantry_kind_frisch:'🥬 Fresh',
-    pantry_loc_vorrat:'Pantry',pantry_loc_kuehlschrank:'Fridge',pantry_loc_gefrierschrank:'Freezer',
-    pantry_loc_short_kuehlschrank:'Fridge',pantry_loc_short_gefrierschrank:'Frzr',
+    pantry_loc_vorrat:'Pantry',pantry_loc_kuehlschrank:'Fresh',pantry_loc_gefrierschrank:'Freezer',
+    pantry_loc_short_kuehlschrank:'Fresh',pantry_loc_short_gefrierschrank:'Frzr',
     pantry_kind_hint_vorrat:'Canned goods, hygiene, frozen – tracked by quantity',
     pantry_kind_hint_frisch:'Milk, yogurt, veggies – simple status instead of exact quantity',
     pantry_ampel_da:'have it',pantry_ampel_knapp:'running low',pantry_ampel_leer:'out',
@@ -3337,7 +3337,7 @@ function saveShopCats(){try{localStorage.setItem('mrshcats',JSON.stringify(S.cus
 const PANTRY_SOON_DAYS = 3; // Ab wie vielen Tagen vor Ablauf gelb markiert wird
 
 const PANTRY_LOCS=['vorrat','kuehlschrank','gefrierschrank'];
-const PANTRY_LOC_ICON={vorrat:'📦',kuehlschrank:'🥛',gefrierschrank:'❄️'};
+const PANTRY_LOC_ICON={vorrat:'📦',kuehlschrank:'🍎',gefrierschrank:'❄️'};
 // Standort eines Artikels, mit Fallback auf das alte kind-Feld (vorrat/frisch) für Bestandsdaten
 function pantryLocation(item){
   if(item.location)return item.location;
@@ -3355,8 +3355,9 @@ function guessPantryLocation(name){
   return 'vorrat';
 }
 function pantryLocButtonsHtml(dataAttr,activeLoc,big){
-  const pad=big?'.55rem .8rem':'.4rem .55rem', fs=big?'.9rem':'.78rem';
-  return PANTRY_LOCS.map(l=>`<button type="button" data-${dataAttr}="${l}" class="btn ${activeLoc===l?'bp':'bg'} sm" style="padding:${pad};font-size:${fs};display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap">${PANTRY_LOC_ICON[l]}${l!=='vorrat'?`<span>${t('pantry_loc_short_'+l)}</span>`:''}</button>`).join('');
+  const pad=big?'.55rem .5rem':'.4rem .55rem', fs=big?'.9rem':'.78rem';
+  const flex=big?'flex:1;justify-content:center;':'';
+  return PANTRY_LOCS.map(l=>`<button type="button" data-${dataAttr}="${l}" class="btn ${activeLoc===l?'bp':'bg'} sm" style="padding:${pad};font-size:${fs};display:inline-flex;align-items:center;${flex}gap:.25rem;white-space:nowrap">${PANTRY_LOC_ICON[l]}${l!=='vorrat'?`<span>${t('pantry_loc_short_'+l)}</span>`:''}</button>`).join('');
 }
 // Eindeutiger Schlüssel zum Zusammenfassen gleicher Produkte (Name + Standort)
 function pantryProductKey(name,loc){
@@ -4055,7 +4056,7 @@ MENGEN: "qty" ist die genannte Stückzahl (z.B. "2x" oder "zwei" → 2). Wird ke
 
 MHD/DATUM: Heute ist der ${todayStr}. Werden nur Tag und Monat genannt (z.B. "31.07" oder "31. Juli"), ergänze das Jahr so: Liegt das Datum in diesem Jahr noch in der Zukunft (oder ist heute), nimm dieses Jahr; liegt es schon in der Vergangenheit, nimm das nächste Jahr. Bei "kein MHD", "ohne Verfallsdatum", "kein Datum" o.ä. lasse "expiry" leer. Gib das Datum als YYYY-MM-DD zurück.
 
-STANDORT ("location"): Klassifiziere jedes Produkt nach dem typischen Lagerort als "vorrat" (lang haltbar: Konserven, Trockenware, Hygieneartikel, Putzmittel, Getränke in Flaschen/Kästen), "kuehlschrank" (Milchprodukte, frisches Obst/Gemüse, frisches Fleisch/Wurst/Fisch, Aufstriche, Salate) oder "gefrierschrank" (Tiefkühlware, Eis). Im Zweifel "vorrat".
+STANDORT ("location"): Klassifiziere jedes Produkt nach dem typischen Lagerort als "vorrat" (lang haltbar: Konserven, Trockenware, Hygieneartikel, Putzmittel, Getränke in Flaschen/Kästen), "kuehlschrank" (Frischware: alles kurz haltbare/schnell verderbliche, auch wenn es nicht zwingend gekühlt wird – Milchprodukte, frisches Obst/Gemüse inkl. Bananen, frisches Fleisch/Wurst/Fisch, Aufstriche, Salate) oder "gefrierschrank" (Tiefkühlware, Eis). Im Zweifel "vorrat".
 
 Produktname ("name"): kurz und generisch, ohne Füllwörter aus der gesprochenen Sprache (z.B. "Mehl Dinkel" bleibt "Mehl Dinkel", nicht "also dann noch Mehl, Dinkelmehl meine ich").
 
@@ -4079,7 +4080,7 @@ MENGEN: "qty" ist die Anzahl gekaufter Packungen/Einheiten dieses Produkts aus d
 
 Produktname ("name"): kurz und generisch, OHNE Handelsmarken- oder Eigenmarken-Präfixe wie "REWE Beste Wahl", "REWE Bio", "ja!", "Bio" oder Herstellernamen (z.B. "Wilhelm Brandenburg"). Behalte nur die Kernbezeichnung plus relevante Sorte/Variante, z.B. "Erdnüsse" statt "REWE Beste Wahl Erdnüsse grosse Kerne", "Rindfleischsalami" statt "Wilhelm Brandenburg Rindfleischsalami", "Apfelsaft naturtrüb" statt "REWE Beste Wahl Apfelsaft naturtrüb". Wenn du dir bei einem Wort im Namen unsicher bist, nimm die naheliegendste sinnvolle Lesart (z.B. ein Fisch-/Fleischprodukt in Tomatensauce statt eines Fantasieworts) – aber erfinde keine neuen Produkte.
 
-STANDORT ("location"): Klassifiziere jedes Produkt nach dem typischen Lagerort als "vorrat" (Vorratskammer: lang haltbar, Konserven, Trockenware, Hygieneartikel, Putzmittel, Getränke in Flaschen/Kästen), "kuehlschrank" (Kühlschrank: Milchprodukte, frisches Obst/Gemüse, frisches Fleisch/Wurst/Fisch, Aufstriche, Salate) oder "gefrierschrank" (Gefrierschrank: Tiefkühlware, Eis). Im Zweifel "vorrat" wählen.
+STANDORT ("location"): Klassifiziere jedes Produkt nach dem typischen Lagerort als "vorrat" (Vorratskammer: lang haltbar, Konserven, Trockenware, Hygieneartikel, Putzmittel, Getränke in Flaschen/Kästen), "kuehlschrank" (Frischware: alles kurz haltbare/schnell verderbliche, auch wenn es nicht zwingend gekühlt wird – Milchprodukte, frisches Obst/Gemüse inkl. Bananen, frisches Fleisch/Wurst/Fisch, Aufstriche, Salate) oder "gefrierschrank" (Gefrierschrank: Tiefkühlware, Eis). Im Zweifel "vorrat" wählen.
 
 VORSICHT BEI UNSICHERHEIT: Ersetze ein schwer lesbares Wort NIEMALS durch ein anderes, aber ähnlich aussehendes oder plausibel klingendes Produkt (z.B. nicht "Apfelmark" zu "Kaffee Mark" machen, nicht "Weidemilch" zu "Weidekäse Joghurt" machen, nicht ein Produkt durch eine bekannte Marke wie "Fanta Zero" ersetzen, nur weil die Form der Verpackung ähnlich aussieht). Wenn du dir bei einem Wort unsicher bist, gib lieber den Teil wieder, den du sicher lesen kannst (z.B. nur "Milch" statt eines erfundenen Produkts), oder lasse die Zeile weg.
 
