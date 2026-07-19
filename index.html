@@ -3511,6 +3511,8 @@ function openPantrySuggestModal(){
     close();renderApp();renderNav();
   });
 }
+
+function showShopCatPicker(idx){
   const it=S.shopping[idx];if(!it)return;
   const current=getShopCat(it.text);
   const ov=document.createElement('div');
