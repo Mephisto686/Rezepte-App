@@ -3407,9 +3407,8 @@ function pantryDaysLeft(expiry){
   const exp=new Date(expiry+'T00:00:00');
   return Math.round((exp-today)/86400000);
 }
-// 'expired' | 'soon' | 'ok' | 'none' – ausschließlich MHD-basiert, nur wenn "Bestandsaufnahme" aktiv ist. Die Ampel fließt NICHT mit ein (eigenständiges, unabhängiges Signal).
+// 'expired' | 'soon' | 'ok' | 'none' – ausschließlich MHD-basiert, unabhängig davon ob gerade Ampel oder Bestand aktiv gewählt ist.
 function pantryStatus(item){
-  if(pantryActiveMode(item)!=='qty')return 'none';
   const eb=pantryEarliestBatch(item);
   if(!eb)return 'none';
   const d=pantryDaysLeft(eb.expiry);
@@ -3572,6 +3571,7 @@ function removePantryBatch(id,batchId){
 function adjustPantryQty(id,delta){
   const it=S.pantry.find(x=>x.id===id);if(!it)return;
   let batches=pantryBatches(it).map(b=>({...b}));
+  if(batches.length===0)batches=[{id:uid(),qty:0,expiry:''}];
   if(delta>0){
     const b=batches.find(x=>!x.expiry);
     if(b)b.qty=(Number(b.qty)||0)+delta;
@@ -3591,8 +3591,9 @@ function adjustPantryQty(id,delta){
       remaining-=take;
     }
     batches=batches.filter(b=>Number(b.qty)>0);
+    if(batches.length===0)batches=[{id:uid(),qty:0,expiry:''}]; // auf 0 bleiben, nicht auf Ampel zurückfallen
   }
-  updatePantryItem(id,{batches});
+  updatePantryItem(id,{batches,trackMode:'qty'});
   renderApp();
 }
 function setPantryAmpel(id,ampel){
@@ -3834,7 +3835,7 @@ function pantryRowHtml(it){
   const batches=pantryBatches(it);
   const isAmpel=pantryActiveMode(it)==='ampel';
   const total=pantryTotalQty(it);
-  const earliest=isAmpel?null:pantryEarliestBatch(it);
+  const earliest=pantryEarliestBatch(it);
   const col=earliest?pantryStatusColor(status):(isAmpel?pantryAmpelColor(it.ampel):'var(--muted)');
   const selecting=!!S.pantrySelectMode;
   const selected=!!(S.pantrySelected&&S.pantrySelected.has(it.id));
@@ -3923,11 +3924,13 @@ function openPantryDetail(id){
         </div>
         <button class="btn bg sm" id="pdAddBatch" style="margin-bottom:1rem">+ ${t('pantry_add_batch')}</button>
       `:`
-        <div style="display:flex;gap:.5rem;margin-bottom:1rem">
+        <div style="display:flex;gap:.5rem;margin-bottom:.7rem">
           <button type="button" data-pdampel="da" class="btn ${curAmpel==='da'?'bp':'bg'} sm" style="flex:1">🟢 ${t('pantry_ampel_da')}</button>
           <button type="button" data-pdampel="knapp" class="btn ${curAmpel==='knapp'?'bp':'bg'} sm" style="flex:1">🟡 ${t('pantry_ampel_knapp')}</button>
           <button type="button" data-pdampel="leer" class="btn ${curAmpel==='leer'?'bp':'bg'} sm" style="flex:1">🔴 ${t('pantry_ampel_leer')}</button>
         </div>
+        <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_expiry')} (${t('pantry_optional')})</label>
+        <input class="fi" id="pdAmpelExpiry" type="date" style="width:100%;margin-bottom:1rem" value="${esc(batches[0]?.expiry||'')}">
       `}
 
       <label class="sl" style="display:block;margin-bottom:.3rem">${t('pantry_note')}</label>
@@ -3953,6 +3956,12 @@ function openPantryDetail(id){
     md.querySelectorAll('[data-pdampel]').forEach(btn=>btn.addEventListener('click',()=>{
       curAmpel=btn.dataset.pdampel;render();
     }));
+    document.getElementById('pdAmpelExpiry')?.addEventListener('change',e=>{
+      const val=e.target.value;
+      if(batches.length===0)batches=[{id:uid(),qty:1,expiry:val}];
+      else batches[0]={...batches[0],expiry:val};
+      render();
+    });
 
     // Chargen
     document.getElementById('pdAddBatch')?.addEventListener('click',()=>{
