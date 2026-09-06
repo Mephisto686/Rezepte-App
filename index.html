@@ -1036,6 +1036,14 @@ function startFsSync(){
           if(!change.doc.metadata.hasPendingWrites) _recipePendingDeletes.delete(id);
           continue;
         }
+        // Nur eine SERVER-bestätigte Löschung übernehmen. Ein Snapshot, der (noch) aus dem
+        // lokalen Cache stammt (z.B. kurz nach dem Anlegen bei wackeliger Mobilfunk-Verbindung,
+        // oder beim Reconnect), kann ein Dokument fälschlich als "entfernt" zeigen, obwohl es
+        // serverseitig längst existiert – Firestore muss die Pending-Writes erst mit dem Server
+        // abgleichen. Das führte dazu, dass frisch importierte Rezepte kurz verschwanden und nach
+        // dem nächsten (korrekten) Snapshot von selbst wieder auftauchten. Solche unbestätigten
+        // Removals ignorieren wir daher und warten auf einen server-bestätigten Folge-Snapshot.
+        if(change.doc.metadata.fromCache) continue;
         const before=S.recipes.length;
         S.recipes=S.recipes.filter(r=>r.id!==id);
         if(S.recipes.length!==before)changed=true;
@@ -1662,9 +1670,11 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.8.0';
+const APP_VERSION = '3.8.2';
 const APP_DATE = '2026-09-06';
 const VERSION_HISTORY = [
+  { version:'3.8.2', date:'2026-09-06', de:['🚨 Kritischer Fix: Ein kaputtes Escaping in der Versionshistorie (v3.8.1) verursachte einen Syntaxfehler, der die komplette App am Laden gehindert hätte','Fix: Frisch importierte Rezepte konnten kurz verschwinden und nach einer Weile von selbst wieder auftauchen – Firestore kann ein gerade erst erstelltes Dokument bei wackeliger Verbindung kurzzeitig aus dem lokalen Cache als "entfernt" melden, bevor die Server-Bestätigung durchkommt; nur noch server-bestätigte Löschungen werden jetzt übernommen','Zusätzliches Sicherheitsnetz: Falls ein geöffnetes Rezept kurzzeitig nicht auffindbar ist, springt die Detailansicht nicht mehr sofort zur Liste zurück, sondern wartet kurz und prüft erneut'], en:['🚨 Critical fix: a broken escape sequence in the version history (v3.8.1) caused a syntax error that would have prevented the entire app from loading','Fix: freshly imported recipes could briefly disappear and reappear on their own after a while – Firestore can briefly report a just-created document as "removed" from the local cache under flaky connectivity, before server confirmation arrives; only server-confirmed deletions are now applied','Added safety net: if an open recipe is briefly not found, the detail view no longer jumps straight back to the list – it waits briefly and checks again first'] },
+  { version:'3.8.1', date:'2026-09-06', de:['Fix: PDF-/Druckdialog schlug als Dateiname immer "Meine Rezepte" statt des Rezeptnamens vor – Chromium nutzt beim Drucken eines iframes den Titel des Haupt-App-Dokuments; dieser wird jetzt kurz auf den Rezeptnamen umgestellt','Fix: doppelte PDF-Werkzeugleiste im Rezept-Export entfernt – die alte, eingebettete "Als PDF speichern"-Leiste im generierten HTML war ein Leftover und existierte redundant neben der eigentlichen Symbolleiste (Drucken/⬇PDF/⬇HTML)'], en:['Fix: the print/PDF dialog always suggested "Meine Rezepte" as the filename instead of the recipe name – Chromium uses the main app document\'s title when printing an iframe; this is now temporarily switched to the recipe title','Fix: removed a duplicate PDF toolbar in the recipe export – the old, embedded "Save as PDF" bar inside the generated HTML was a leftover, sitting redundantly alongside the actual toolbar (Print/⬇PDF/⬇HTML)'] },
   { version:'3.8.0', date:'2026-09-06', de:['🆕 Große Navigations-Überarbeitung: neue Startseite mit horizontal scrollbaren Kategorie-Reihen (wie in bekannten Rezept-Apps) statt direktem Sprung in die Rezeptliste','Startseite teasert alle Module an: Speiseplan, Einkaufsliste, Vorratskammer, Neues Rezept, Einstellungen – inkl. Badges für offene Einkäufe/abgelaufene Vorräte','Bottom-Navigation komplett durch ein Hamburger-Menü (☰ oben links) ersetzt, darüber sind alle Module jederzeit erreichbar','Zurück-Pfeil merkt sich jetzt, ob ein Rezept von der Startseite oder aus der Liste geöffnet wurde, und führt entsprechend dorthin zurück'], en:['🆕 Major navigation overhaul: new home screen with horizontally scrollable category rows (like popular recipe apps) instead of jumping straight into the recipe list','Home screen teases all modules: meal plan, shopping list, pantry, new recipe, settings – including badges for open shopping items/expired pantry items','Bottom navigation fully replaced by a hamburger menu (☰ top left), giving access to all modules at any time','Back arrow now remembers whether a recipe was opened from the home screen or the list, and returns there accordingly'] },
   { version:'3.7.3', date:'2026-09-06', de:['Neu: Nach Foto-/Link-/PDF-Import sowie beim Import einer JSON-Datei mit genau einem Rezept wird das neue Rezept jetzt direkt geöffnet statt in der Liste zu landen','Bei mehreren importierten Rezepten (Bulk-JSON-Import) bleibt weiterhin die Listenansicht, da unklar wäre, welches geöffnet werden soll'], en:['New: after photo/link/PDF import as well as importing a JSON file containing exactly one recipe, the new recipe now opens directly instead of landing on the list','When multiple recipes are imported at once (bulk JSON import), the list view is still shown since it would be unclear which one to open'] },
   { version:'3.7.2', date:'2026-09-06', de:['Fix: "Als PDF" erzeugte in der als App installierten Version (Android, „display: standalone") gar nichts – window.print() liefert dort keinen Systemdialog, weil keine Browser-Chrome zum Anzeigen existiert (bekannte Chromium-Einschränkung)','Neuer Button ⬇ PDF erzeugt jetzt eine echte PDF-Datei direkt im Browser (html2canvas + jsPDF) und lädt sie herunter – funktioniert identisch in Browser-Tab, installierter PWA und WebView','🖨 Drucken (Systemdialog) bleibt als Option für den normalen Browser-Tab erhalten'], en:['Fix: "Export as PDF" did nothing in the installed app version (Android, "display: standalone") – window.print() produces no system dialog there since there is no browser chrome to host it (known Chromium limitation)','New ⬇ PDF button now generates an actual PDF file directly in the browser (html2canvas + jsPDF) and downloads it – works identically in a browser tab, installed PWA, and WebView','🖨 Print (system dialog) remains available for regular browser tab use'] },
@@ -2854,7 +2864,22 @@ function stepRow(line,idx,done,ingMap){
 
 // DETAIL VIEW
 function renderDetail(app){
-  const r=S.recipes.find(x=>x.id===S.selId);if(!r){goList();return;}
+  const r=S.recipes.find(x=>x.id===S.selId);
+  if(!r){
+    // Sicherheitsnetz: falls das Rezept nur KURZZEITIG fehlt (z.B. während ein Sync-Vorgang
+    // noch läuft), nicht sofort zur Liste zurückspringen – das würde ein frisch geöffnetes
+    // Rezept ungewollt "verschwinden" lassen. Stattdessen kurz abwarten und erneut prüfen;
+    // erst wenn es auch dann noch fehlt, wirklich zur Liste zurück.
+    if(!S._detailRetried){
+      S._detailRetried=true;
+      app.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:50dvh;flex-direction:column;gap:.8rem"><div style="font-size:2rem">🍳</div><div style="font-size:.85rem;color:var(--muted);font-family:var(--ui)">${S.lang==='en'?'Loading…':'Wird geladen…'}</div></div>`;
+      setTimeout(()=>{ if(S.view==='detail'&&S.selId){renderApp();} },600);
+      return;
+    }
+    S._detailRetried=false;
+    goList();return;
+  }
+  S._detailRetried=false;
   const sf=S.scaleFactor,base=r.servings||4,sc=base*sf;
   const ings=(r.ingredients||'').split('\n').filter(l=>l.trim());
   app.innerHTML=`<div class="dc">
@@ -5094,9 +5119,7 @@ function exportRecipePDF(id){
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Georgia,serif;color:#2d2416;padding:2cm;max-width:800px;margin:0 auto;font-size:11pt}
-    .pbar{position:fixed;top:0;left:0;right:0;background:#1e1e2e;padding:.6rem 1rem;display:flex;align-items:center;gap:.5rem;z-index:999}
-    .pbtn{background:#89b4fa;color:#1e1e2e;border:none;border-radius:8px;padding:.4rem .9rem;font-family:system-ui;font-size:.82rem;font-weight:700;cursor:pointer}
-    .content{margin-top:3rem}
+    .content{margin-top:0}
     .header{background:${catColor};color:white;padding:1.2rem 1.5rem;border-radius:8px;margin-bottom:1.5rem}
     .header h1{font-size:1.6rem;margin-bottom:.3rem}
     .header .meta{font-size:.85rem;opacity:.9;font-family:system-ui}
@@ -5112,12 +5135,8 @@ function exportRecipePDF(id){
     .num{width:24px;height:24px;border-radius:50%;border:2px solid ${catColor};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.75rem;color:${catColor};font-family:system-ui;font-weight:bold;margin-top:.1rem}
     .notes{background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:.8rem 1rem;font-style:italic;font-size:.9rem;color:#78350f;margin-top:.5rem}
     ${r.photo?`.photo{width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin-bottom:1rem}`:''}
-    @media print{.pbar{display:none!important}.content{margin-top:0}.header{-webkit-print-color-adjust:exact;print-color-adjust:exact}.notes{-webkit-print-color-adjust:exact;print-color-adjust:exact}.num{-webkit-print-color-adjust:exact;print-color-adjust:exact}.sec-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    @media print{.content{margin-top:0}.header{-webkit-print-color-adjust:exact;print-color-adjust:exact}.notes{-webkit-print-color-adjust:exact;print-color-adjust:exact}.num{-webkit-print-color-adjust:exact;print-color-adjust:exact}.sec-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
-  <div class="pbar">
-    <span style="color:#cdd6f4;font-family:system-ui;font-size:.82rem;flex:1">📄 ${r.title}</span>
-    <button class="pbtn" onclick="window.print()">${t('pdf_save')}</button>
-  </div>
   <div class="content">
   ${r.photo?`<img class="photo" src="${r.photo}">`:''}
   <div class="header">
@@ -5166,8 +5185,16 @@ function exportRecipePDF(id){
   // Browser-Chrome, die den Dialog anzeigen könnte; window.print() tut dort schlicht nichts.
   // Deshalb ⬇ PDF als primären, plattformunabhängigen Weg anbieten (siehe unten).
   bar.querySelector('#pdfPrintBtn').onclick=()=>{
+    // Chromium schlägt im "Als PDF speichern"-Dialog den Titel des äußeren (Haupt-App-)
+    // Dokuments als Dateiname vor, nicht den des iframes – deshalb Titel kurz umbiegen.
+    const prevTitle=document.title;
+    document.title=r.title;
+    let restored=false;
+    const restore=()=>{if(restored)return;restored=true;document.title=prevTitle;window.removeEventListener('afterprint',restore);};
+    window.addEventListener('afterprint',restore);
+    setTimeout(restore,5000); // Sicherheitsnetz falls afterprint nicht feuert (manche WebViews)
     try{iframe.contentWindow.print();}
-    catch(e){toast(t('pdf_html_hint'));}
+    catch(e){restore();toast(t('pdf_html_hint'));}
   };
   bar.querySelector('#pdfPdfBtn').addEventListener('click',async()=>{
     const btn=bar.querySelector('#pdfPdfBtn');
