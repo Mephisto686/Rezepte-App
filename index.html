@@ -816,6 +816,10 @@ async function load(){
   try{const ccol=localStorage.getItem('mrcatcol');if(ccol)S.customCatColors=JSON.parse(ccol);}catch{}
   try{const cico=localStorage.getItem('mrcatico');if(cico)S.customCatIcons=JSON.parse(cico);}catch{}
   try{S._catUpdatedAt=+localStorage.getItem('mrcatts')||0;}catch{S._catUpdatedAt=0;}
+  try{S._shopSyncTs=+localStorage.getItem('mrshopts')||0;}catch{S._shopSyncTs=0;}
+  try{S._pantrySyncTs=+localStorage.getItem('mrpantryts')||0;}catch{S._pantrySyncTs=0;}
+  try{S._shopDirty=localStorage.getItem('mrshopdirty')==='1';}catch{S._shopDirty=false;}
+  try{S._pantryDirty=localStorage.getItem('mrpantrydirty')==='1';}catch{S._pantryDirty=false;}
   try{const wl=localStorage.getItem('mrwl');S.wakeLock=wl===null?true:wl==='1';}catch{}
   try{const csc=localStorage.getItem('mrshcats');if(csc)S.customShopCats=JSON.parse(csc);}catch{}
   applyTheme();
@@ -896,6 +900,7 @@ function saveSh_local(){
 function saveSh(){
   // Push to Firestore, then save locally
   if(fsReady())fsPushShopping();
+  else{ S._shopDirty=true; try{localStorage.setItem('mrshopdirty','1');}catch{} } // offline geändert → muss beim nächsten Online-Start noch hochgeladen werden
   saveSh_local();
 }
 function savePantry_local(){
@@ -908,6 +913,7 @@ function savePantry_local(){
 }
 function savePantry(){
   if(fsReady())fsPushPantry();
+  else{ S._pantryDirty=true; try{localStorage.setItem('mrpantrydirty','1');}catch{} }
   savePantry_local();
 }
 function saveKey(){try{localStorage.setItem('mrak',S.apiKey);}catch{}}
@@ -1005,6 +1011,9 @@ async function fsPushShopping(){
   try{
     const ts=Date.now();
     S._shopSyncTs=ts;
+    try{localStorage.setItem('mrshopts',String(ts));}catch{}
+    S._shopDirty=false;
+    try{localStorage.removeItem('mrshopdirty');}catch{}
     await fsMetaDoc('shopping').set({items:S.shopping,_updatedAt:ts});
   }catch(e){console.warn('Firestore shopping push failed:',e);}
 }
@@ -1015,6 +1024,9 @@ async function fsPushPantry(){
   try{
     const ts=Date.now();
     S._pantrySyncTs=ts;
+    try{localStorage.setItem('mrpantryts',String(ts));}catch{}
+    S._pantryDirty=false;
+    try{localStorage.removeItem('mrpantrydirty');}catch{}
     await fsMetaDoc('pantry').set({items:S.pantry,_updatedAt:ts});
   }catch(e){console.warn('Firestore pantry push failed:',e);}
 }
@@ -1101,6 +1113,7 @@ function startFsSync(){
     const remoteTs=data._updatedAt||0;
     if(remoteTs<=(S._shopSyncTs||0))return; // eigener Write (Echo) oder veralteter/überholter Stand
     S._shopSyncTs=remoteTs;
+    try{localStorage.setItem('mrshopts',String(remoteTs));}catch{}
     S.shopping=data.items||[];
     saveSh_local();
     if(S.view==='shopping')renderApp();
@@ -1114,6 +1127,7 @@ function startFsSync(){
     const remoteTs=data._updatedAt||0;
     if(remoteTs<=(S._pantrySyncTs||0))return; // eigener Write (Echo) oder veralteter/überholter Stand
     S._pantrySyncTs=remoteTs;
+    try{localStorage.setItem('mrpantryts',String(remoteTs));}catch{}
     S.pantry=data.items||[];
     consolidatePantryDuplicates();
     savePantry_local();
@@ -1394,14 +1408,33 @@ async function fsInitialSync(){
         }catch{}
       } else { await fsPushCats(); }
     } else if(S.customCats){ await fsPushCats(); }
-    // Einkaufsliste mergen (neueste gewinnt)
+    // Einkaufsliste mergen (neueste gewinnt – nach persistiertem Zeitstempel, nicht danach ob
+    // lokal zufällig Einträge vorhanden sind: Bug bis v3.8.2 – ein Gerät mit älterem lokalem
+    // Stand hat beim Start den frischeren Server-Stand blind überschrieben, sobald seine eigene
+    // Liste nicht leer war. Jetzt: Remote nur übernehmen wenn wirklich neuer; eigenen (evtl.
+    // offline entstandenen) Stand nur hochladen wenn er neuer ist ODER noch ungesynct (dirty)).
     const shopDoc=await fsMetaDoc('shopping').get();
     if(shopDoc.exists){
       const data=shopDoc.data();
-      if(data.items&&data.items.length&&!S.shopping.length){
-        S.shopping=data.items;S._shopSyncTs=data._updatedAt||0;saveSh_local();
-      } else if(S.shopping.length){ await fsPushShopping(); }
+      const remoteTs=data._updatedAt||0;
+      if(remoteTs>(S._shopSyncTs||0)){
+        S.shopping=data.items||[];S._shopSyncTs=remoteTs;S._shopDirty=false;
+        try{localStorage.setItem('mrshopts',String(remoteTs));localStorage.removeItem('mrshopdirty');}catch{}
+        saveSh_local();
+      } else if(S._shopDirty){ await fsPushShopping(); }
     } else if(S.shopping.length){ await fsPushShopping(); }
+    // Vorratskammer mergen (gleiches Prinzip)
+    const pantryDoc=await fsMetaDoc('pantry').get();
+    if(pantryDoc.exists){
+      const data=pantryDoc.data();
+      const remoteTs=data._updatedAt||0;
+      if(remoteTs>(S._pantrySyncTs||0)){
+        S.pantry=data.items||[];S._pantrySyncTs=remoteTs;S._pantryDirty=false;
+        try{localStorage.setItem('mrpantryts',String(remoteTs));localStorage.removeItem('mrpantrydirty');}catch{}
+        consolidatePantryDuplicates();
+        savePantry_local();
+      } else if(S._pantryDirty){ await fsPushPantry(); }
+    } else if(S.pantry.length){ await fsPushPantry(); }
     render();
   }catch(e){console.warn('Firestore initial sync failed:',e);}
   startFsSync();
@@ -1476,10 +1509,11 @@ const LANG={
     imp_photo_hint:'Mehrere Fotos oder Screenshots auf einmal hochladen – z.B. Zutaten + Zubereitung auf verschiedenen Seiten.',
     imp_photo_choose:'Ein oder mehrere Bilder auswählen',imp_photo_selected:'ausgewählt',
     imp_url_hint:'Link zu einer Rezeptseite (Chefkoch, Kitchen Stories…)',imp_url_load:'🔗 Rezept laden',
+    imp_text_hint:'Rezepttext einfügen – z.B. aus WhatsApp, einer Mail oder einem Dokument',imp_text_placeholder:'Zutaten und Zubereitung hier einfügen…',imp_text_none_found:'Kein Rezept im Text erkannt.',
     imp_pdf_hint:'PDF-Rezept (gescannte Kochbuchseite oder exportierte Rezept-PDF)',imp_pdf_choose:'PDF-Datei auswählen',
     imp_json_hint:'Mehrere JSON-Dateien oder ganzen Ordner auf einmal importieren.',
     imp_json_choose:'📄 Dateien auswählen',imp_json_multi:'(mehrere möglich)',imp_json_folder:'📁 Ordner auswählen',
-    imp_ai_analyze:'✨ KI analysieren',imp_add:'+ Hinzufügen',imp_page_missing:'Seite konnte nicht geladen werden.',
+    imp_ai_analyze:'✨ KI analysieren',imp_add:'✓ Prüfen & übernehmen',imp_page_missing:'Seite konnte nicht geladen werden.',
     imp_none_found:'Kein Rezept erkannt.',imp_none_found_url:'Kein Rezept gefunden.',imp_no_json:'kein JSON',
     imp_invalid_json:'Ungültiges JSON – ',imp_imported:'importiert',imp_duplicates_skipped:'Duplikat(e) übersprungen',
     imp_none_found2:'Keine Rezepte gefunden.',
@@ -1583,10 +1617,11 @@ const LANG={
     imp_photo_hint:'Upload multiple photos or screenshots of a recipe at once – e.g. ingredients on page 1, instructions on page 2.',
     imp_photo_choose:'Select one or more images',imp_photo_selected:'selected',
     imp_url_hint:'Link to a recipe page (Chefkoch, Kitchen Stories…)',imp_url_load:'🔗 Load recipe',
+    imp_text_hint:'Paste recipe text – e.g. from WhatsApp, an email or a document',imp_text_placeholder:'Paste ingredients and instructions here…',imp_text_none_found:'No recipe recognized in the text.',
     imp_pdf_hint:'PDF recipe (scanned cookbook page or exported recipe PDF)',imp_pdf_choose:'Select PDF file',
     imp_json_hint:'Import multiple JSON files or an entire folder at once.',
     imp_json_choose:'📄 Select files',imp_json_multi:'(multiple possible)',imp_json_folder:'📁 Select folder',
-    imp_ai_analyze:'✨ Analyze with AI',imp_add:'+ Add',imp_page_missing:'Page could not be loaded.',
+    imp_ai_analyze:'✨ Analyze with AI',imp_add:'✓ Review & use',imp_page_missing:'Page could not be loaded.',
     imp_none_found:'No recipe recognized.',imp_none_found_url:'No recipe found.',imp_no_json:'not JSON',
     imp_invalid_json:'Invalid JSON – ',imp_imported:'imported',imp_duplicates_skipped:'duplicate(s) skipped',
     imp_none_found2:'No recipes found.',
@@ -1670,9 +1705,14 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.8.2';
-const APP_DATE = '2026-09-06';
+const APP_VERSION = '3.8.7';
+const APP_DATE = '2026-09-19';
 const VERSION_HISTORY = [
+  { version:'3.8.7', date:'2026-09-19', de:['Neu: 🪄 Schritt-Assistent im Rezept-Formular – Zubereitungsschritte einzeln eintragen statt alles in einer Textarea, mit Feld für Zeit und Aktiv/Passiv-Umschalter pro Schritt, inkl. Zurück/Einfügen/Nächster-Schritt/Letzter-Schritt-Navigation und Umschalten Schritt ↔ Überschrift','Die freie Textarea bleibt vollständig erhalten und nutzbar – der Assistent ist eine Alternative, keine Pflicht','Explizit im Assistenten gesetzte Zeit/Art werden jetzt auch im Rezept-Detail (Timer-Button) und beim automatischen Kochsession-Ablaufplan (ohne KI) respektiert, statt sie immer neu zu erraten'], en:['New: 🪄 Step assistant in the recipe form – enter preparation steps one at a time instead of one big textarea, with a duration field and an active/passive toggle per step, including back/insert/next-step/last-step navigation and switching a step into a section header and back','The free-text textarea remains fully available – the assistant is an alternative, not a requirement','Duration/type set explicitly via the assistant are now also respected in the recipe detail view (timer button) and by the automatic (non-AI) cooking-session timeline builder, instead of always being re-guessed'] },
+  { version:'3.8.6', date:'2026-09-19', de:['Rezepteingabe überarbeitet: Tag-Suche im Formular (ab 9 Tags), damit man nicht mehr durch eine lange Liste scrollen muss','Foto-/Link-/PDF-Import öffnet jetzt vor dem Speichern das volle Formular zur Kontrolle statt direkt zu speichern – Fehler der KI lassen sich so sofort korrigieren','Warnung, wenn beim Import bereits ein Rezept mit demselben Titel existiert','Neuer Import-Tab "Text": Rezepttext direkt einfügen (z.B. aus WhatsApp oder einer Mail) statt Umweg über Link oder Foto','"Manuell"-Tab öffnet jetzt direkt das leere Formular statt eines Zwischenschritts'], en:['Recipe entry overhaul: tag search in the form (from 9 tags onward) so you no longer have to scroll through a long list','Photo/link/PDF import now opens the full form for review before saving instead of saving immediately – AI mistakes can be fixed right away','Warning when a recipe with the same title already exists on import','New "Text" import tab: paste recipe text directly (e.g. from WhatsApp or an email) instead of going via a link or photo','The "Manual" tab now opens the empty form directly instead of an extra step'] },
+  { version:'3.8.5', date:'2026-09-19', de:['Kochsession-Ablaufplan: Dauer und Aktiv/Passiv eines Schritts können jetzt manuell angetippt und korrigiert werden (Minuten-Zahl bzw. ⚡/⏳-Badge antippen) – bisher kam das ausschließlich aus der KI-generierten Zeitplanung, ohne Möglichkeit zur manuellen Korrektur'], en:['Cooking-session timeline: a step\'s duration and active/passive type can now be tapped and edited manually (tap the minutes number or the ⚡/⏳ badge) – previously this only ever came from the AI-generated schedule, with no way to correct it manually'] },
+  { version:'3.8.4', date:'2026-09-19', de:['Foto-Feld im Editor (Neu/Bearbeiten) an den Anfang des Formulars verschoben, direkt vor den Titel'], en:['Moved the photo field in the editor (new/edit) to the top of the form, right before the title'] },
+  { version:'3.8.3', date:'2026-09-06', de:['🚨 Kern-Fix: Einkaufsliste synchronisierte zwischen Geräten nicht zuverlässig – beim App-Start wurde entgegen dem Kommentar NICHT nach Zeitstempel entschieden, sondern praktisch immer der lokale Stand hochgeladen sobald er nicht leer war. Ein Gerät mit älterem lokalem Stand hat damit bei jedem Start frischere Änderungen eines anderen Geräts überschrieben','Zeitstempel der Einkaufsliste/Vorratskammer werden jetzt (wie bei den Kategorien) dauerhaft gespeichert, nicht nur im Arbeitsspeicher – sonst "vergisst" die App bei jedem Neustart, was sie zuletzt wusste','Vorratskammer bekommt jetzt ebenfalls einen Zeitstempel-Abgleich beim Start (gab es bisher gar nicht) – Offline-Änderungen gingen sonst beim nächsten Start klanglos verloren, sobald der Server-Stand zuerst ankam','Offline gemachte Änderungen an Liste/Vorrat werden jetzt als "ungesynct" markiert und beim nächsten Online-Start zuverlässig nachgeholt, statt stillschweigend verworfen zu werden'], en:['🚨 Core fix: the shopping list didn\'t reliably sync between devices – on app start, despite the comment saying otherwise, the merge did NOT compare timestamps but effectively always uploaded the local state whenever it wasn\'t empty. A device with an older local list would overwrite another device\'s fresher changes on every start','Shopping list/pantry sync timestamps are now persisted (like the categories already were), not just kept in memory – otherwise the app "forgot" what it last knew on every restart','Pantry now also gets a timestamp reconciliation on startup (didn\'t exist before) – offline edits used to be silently discarded once the server state arrived first','Offline changes to the shopping list/pantry are now marked as "unsynced" and reliably pushed on the next online start instead of being silently dropped'] },
   { version:'3.8.2', date:'2026-09-06', de:['🚨 Kritischer Fix: Ein kaputtes Escaping in der Versionshistorie (v3.8.1) verursachte einen Syntaxfehler, der die komplette App am Laden gehindert hätte','Fix: Frisch importierte Rezepte konnten kurz verschwinden und nach einer Weile von selbst wieder auftauchen – Firestore kann ein gerade erst erstelltes Dokument bei wackeliger Verbindung kurzzeitig aus dem lokalen Cache als "entfernt" melden, bevor die Server-Bestätigung durchkommt; nur noch server-bestätigte Löschungen werden jetzt übernommen','Zusätzliches Sicherheitsnetz: Falls ein geöffnetes Rezept kurzzeitig nicht auffindbar ist, springt die Detailansicht nicht mehr sofort zur Liste zurück, sondern wartet kurz und prüft erneut'], en:['🚨 Critical fix: a broken escape sequence in the version history (v3.8.1) caused a syntax error that would have prevented the entire app from loading','Fix: freshly imported recipes could briefly disappear and reappear on their own after a while – Firestore can briefly report a just-created document as "removed" from the local cache under flaky connectivity, before server confirmation arrives; only server-confirmed deletions are now applied','Added safety net: if an open recipe is briefly not found, the detail view no longer jumps straight back to the list – it waits briefly and checks again first'] },
   { version:'3.8.1', date:'2026-09-06', de:['Fix: PDF-/Druckdialog schlug als Dateiname immer "Meine Rezepte" statt des Rezeptnamens vor – Chromium nutzt beim Drucken eines iframes den Titel des Haupt-App-Dokuments; dieser wird jetzt kurz auf den Rezeptnamen umgestellt','Fix: doppelte PDF-Werkzeugleiste im Rezept-Export entfernt – die alte, eingebettete "Als PDF speichern"-Leiste im generierten HTML war ein Leftover und existierte redundant neben der eigentlichen Symbolleiste (Drucken/⬇PDF/⬇HTML)'], en:['Fix: the print/PDF dialog always suggested "Meine Rezepte" as the filename instead of the recipe name – Chromium uses the main app document\'s title when printing an iframe; this is now temporarily switched to the recipe title','Fix: removed a duplicate PDF toolbar in the recipe export – the old, embedded "Save as PDF" bar inside the generated HTML was a leftover, sitting redundantly alongside the actual toolbar (Print/⬇PDF/⬇HTML)'] },
   { version:'3.8.0', date:'2026-09-06', de:['🆕 Große Navigations-Überarbeitung: neue Startseite mit horizontal scrollbaren Kategorie-Reihen (wie in bekannten Rezept-Apps) statt direktem Sprung in die Rezeptliste','Startseite teasert alle Module an: Speiseplan, Einkaufsliste, Vorratskammer, Neues Rezept, Einstellungen – inkl. Badges für offene Einkäufe/abgelaufene Vorräte','Bottom-Navigation komplett durch ein Hamburger-Menü (☰ oben links) ersetzt, darüber sind alle Module jederzeit erreichbar','Zurück-Pfeil merkt sich jetzt, ob ein Rezept von der Startseite oder aus der Liste geöffnet wurde, und führt entsprechend dorthin zurück'], en:['🆕 Major navigation overhaul: new home screen with horizontally scrollable category rows (like popular recipe apps) instead of jumping straight into the recipe list','Home screen teases all modules: meal plan, shopping list, pantry, new recipe, settings – including badges for open shopping items/expired pantry items','Bottom navigation fully replaced by a hamburger menu (☰ top left), giving access to all modules at any time','Back arrow now remembers whether a recipe was opened from the home screen or the list, and returns there accordingly'] },
@@ -2233,18 +2273,12 @@ function renderNewRecipe(app){
     </div>
     <div id="newRecipeContent"></div>`;
   document.querySelectorAll('[data-nrtab]').forEach(b=>b.addEventListener('click',()=>{
+    if(b.dataset.nrtab==='manual'){openNew();return;} // Manuell: kein Zwischenschritt, Formular direkt öffnen
     S.newRecipeTab=b.dataset.nrtab;renderApp();
   }));
   const content=document.getElementById('newRecipeContent');
   if(S.newRecipeTab==='aisearch'){
     renderAISearch(content);
-  } else if(S.newRecipeTab==='manual'){
-    content.innerHTML=`<div style="max-width:420px;margin:2.5rem auto;text-align:center">
-      <div style="font-size:2.5rem;margin-bottom:1rem">✏️</div>
-      <div style="font-family:var(--ui);color:var(--muted);font-size:.9rem;margin-bottom:1.3rem;line-height:1.5">${S.lang==='en'?'Start a recipe from scratch – enter ingredients, steps and nutrition yourself.':'Leg ein Rezept von Grund auf neu an – Zutaten, Zubereitung und Nährwerte selbst eintragen.'}</div>
-      <button class="btn bp" id="manualNewBtn">+ ${S.lang==='en'?'Create new recipe':'Neues Rezept erstellen'}</button>
-    </div>`;
-    document.getElementById('manualNewBtn').addEventListener('click',openNew);
   } else {
     renderImportPage(content);
   }
@@ -2848,9 +2882,9 @@ function showIngBubble(e, scaled){
 }
 
 function stepRow(line,idx,done,ingMap){
-  const {mins,text}=parseStepTime(line);
+  const {mins,type,text}=parseStepTime(line);
   const displayText=ingMap?highlightIngRefs(text,ingMap):boldify(text);
-  const stepType=detectStepType(text);
+  const stepType=type||detectStepType(text);
   const typeColor=stepType==='passive'?'#f87171':'#4ade80';
   return `<div class="step-row${done?' step-done':''}" data-step="${idx}" style="display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid var(--border);cursor:pointer">
     <div class="step-circle" data-num="${idx+1}" style="width:26px;height:26px;border-radius:50%;border:2px solid ${done?'var(--accent)':'var(--border2)'};background:${done?'var(--accent)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:${done?'#fff':'var(--muted)'};font-size:.78rem;margin-top:.15rem;transition:all .2s">${done?'✓':String(idx+1)}</div>
@@ -3136,8 +3170,9 @@ function renderDetail(app){
       const line=toggleBtn.dataset.line;
       let lines=(r.steps||'').split('\n');
       if(action==='promote'){
-        // Wrap line in **...** → becomes a bold header
-        lines=lines.map(l=>l.trim()===line.trim()?`**${l.trim()}**`:l);
+        // Wrap line in **...** → becomes a bold header. Eventuellen [Min:Typ]-Marker vorher
+        // entfernen, sonst würde er wörtlich im Überschrift-Text landen.
+        lines=lines.map(l=>l.trim()===line.trim()?`**${parseStepTime(l.trim()).text}**`:l);
       } else {
         // Remove **...** or trailing : from header line → becomes a step
         lines=lines.map(l=>{
@@ -3322,6 +3357,14 @@ function renderForm(app){
   app.innerHTML=`<div class="fc">
     <h3>${S.editId?t('hdr_edit'):t('hdr_new')}</h3>
     <div class="fg">
+      <div class="cf">
+        <div class="fl">${t('form_photo')} (optional)</div>
+        <div class="pa" onclick="document.getElementById('pup').click()">
+          ${photo?`<img class="pp" src="${photo}"><small style="font-family:var(--ui)">${t('form_photo_tap_change')}</small>`:t('form_photo_add')}
+        </div>
+        <input type="file" id="pup" accept="image/*" style="display:none">
+        ${photo?`<button class="btn bg sm" style="margin-top:.4rem" onclick="S.formPhoto=null;S.formData.photo=null;renderApp()">${t('form_photo_remove')}</button>`:''}
+      </div>
       <div class="cf"><div class="fl">${t('form_title')} *</div><input class="fi" id="f-t" value="${esc(f.title)}" placeholder="${t('form_title')}"></div>
       <div><div class="fl">${t('form_category')}</div><select class="fs" id="f-c">${getCats().map(c=>`<option${c===f.category?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
       <div><div class="fl">${t('form_servings')}</div><input class="fi" id="f-s" type="number" min="1" value="${esc(f.servings)}"></div>
@@ -3329,8 +3372,9 @@ function renderForm(app){
       <div><div class="fl">${t('form_cook')}</div><input class="fi" id="f-k" type="number" min="0" value="${esc(f.cookTime)}" placeholder="30"></div>
       <div class="cf">
         <div class="fl">${t('form_tags')}</div>
+        ${allTags().length>8?`<input id="formTagSearch" style="width:100%;padding:.4rem .65rem;border:1px solid var(--border2);border-radius:8px;background:var(--bg);font-family:var(--font);font-size:.85rem;color:var(--text);outline:none;margin-bottom:.45rem" placeholder="${t('flt_tag_search')}">`:''}
         <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.5rem" id="tagChips">
-          ${allTags().map(t=>{const sel=S.formTags.includes(t);return`<button type="button" class="tag-chip-sel${sel?' active':''}" data-tagsel="${esc(t)}" style="padding:.25rem .65rem;border-radius:20px;font-size:.78rem;font-family:var(--ui);cursor:pointer;border:1px solid ${sel?'var(--accent)':'var(--border2)'};background:${sel?'var(--accent)':'var(--surface2)'};color:${sel?'#fff':'var(--muted)'};transition:all .15s">${esc(t)}</button>`;}).join('')}
+          ${allTags().map(t=>{const sel=S.formTags.includes(t);return`<button type="button" class="tag-chip-sel${sel?' active':''}" data-tagsel="${esc(t)}" data-tagname="${esc(t.toLowerCase())}" style="padding:.25rem .65rem;border-radius:20px;font-size:.78rem;font-family:var(--ui);cursor:pointer;border:1px solid ${sel?'var(--accent)':'var(--border2)'};background:${sel?'var(--accent)':'var(--surface2)'};color:${sel?'#fff':'var(--muted)'};transition:all .15s">${esc(t)}</button>`;}).join('')}
         </div>
         <div style="display:flex;gap:.4rem">
           <input class="fi" id="tagNewInp" placeholder="${t('form_tag_add')}" style="flex:1;padding:.45rem .65rem">
@@ -3342,19 +3386,14 @@ function renderForm(app){
           ${S.formTags.map(t=>`<span style="background:var(--accent);color:#fff;border-radius:20px;font-size:.75rem;padding:.18rem .55rem;font-family:var(--ui);display:flex;align-items:center;gap:.3rem">${esc(t)}<button type="button" class="tag-rm-btn" data-rmtag="${esc(t)}" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.8);font-size:.8rem;padding:0;line-height:1">✕</button></span>`).join('')}
         </div>`:''}
       </div>
-      <div class="cf">
-        <div class="fl">${t('form_photo')} (optional)</div>
-        <div class="pa" onclick="document.getElementById('pup').click()">
-          ${photo?`<img class="pp" src="${photo}"><small style="font-family:var(--ui)">${t('form_photo_tap_change')}</small>`:t('form_photo_add')}
-        </div>
-        <input type="file" id="pup" accept="image/*" style="display:none">
-        ${photo?`<button class="btn bg sm" style="margin-top:.4rem" onclick="S.formPhoto=null;S.formData.photo=null;renderApp()">${t('form_photo_remove')}</button>`:''}
-      </div>
       <div class="cf"><div class="fl">${t('form_ingredients')}</div><textarea class="ft" id="f-i" rows="7" placeholder="${t('form_ing_hint')}">${esc(f.ingredients)}</textarea></div>
       <div class="cf">
-        <div class="fl" style="display:flex;align-items:center;justify-content:space-between">
+        <div class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:.4rem;flex-wrap:wrap">
           <span>${t('det_steps')}</span>
-          <button id="boldBtn" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:.15rem .5rem;font-family:var(--ui);font-size:.8rem;font-weight:bold;cursor:pointer;color:var(--text)">B Fett</button>
+          <div style="display:flex;gap:.4rem">
+            <button type="button" id="stepWizardBtn" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:.15rem .5rem;font-family:var(--ui);font-size:.8rem;cursor:pointer;color:var(--text)">🪄 ${S.lang==='en'?'Step assistant':'Schritt-Assistent'}</button>
+            <button id="boldBtn" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:.15rem .5rem;font-family:var(--ui);font-size:.8rem;font-weight:bold;cursor:pointer;color:var(--text)">B Fett</button>
+          </div>
         </div>
         <div style="font-size:.7rem;color:var(--muted);font-family:var(--ui);margin:.25rem 0 .35rem;font-style:italic">${t('form_cluster_hint')}</div>
         <textarea class="ft" id="f-st" rows="9" placeholder="${t('form_steps_hint')}">${esc(f.steps)}</textarea>
@@ -3442,6 +3481,11 @@ Alle Werte gerundete Ganzzahlen außer Salz (eine Dezimalstelle).`,
   };
   document.getElementById('tagNewAdd')?.addEventListener('click',tagNewAdd);
   document.getElementById('tagNewInp')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();tagNewAdd();}});
+  document.getElementById('stepWizardBtn')?.addEventListener('click',openStepWizard);
+  document.getElementById('formTagSearch')?.addEventListener('input',e=>{
+    const q=e.target.value.toLowerCase();
+    document.querySelectorAll('#tagChips [data-tagname]').forEach(b=>{b.style.display=b.dataset.tagname.includes(q)?'':'none';});
+  });
   document.getElementById('pup').addEventListener('change',async e=>{
     const f=e.target.files[0];if(!f)return;S.formPhoto=await compressImg(f);renderApp();
   });
@@ -4874,8 +4918,21 @@ const openDetail=(id,from)=>{
   S.scaleFactor=S.scaleFactors[id]||1;
   saveSession();render();restoreScroll('detail_'+id);
 };
-const openNew=()=>{S.formData=defForm();S.formTags=[];S.formPhoto=null;S.editId=null;S.view='form';render();scrollTo(0,0);};
+const openNew=()=>{S.formData=defForm();S.formTags=[];S.formPhoto=null;S.editId=null;S.formFrom=S.view;S.view='form';render();scrollTo(0,0);};
 function openEdit(id){const r=S.recipes.find(x=>x.id===id);if(!r)return;S.formData={...r};S.formTags=[...(r.tags||[])];S.formPhoto=null;S.editId=id;S.view='form';render();scrollTo(0,0);}
+// Öffnet das Formular mit KI-extrahierten Daten vorausgefüllt, statt sie direkt zu speichern –
+// so kann man Titel/Zutaten/Schritte vor dem Speichern noch prüfen und korrigieren, statt es erst
+// hinterher im Nachhinein reparieren zu müssen (galt bisher nur für Foto/Link/PDF-Import).
+function openFormWithPrefill(r){
+  S.formData={...defForm(),...r,
+    category:getCats().includes(r.category)?r.category:getCats()[getCats().length-1]||'Sonstiges',
+    servings:r.servings||4};
+  S.formTags=[...(r.tags||[])];
+  S.formPhoto=null;
+  S.editId=null;
+  S.formFrom='newrecipe';
+  S.view='form';render();scrollTo(0,0);
+}
 function setTag(t){S.filterTag=t;renderApp();}
 function setDetTab(id,tab){
   S.detTab[id]=tab;
@@ -5848,10 +5905,13 @@ function renderPlannerKanban(app){
 // KOCHSESSION
 // ════════════════════════════════════════════════════
 
-// Parse step time: "[15] Schritt text" → {mins:15, text:"Schritt text"} or {mins:null, text:line}
+// Parse step time + optional Aktiv/Passiv-Marker: "[15:p] Schritt text" → {mins:15, type:'passive', text:"Schritt text"}
+// Typ-Suffix ist optional (Rückwärtskompatibilität mit dem alten reinen "[15]"-Format) – fehlt er,
+// wird type:null zurückgegeben und der Aufrufer soll auf detectStepType() zurückfallen.
 function parseStepTime(line){
-  const m=line.match(/^\[(\d+)\]\s*(.*)/);
-  return m?{mins:parseInt(m[1]),text:m[2]}:{mins:null,text:line};
+  const m=line.match(/^\[(\d+)(?::([ap]))?\]\s*(.*)/);
+  if(!m)return{mins:null,type:null,text:line};
+  return{mins:parseInt(m[1],10),type:m[2]==='p'?'passive':(m[2]==='a'?'active':null),text:m[3]};
 }
 
 function saveSessions(){
@@ -6014,7 +6074,7 @@ function buildSmartTimeline(recipes){
     (r.steps||'').split('\n').forEach((line,i)=>{
       const t2=line.trim();
       if(!t2||/^\*\*/.test(t2))return;
-      const {mins,text}=parseStepTime(t2);
+      const {mins,type,text}=parseStepTime(t2);
       const estimatedMins=mins||Math.round(
         ((parseInt(r.prepTime)||0)+(parseInt(r.cookTime)||0))/
         Math.max(1,(r.steps||'').split('\n').filter(l=>l.trim()&&!l.match(/^\*\*$/)).length)
@@ -6025,7 +6085,7 @@ function buildSmartTimeline(recipes){
         recipeTitle:r.title,
         text,
         mins:estimatedMins,
-        type:detectStepType(text),
+        type:type||detectStepType(text),
         done:false
       });
     });
@@ -6259,12 +6319,12 @@ function renderSessionTimeline(app, session, recipes){
           </div>`:''}
           <div style="display:flex;flex-direction:column;align-items:center;gap:.15rem;flex-shrink:0;margin-top:.1rem">
             <div style="width:24px;height:24px;border-radius:50%;border:2px solid ${step.done?'var(--border)':col};background:${step.done?col:'transparent'};display:flex;align-items:center;justify-content:center;font-size:.7rem;color:${step.done?'#fff':col};font-weight:700;transition:all .2s">${step.done?'✓':idx+1}</div>
-            <div style="font-size:.6rem;color:${step.done?'var(--faint)':col};font-family:var(--ui)">${step.mins}m</div>
+            <div onclick="event.stopPropagation();openStepEditModal('${session.id}','${step.id}')" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" style="font-size:.6rem;color:${step.done?'var(--faint)':col};font-family:var(--ui);cursor:pointer;text-decoration:underline;text-decoration-style:dotted">${step.mins}m</div>
           </div>
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem">
               <div style="font-size:.65rem;font-weight:700;color:${step.done?'var(--faint)':col};text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${esc(r?.title||'')}</div>
-              ${step.type?`<span style="font-size:.6rem;padding:.05rem .28rem;border-radius:4px;font-family:var(--ui);font-weight:600;flex-shrink:0;background:${step.type==='passive'?'rgba(248,113,113,.15)':'rgba(74,222,128,.15)'};color:${step.type==='passive'?'#f87171':'#4ade80'}">${step.type==='passive'?'⏳':'⚡'}</span>`:''}
+              ${step.type?`<span onclick="event.stopPropagation();openStepEditModal('${session.id}','${step.id}')" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" style="font-size:.6rem;padding:.05rem .28rem;border-radius:4px;font-family:var(--ui);font-weight:600;flex-shrink:0;background:${step.type==='passive'?'rgba(248,113,113,.15)':'rgba(74,222,128,.15)'};color:${step.type==='passive'?'#f87171':'#4ade80'};cursor:pointer">${step.type==='passive'?'⏳':'⚡'}</span>`:''}
             </div>
             <div style="font-size:.88rem;color:${step.done?'var(--muted)':'var(--text)'};line-height:1.5;${step.done?'text-decoration:line-through':''}">${esc(step.text)}</div>
             ${step.note?`<div style="font-size:.68rem;color:var(--muted);margin-top:.2rem;font-style:italic">${esc(step.note)}</div>`:''}
@@ -6294,6 +6354,179 @@ function renderSessionTimeline(app, session, recipes){
     session.startTime='';
     saveSessions();renderApp();
   });
+}
+
+// Manuelles Bearbeiten von Zeit + Aktiv/Passiv eines Timeline-Schritts. Bisher kam das nur aus
+// dem KI-generierten Ablaufplan – ohne KI (oder wenn die Einschätzung daneben lag) gab es keine
+// Möglichkeit, das im Nachhinein manuell zu korrigieren.
+// ══════════════ SCHRITT-ASSISTENT (Rezept-Formular) ══════════════
+// Alternative, geführte Eingabe der Zubereitungsschritte: ein Schritt nach dem anderen statt
+// alles in einer Textarea zu tippen, mit Feldern für Zeit und Aktiv/Passiv. Ergänzt die freie
+// Textarea (die bleibt vollständig nutzbar) – beim Schließen wird in die Textarea zurückgeschrieben;
+// gespeichert wird weiterhin erst über den normalen "Speichern"-Button des Formulars.
+//
+// Zeilenformat: "[Minuten:a]"/"[Minuten:p]"-Präfix für Schritte mit gesetzter Zeit/Art
+// (a=aktiv, p=passiv), "**Text**" für Überschriften/Kategorien, sonst reiner Text.
+function parseStepsForWizard(raw){
+  const lines=(raw||'').split('\n').map(l=>l.trim()).filter(l=>l!=='');
+  if(!lines.length)return[{isHeader:false,text:'',mins:0,type:'active'}];
+  return lines.map(line=>{
+    const hm=line.match(/^\*\*(.*)\*\*$/);
+    if(hm)return{isHeader:true,text:hm[1],mins:0,type:'active'};
+    const {mins,type,text}=parseStepTime(line);
+    return{isHeader:false,text,mins:mins||0,type:type||detectStepType(text)};
+  });
+}
+function serializeStepsFromWizard(steps){
+  return steps.filter(s=>s.text.trim()!=='').map(s=>{
+    if(s.isHeader)return `**${s.text.trim()}**`;
+    return `[${s.mins||0}:${s.type==='passive'?'p':'a'}] ${s.text.trim()}`;
+  }).join('\n');
+}
+
+function openStepWizard(){
+  const ta=document.getElementById('f-st');if(!ta)return;
+  let steps=parseStepsForWizard(ta.value);
+  let idx=0;
+  document.getElementById('stepWizardOv')?.remove();
+  const ov=document.createElement('div');
+  ov.id='stepWizardOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  document.body.appendChild(ov);
+
+  function commitCurrent(){
+    const s=steps[idx];if(!s)return;
+    const txt=document.getElementById('swText');
+    if(txt)s.text=txt.value;
+    if(!s.isHeader){
+      const m=document.getElementById('swMins');
+      if(m)s.mins=Math.max(0,parseInt(m.value)||0);
+    }
+  }
+  function writeBack(){
+    const val=serializeStepsFromWizard(steps);
+    ta.value=val;
+    S.formData.steps=val; // sonst würde ein späteres Re-Render des Formulars die Änderung wieder verwerfen
+  }
+  function close(){commitCurrent();writeBack();ov.remove();}
+
+  function render(){
+    const s=steps[idx];
+    const total=steps.length;
+    ov.innerHTML=`<div style="background:var(--surface);border-radius:16px;padding:1.2rem;width:100%;max-width:400px;max-height:88dvh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.4)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem">
+        <div style="font-family:var(--font);font-weight:800;font-size:1rem;color:var(--text)">🪄 ${S.lang==='en'?'Step':'Schritt'} ${idx+1}/${total}</div>
+        <button type="button" id="swClose" style="background:none;border:none;font-size:1.3rem;color:var(--muted);cursor:pointer;line-height:1;padding:0">✕</button>
+      </div>
+      <div style="display:flex;gap:.4rem;margin-bottom:.9rem">
+        <button type="button" id="swModeStep" style="flex:1;padding:.5rem;border-radius:8px;border:1px solid ${!s.isHeader?'var(--accent)':'var(--border2)'};background:${!s.isHeader?'var(--accent)':'var(--surface2)'};color:${!s.isHeader?'#fff':'var(--muted)'};font-family:var(--ui);font-weight:700;font-size:.8rem;cursor:pointer">📝 ${S.lang==='en'?'Step':'Schritt'}</button>
+        <button type="button" id="swModeHeader" style="flex:1;padding:.5rem;border-radius:8px;border:1px solid ${s.isHeader?'var(--accent)':'var(--border2)'};background:${s.isHeader?'var(--accent)':'var(--surface2)'};color:${s.isHeader?'#fff':'var(--muted)'};font-family:var(--ui);font-weight:700;font-size:.8rem;cursor:pointer">🏷 ${S.lang==='en'?'Section header':'Überschrift'}</button>
+      </div>
+      <textarea id="swText" rows="${s.isHeader?1:4}" placeholder="${s.isHeader?(S.lang==='en'?'e.g. For the sauce':'z.B. Für die Soße'):(S.lang==='en'?'Describe this step…':'Diesen Schritt beschreiben…')}" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.6rem .7rem;font-family:var(--ui);font-size:.9rem;color:var(--text);resize:vertical;margin-bottom:${s.isHeader?'0':'.9rem'}">${esc(s.text)}</textarea>
+      ${s.isHeader?'':`
+      <div style="margin-bottom:.9rem">
+        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">${S.lang==='en'?'Duration (min, optional)':'Dauer (Min., optional)'}</div>
+        <input id="swMins" type="number" min="0" inputmode="numeric" value="${s.mins||0}" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .7rem;font-family:var(--ui);font-size:.95rem;color:var(--text)">
+      </div>
+      <div style="margin-bottom:1.1rem">
+        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">${S.lang==='en'?'Type':'Art'}</div>
+        <div style="display:flex;gap:.5rem">
+          <button type="button" id="swActive" style="flex:1;padding:.55rem;border-radius:8px;border:1px solid ${s.type!=='passive'?'#4ade80':'var(--border2)'};background:${s.type!=='passive'?'rgba(74,222,128,.15)':'var(--surface2)'};color:${s.type!=='passive'?'#4ade80':'var(--muted)'};font-family:var(--ui);font-weight:700;font-size:.82rem;cursor:pointer">⚡ ${S.lang==='en'?'Active':'Aktiv'}</button>
+          <button type="button" id="swPassive" style="flex:1;padding:.55rem;border-radius:8px;border:1px solid ${s.type==='passive'?'#f87171':'var(--border2)'};background:${s.type==='passive'?'rgba(248,113,113,.15)':'var(--surface2)'};color:${s.type==='passive'?'#f87171':'var(--muted)'};font-family:var(--ui);font-weight:700;font-size:.82rem;cursor:pointer">⏳ ${S.lang==='en'?'Passive':'Passiv'}</button>
+        </div>
+      </div>`}
+      <div style="display:flex;gap:.5rem;margin-bottom:.6rem">
+        <button type="button" id="swPrev" ${idx===0?'disabled':''} style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer;opacity:${idx===0?'.4':'1'}">◀ ${S.lang==='en'?'Back':'Zurück'}</button>
+        <button type="button" id="swInsert" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer">+ ${S.lang==='en'?'Insert step':'Schritt einfügen'}</button>
+        ${steps.length>1?`<button type="button" id="swDelete" style="background:rgba(239,68,68,.15);border:none;border-radius:10px;padding:.6rem .8rem;font-family:var(--font);font-size:.82rem;color:var(--danger);cursor:pointer">🗑</button>`:''}
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <button type="button" id="swNext" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:.85rem;font-weight:700;color:var(--text);cursor:pointer">${S.lang==='en'?'Next step':'Nächster Schritt'} ▶</button>
+        <button type="button" id="swDone" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:.85rem;font-weight:700;color:#fff;cursor:pointer">✓ ${S.lang==='en'?'Last step, done':'Letzter Schritt'}</button>
+      </div>
+    </div>`;
+
+    document.getElementById('swClose').onclick=close;
+    ov.onclick=e=>{if(e.target===ov)close();};
+    document.getElementById('swModeStep').onclick=()=>{commitCurrent();s.isHeader=false;render();};
+    document.getElementById('swModeHeader').onclick=()=>{commitCurrent();s.isHeader=true;render();};
+    document.getElementById('swActive')?.addEventListener('click',()=>{commitCurrent();s.type='active';render();});
+    document.getElementById('swPassive')?.addEventListener('click',()=>{commitCurrent();s.type='passive';render();});
+    document.getElementById('swPrev').onclick=()=>{if(idx===0)return;commitCurrent();idx--;render();};
+    document.getElementById('swInsert').onclick=()=>{
+      commitCurrent();
+      steps.splice(idx+1,0,{isHeader:false,text:'',mins:0,type:'active'});
+      idx++;render();
+      setTimeout(()=>document.getElementById('swText')?.focus(),30);
+    };
+    document.getElementById('swDelete')?.addEventListener('click',()=>{
+      steps.splice(idx,1);
+      idx=Math.min(idx,steps.length-1);
+      render();
+    });
+    document.getElementById('swNext').onclick=()=>{
+      commitCurrent();
+      if(idx===steps.length-1){
+        steps.push({isHeader:false,text:'',mins:0,type:'active'});
+      }
+      idx++;render();
+      setTimeout(()=>document.getElementById('swText')?.focus(),30);
+    };
+    document.getElementById('swDone').onclick=close;
+    setTimeout(()=>document.getElementById('swText')?.focus(),30);
+  }
+  render();
+}
+
+function openStepEditModal(sessionId,stepId){
+  const session=S.sessions.find(s=>s.id===sessionId);if(!session||!session.timeline)return;
+  const step=session.timeline.steps.find(s=>s.id===stepId);if(!step)return;
+  document.getElementById('stepEditOv')?.remove();
+  const ov=document.createElement('div');
+  ov.id='stepEditOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;display:flex;align-items:center;justify-content:center;padding:1.2rem';
+  ov.innerHTML=`<div style="background:var(--surface);border-radius:16px;padding:1.3rem;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,.4)">
+    <div style="font-family:var(--font);font-weight:800;font-size:1rem;color:var(--text);margin-bottom:.7rem">${S.lang==='en'?'Edit step':'Schritt bearbeiten'}</div>
+    <div style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:1.1rem;line-height:1.4">${esc(step.text)}</div>
+    <div style="margin-bottom:.9rem">
+      <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">${S.lang==='en'?'Duration (min)':'Dauer (Min.)'}</div>
+      <input id="stepEditMins" type="number" min="0" inputmode="numeric" value="${step.mins||0}" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .7rem;font-family:var(--ui);font-size:.95rem;color:var(--text)">
+    </div>
+    <div style="margin-bottom:1.2rem">
+      <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">${S.lang==='en'?'Type':'Art'}</div>
+      <div style="display:flex;gap:.5rem">
+        <button type="button" id="stepEditActive" style="flex:1;padding:.55rem;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--muted);font-family:var(--ui);font-weight:700;font-size:.82rem;cursor:pointer">⚡ ${S.lang==='en'?'Active':'Aktiv'}</button>
+        <button type="button" id="stepEditPassive" style="flex:1;padding:.55rem;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--muted);font-family:var(--ui);font-weight:700;font-size:.82rem;cursor:pointer">⏳ ${S.lang==='en'?'Passive':'Passiv'}</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:.6rem">
+      <button type="button" id="stepEditCancel" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.85rem;color:var(--muted);cursor:pointer">${t('btn_cancel')}</button>
+      <button type="button" id="stepEditSave" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.85rem;color:#fff;font-weight:700;cursor:pointer">${S.lang==='en'?'Save':'Speichern'}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  let pendingType=step.type==='passive'?'passive':'active';
+  const btnActive=document.getElementById('stepEditActive'),btnPassive=document.getElementById('stepEditPassive');
+  const updateTypeBtns=()=>{
+    btnActive.style.borderColor=pendingType==='active'?'#4ade80':'var(--border2)';
+    btnActive.style.background=pendingType==='active'?'rgba(74,222,128,.15)':'var(--surface2)';
+    btnActive.style.color=pendingType==='active'?'#4ade80':'var(--muted)';
+    btnPassive.style.borderColor=pendingType==='passive'?'#f87171':'var(--border2)';
+    btnPassive.style.background=pendingType==='passive'?'rgba(248,113,113,.15)':'var(--surface2)';
+    btnPassive.style.color=pendingType==='passive'?'#f87171':'var(--muted)';
+  };
+  updateTypeBtns();
+  btnActive.onclick=()=>{pendingType='active';updateTypeBtns();};
+  btnPassive.onclick=()=>{pendingType='passive';updateTypeBtns();};
+  document.getElementById('stepEditCancel').onclick=()=>ov.remove();
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  document.getElementById('stepEditSave').onclick=()=>{
+    const mins=Math.max(0,parseInt(document.getElementById('stepEditMins').value)||0);
+    step.mins=mins;step.type=pendingType;
+    saveSessions();
+    ov.remove();
+    renderApp();
+  };
 }
 
 function initTimelineDnD(session){
@@ -6910,6 +7143,7 @@ function renderImportPage(app){
         <div class="itabs" style="margin:0;padding:0 1rem">
           <button class="itab on" data-tab="json">🗂 JSON</button>
           <button class="itab" data-tab="photo">${S.lang==='en'?'📸 Photo':'📸 Foto'}</button>
+          <button class="itab" data-tab="text">📋 Text</button>
           <button class="itab" data-tab="url">🔗 Link</button>
           <button class="itab" data-tab="pdf">📄 PDF</button>
         </div>
@@ -6936,6 +7170,16 @@ function renderImportPage(app){
             <div id="urlRes2"></div>
             <div style="display:flex;justify-content:flex-end;margin-top:.8rem">
               <button class="btn bp" id="urlAdd2" style="display:none">${t('imp_add')}</button>
+            </div>
+          </div>
+          <!-- Text -->
+          <div id="pnlText" class="ipnl">
+            <p style="font-size:.82rem;color:var(--muted);font-family:var(--ui);margin-bottom:.7rem">${t('imp_text_hint')}</p>
+            <textarea id="textInput2" class="ft" rows="10" placeholder="${t('imp_text_placeholder')}"></textarea>
+            <button class="btn bp" id="textAnalyze2" style="width:100%;margin-top:.6rem">${t('imp_ai_analyze')}</button>
+            <div id="textRes2"></div>
+            <div style="display:flex;justify-content:flex-end;margin-top:.8rem">
+              <button class="btn bp" id="textAdd2" style="display:none">${t('imp_add')}</button>
             </div>
           </div>
           <!-- PDF -->
@@ -6983,8 +7227,13 @@ function renderImportPage(app){
   const showL2=id=>document.getElementById(id).innerHTML=`<div class="iload"><span class="sp">🤖</span>${t('pantry_scan_analyzing')}</div>`;
   const showE2=(id,msg)=>document.getElementById(id).innerHTML=`<div class="ierr">⚠️ ${esc(msg)}</div>`;
   let pg_pending=null;
-  function showP2(resId,addId,r){pg_pending=r;document.getElementById(resId).innerHTML=`<div class="iprev"><strong>${esc(r.title||(S.lang==='en'?'Recipe':'Rezept'))}</strong><small>${esc(r.category)} · ${r.servings||'?'} Port.</small></div>`;document.getElementById(addId).style.display='inline-flex';}
-  function addImp2(r){addImport(r);}
+  function showP2(resId,addId,r){
+    pg_pending=r;
+    const dup=S.recipes.some(x=>x.title.toLowerCase()===(r.title||'').toLowerCase());
+    document.getElementById(resId).innerHTML=`<div class="iprev"><strong>${esc(r.title||(S.lang==='en'?'Recipe':'Rezept'))}</strong><small>${esc(r.category)} · ${r.servings||'?'} Port.</small>${dup?`<div style="margin-top:.4rem;font-family:var(--ui);font-size:.75rem;color:var(--warn,#f59e0b)">${S.lang==='en'?'⚠️ A recipe with this title already exists':'⚠️ Ein Rezept mit diesem Titel existiert bereits'}</div>`:''}</div>`;
+    document.getElementById(addId).style.display='inline-flex';
+  }
+  function addImp2(r){openFormWithPrefill(r);}
 
   // Photo
   document.getElementById('photoDrop2').addEventListener('click',()=>document.getElementById('photoFile2').click());
@@ -7023,6 +7272,17 @@ function renderImportPage(app){
     }catch(e){showE2('urlRes2',e.message);}
   });
   document.getElementById('urlAdd2').addEventListener('click',()=>{if(pg_pending)addImp2(pg_pending);});
+
+  // Text (eingefügter Rezepttext)
+  document.getElementById('textAnalyze2').addEventListener('click',async()=>{
+    const text=(document.getElementById('textInput2').value||'').trim();if(!text)return;
+    showL2('textRes2');document.getElementById('textAdd2').style.display='none';
+    try{
+      const r=await callClaude([{text:'Extrahiere das Rezept aus folgendem Text:\n\n'+text}],'text_import');
+      r?showP2('textRes2','textAdd2',r):showE2('textRes2',t('imp_text_none_found'));
+    }catch(e){showE2('textRes2',e.message);}
+  });
+  document.getElementById('textAdd2').addEventListener('click',()=>{if(pg_pending)addImp2(pg_pending);});
 
   // PDF
   document.getElementById('pdfDrop2').addEventListener('click',()=>document.getElementById('pdfFile2').click());
@@ -7640,7 +7900,12 @@ function showIconPicker(catName, onSelect){
 
 // ══════════════ EVENTS ══════════════
 document.getElementById('backBtn').onclick=()=>{
-  if(S.view==='form'){S.editId?openDetail(S.editId,S.detailFrom):(S.formFrom==='home'?goHome():goList());}
+  if(S.view==='form'){
+    if(S.editId)openDetail(S.editId,S.detailFrom);
+    else if(S.formFrom==='home')goHome();
+    else if(S.formFrom==='newrecipe'){S.view='newrecipe';render();}
+    else goList();
+  }
   else if(S.view==='detail'){S.detailFrom==='home'?goHome():goList();}
   else goList();
 };
