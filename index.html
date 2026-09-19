@@ -1705,9 +1705,11 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.8.7';
+const APP_VERSION = '3.8.9';
 const APP_DATE = '2026-09-19';
 const VERSION_HISTORY = [
+  { version:'3.8.9', date:'2026-09-19', de:['Schritt-Assistent überarbeitet: Aktiv/Passiv ist jetzt ein einzelner Umschalt-Button statt zwei getrennter Buttons','Navigation auf eine Zeile mit 4 Buttons verkürzt: ◀ Zurück, ▶ Vor, + Schritt hinzufügen, ✓ Fertig','Löschen-Symbol (🗑) in die Kopfzeile neben das ✕ verschoben, um Platz für die neue Button-Zeile zu schaffen'], en:['Step assistant revised: Active/Passive is now a single toggle button instead of two separate buttons','Navigation condensed into one row of 4 buttons: ◀ Back, ▶ Forward, + Add step, ✓ Done','Delete icon (🗑) moved to the header row next to ✕ to make room for the new button row'] },
+  { version:'3.8.8', date:'2026-09-19', de:['Schritt-Assistent: Button "Letzter Schritt" in "Fertig" umbenannt (war missverständlich – speichert & schließt, ist keine Navigation)','Schritt-Assistent: kein automatischer Fokus mehr im Textfeld – öffnete bisher sofort die Tastatur und verschob/verscrollte das Fenster'], en:['Step assistant: renamed the "Last step" button to "Done" (was confusing – it saves & closes, it\'s not navigation)','Step assistant: text field no longer auto-focuses – previously popped up the keyboard immediately and shifted/scrolled the window'] },
   { version:'3.8.7', date:'2026-09-19', de:['Neu: 🪄 Schritt-Assistent im Rezept-Formular – Zubereitungsschritte einzeln eintragen statt alles in einer Textarea, mit Feld für Zeit und Aktiv/Passiv-Umschalter pro Schritt, inkl. Zurück/Einfügen/Nächster-Schritt/Letzter-Schritt-Navigation und Umschalten Schritt ↔ Überschrift','Die freie Textarea bleibt vollständig erhalten und nutzbar – der Assistent ist eine Alternative, keine Pflicht','Explizit im Assistenten gesetzte Zeit/Art werden jetzt auch im Rezept-Detail (Timer-Button) und beim automatischen Kochsession-Ablaufplan (ohne KI) respektiert, statt sie immer neu zu erraten'], en:['New: 🪄 Step assistant in the recipe form – enter preparation steps one at a time instead of one big textarea, with a duration field and an active/passive toggle per step, including back/insert/next-step/last-step navigation and switching a step into a section header and back','The free-text textarea remains fully available – the assistant is an alternative, not a requirement','Duration/type set explicitly via the assistant are now also respected in the recipe detail view (timer button) and by the automatic (non-AI) cooking-session timeline builder, instead of always being re-guessed'] },
   { version:'3.8.6', date:'2026-09-19', de:['Rezepteingabe überarbeitet: Tag-Suche im Formular (ab 9 Tags), damit man nicht mehr durch eine lange Liste scrollen muss','Foto-/Link-/PDF-Import öffnet jetzt vor dem Speichern das volle Formular zur Kontrolle statt direkt zu speichern – Fehler der KI lassen sich so sofort korrigieren','Warnung, wenn beim Import bereits ein Rezept mit demselben Titel existiert','Neuer Import-Tab "Text": Rezepttext direkt einfügen (z.B. aus WhatsApp oder einer Mail) statt Umweg über Link oder Foto','"Manuell"-Tab öffnet jetzt direkt das leere Formular statt eines Zwischenschritts'], en:['Recipe entry overhaul: tag search in the form (from 9 tags onward) so you no longer have to scroll through a long list','Photo/link/PDF import now opens the full form for review before saving instead of saving immediately – AI mistakes can be fixed right away','Warning when a recipe with the same title already exists on import','New "Text" import tab: paste recipe text directly (e.g. from WhatsApp or an email) instead of going via a link or photo','The "Manual" tab now opens the empty form directly instead of an extra step'] },
   { version:'3.8.5', date:'2026-09-19', de:['Kochsession-Ablaufplan: Dauer und Aktiv/Passiv eines Schritts können jetzt manuell angetippt und korrigiert werden (Minuten-Zahl bzw. ⚡/⏳-Badge antippen) – bisher kam das ausschließlich aus der KI-generierten Zeitplanung, ohne Möglichkeit zur manuellen Korrektur'], en:['Cooking-session timeline: a step\'s duration and active/passive type can now be tapped and edited manually (tap the minutes number or the ⚡/⏳ badge) – previously this only ever came from the AI-generated schedule, with no way to correct it manually'] },
@@ -6414,9 +6416,12 @@ function openStepWizard(){
     const s=steps[idx];
     const total=steps.length;
     ov.innerHTML=`<div style="background:var(--surface);border-radius:16px;padding:1.2rem;width:100%;max-width:400px;max-height:88dvh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.4)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;gap:.5rem">
         <div style="font-family:var(--font);font-weight:800;font-size:1rem;color:var(--text)">🪄 ${S.lang==='en'?'Step':'Schritt'} ${idx+1}/${total}</div>
-        <button type="button" id="swClose" style="background:none;border:none;font-size:1.3rem;color:var(--muted);cursor:pointer;line-height:1;padding:0">✕</button>
+        <div style="display:flex;align-items:center;gap:.7rem">
+          ${steps.length>1?`<button type="button" id="swDelete" title="${S.lang==='en'?'Delete step':'Schritt löschen'}" style="background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:pointer;line-height:1;padding:0">🗑</button>`:''}
+          <button type="button" id="swClose" style="background:none;border:none;font-size:1.3rem;color:var(--muted);cursor:pointer;line-height:1;padding:0">✕</button>
+        </div>
       </div>
       <div style="display:flex;gap:.4rem;margin-bottom:.9rem">
         <button type="button" id="swModeStep" style="flex:1;padding:.5rem;border-radius:8px;border:1px solid ${!s.isHeader?'var(--accent)':'var(--border2)'};background:${!s.isHeader?'var(--accent)':'var(--surface2)'};color:${!s.isHeader?'#fff':'var(--muted)'};font-family:var(--ui);font-weight:700;font-size:.8rem;cursor:pointer">📝 ${S.lang==='en'?'Step':'Schritt'}</button>
@@ -6430,19 +6435,13 @@ function openStepWizard(){
       </div>
       <div style="margin-bottom:1.1rem">
         <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">${S.lang==='en'?'Type':'Art'}</div>
-        <div style="display:flex;gap:.5rem">
-          <button type="button" id="swActive" style="flex:1;padding:.55rem;border-radius:8px;border:1px solid ${s.type!=='passive'?'#4ade80':'var(--border2)'};background:${s.type!=='passive'?'rgba(74,222,128,.15)':'var(--surface2)'};color:${s.type!=='passive'?'#4ade80':'var(--muted)'};font-family:var(--ui);font-weight:700;font-size:.82rem;cursor:pointer">⚡ ${S.lang==='en'?'Active':'Aktiv'}</button>
-          <button type="button" id="swPassive" style="flex:1;padding:.55rem;border-radius:8px;border:1px solid ${s.type==='passive'?'#f87171':'var(--border2)'};background:${s.type==='passive'?'rgba(248,113,113,.15)':'var(--surface2)'};color:${s.type==='passive'?'#f87171':'var(--muted)'};font-family:var(--ui);font-weight:700;font-size:.82rem;cursor:pointer">⏳ ${S.lang==='en'?'Passive':'Passiv'}</button>
-        </div>
+        <button type="button" id="swTypeToggle" style="width:100%;padding:.55rem;border-radius:8px;border:1px solid ${s.type==='passive'?'#f87171':'#4ade80'};background:${s.type==='passive'?'rgba(248,113,113,.15)':'rgba(74,222,128,.15)'};color:${s.type==='passive'?'#f87171':'#4ade80'};font-family:var(--ui);font-weight:700;font-size:.82rem;cursor:pointer">${s.type==='passive'?'⏳ '+(S.lang==='en'?'Passive':'Passiv'):'⚡ '+(S.lang==='en'?'Active':'Aktiv')} <span style="opacity:.6;font-weight:400">(${S.lang==='en'?'tap to switch':'antippen zum Wechseln'})</span></button>
       </div>`}
-      <div style="display:flex;gap:.5rem;margin-bottom:.6rem">
-        <button type="button" id="swPrev" ${idx===0?'disabled':''} style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer;opacity:${idx===0?'.4':'1'}">◀ ${S.lang==='en'?'Back':'Zurück'}</button>
-        <button type="button" id="swInsert" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.6rem;font-family:var(--font);font-size:.82rem;color:var(--muted);cursor:pointer">+ ${S.lang==='en'?'Insert step':'Schritt einfügen'}</button>
-        ${steps.length>1?`<button type="button" id="swDelete" style="background:rgba(239,68,68,.15);border:none;border-radius:10px;padding:.6rem .8rem;font-family:var(--font);font-size:.82rem;color:var(--danger);cursor:pointer">🗑</button>`:''}
-      </div>
-      <div style="display:flex;gap:.5rem">
-        <button type="button" id="swNext" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:.85rem;font-weight:700;color:var(--text);cursor:pointer">${S.lang==='en'?'Next step':'Nächster Schritt'} ▶</button>
-        <button type="button" id="swDone" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:.85rem;font-weight:700;color:#fff;cursor:pointer">✓ ${S.lang==='en'?'Last step, done':'Letzter Schritt'}</button>
+      <div style="display:flex;gap:.4rem">
+        <button type="button" id="swPrev" ${idx===0?'disabled':''} style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:1rem;color:var(--muted);cursor:pointer;opacity:${idx===0?'.4':'1'}">◀</button>
+        <button type="button" id="swNext" ${idx===total-1?'disabled':''} style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:1rem;color:var(--muted);cursor:pointer;opacity:${idx===total-1?'.4':'1'}">▶</button>
+        <button type="button" id="swInsert" title="${S.lang==='en'?'Add step':'Schritt hinzufügen'}" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:1rem;font-weight:700;color:var(--text);cursor:pointer">+</button>
+        <button type="button" id="swDone" style="flex:1.3;background:var(--accent);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:.85rem;font-weight:700;color:#fff;cursor:pointer">✓ ${S.lang==='en'?'Done':'Fertig'}</button>
       </div>
     </div>`;
 
@@ -6450,30 +6449,20 @@ function openStepWizard(){
     ov.onclick=e=>{if(e.target===ov)close();};
     document.getElementById('swModeStep').onclick=()=>{commitCurrent();s.isHeader=false;render();};
     document.getElementById('swModeHeader').onclick=()=>{commitCurrent();s.isHeader=true;render();};
-    document.getElementById('swActive')?.addEventListener('click',()=>{commitCurrent();s.type='active';render();});
-    document.getElementById('swPassive')?.addEventListener('click',()=>{commitCurrent();s.type='passive';render();});
+    document.getElementById('swTypeToggle')?.addEventListener('click',()=>{commitCurrent();s.type=s.type==='passive'?'active':'passive';render();});
     document.getElementById('swPrev').onclick=()=>{if(idx===0)return;commitCurrent();idx--;render();};
+    document.getElementById('swNext').onclick=()=>{if(idx===steps.length-1)return;commitCurrent();idx++;render();};
     document.getElementById('swInsert').onclick=()=>{
       commitCurrent();
       steps.splice(idx+1,0,{isHeader:false,text:'',mins:0,type:'active'});
       idx++;render();
-      setTimeout(()=>document.getElementById('swText')?.focus(),30);
     };
     document.getElementById('swDelete')?.addEventListener('click',()=>{
       steps.splice(idx,1);
       idx=Math.min(idx,steps.length-1);
       render();
     });
-    document.getElementById('swNext').onclick=()=>{
-      commitCurrent();
-      if(idx===steps.length-1){
-        steps.push({isHeader:false,text:'',mins:0,type:'active'});
-      }
-      idx++;render();
-      setTimeout(()=>document.getElementById('swText')?.focus(),30);
-    };
     document.getElementById('swDone').onclick=close;
-    setTimeout(()=>document.getElementById('swText')?.focus(),30);
   }
   render();
 }
