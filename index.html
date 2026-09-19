@@ -929,6 +929,19 @@ let _unsubRecipes=null, _unsubCats=null, _unsubShopping=null, _unsubPantry=null;
 let _recipeSyncTs={};
 let _recipePendingDeletes=new Set(); // eigene Löschungen: eigenes 'removed'-Echo ignorieren
 
+// Lösch-Tombstones {rezeptId: Löschzeitpunkt}. Ohne sie gilt beim Abgleich "Vereinigung": ein Gerät, das ein
+// gelöschtes Rezept noch lokal hat (war offline / lange nicht offen), lädt es beim Start wieder hoch, und es taucht
+// überall wieder auf. Ein Rezept mit _updatedAt <= Löschzeitpunkt gilt als gelöscht; spätere Änderungen gewinnen.
+let _tomb={};
+try{_tomb=JSON.parse(localStorage.getItem('mrtomb')||'{}')||{};}catch{_tomb={};}
+function tombSave(){try{localStorage.setItem('mrtomb',JSON.stringify(_tomb));}catch{}}
+function isTombstoned(r){const t=_tomb[r.id];return !!t&&(r._updatedAt||0)<=t;}
+async function fsPushTombs(){
+  if(!fsReady()||!Object.keys(_tomb).length)return;
+  try{await fsMetaDoc('deletedRecipes').set({ids:_tomb,_updatedAt:Date.now()},{merge:true});}
+  catch(e){console.warn('Tombstones konnten nicht hochgeladen werden (Firestore-Regeln für meta/deletedRecipes prüfen):',e);}
+}
+
 function fsUid(){return S.user&&S.user.uid;}
 function fsReady(){return !!(fsUid()&&S.groupsReady&&S.recipeGroupId&&S.shoppingGroupId);}
 function fsUserRef(){return fbDb.collection('users').doc(fsUid());}
@@ -942,7 +955,7 @@ function fsMetaDoc(name){
 
 // ── Rezepte ──
 async function fsPushRecipe(r){
-  if(!fsReady())return;
+  if(!fsReady()||isTombstoned(r))return;
   try{
     const {photo,...rest}=r;
     const ts=rest._updatedAt||Date.now();
@@ -952,9 +965,11 @@ async function fsPushRecipe(r){
   }catch(e){console.warn('Firestore recipe push failed:',e);}
 }
 async function fsDeleteRecipe(id){
+  _tomb[id]=Date.now();tombSave(); // immer lokal merken – auch offline, wird beim nächsten Abgleich hochgeladen
   if(!fsReady())return;
   try{
     _recipePendingDeletes.add(id);
+    await fsPushTombs();
     await fsRecipesCol().doc(id).delete();
     await fsDeletePhoto(id);
   }catch(e){console.warn('Firestore recipe delete failed:',e);}
@@ -964,6 +979,7 @@ async function fsPushAllRecipes(showToast=false){
   try{
     const batch=fbDb.batch();
     S.recipes.forEach(r=>{
+      if(isTombstoned(r))return; // gelöscht – nicht wieder hochladen
       const {photo,...rest}=r;
       // Vorhandenen _updatedAt-Stempel übernehmen statt jedes Mal neu zu stempeln, damit
       // lokaler und Server-Stand exakt denselben Zeitstempel tragen (kein Auseinanderlaufen).
@@ -1064,6 +1080,11 @@ function startFsSync(){
       }
       const remote=change.doc.data();
       const remoteTs=remote._updatedAt||0;
+      // Von einem Gerät mit altem Stand wieder hochgeladenes, bereits gelöschtes Rezept: erneut entfernen
+      if(_tomb[id]&&remoteTs<=_tomb[id]){
+        if(!change.doc.metadata.hasPendingWrites){_recipePendingDeletes.add(id);fsRecipesCol().doc(id).delete().catch(()=>{});}
+        continue;
+      }
       // Zeitstempel-Wächter: alles bis einschließlich unseres letzten eigenen Pushes ignorieren.
       // Das fängt auch das Echo ÄLTERER eigener Writes ab, die (z.B. bei schnell aufeinander-
       // folgenden Änderungen wie Import → sofort Foto nachtragen) erst verspätet bestätigt werden.
@@ -1362,10 +1383,19 @@ async function fsInitialSync(){
     snap.forEach(doc=>remoteMap[doc.id]=doc.data());
     const localMap={};
     S.recipes.forEach(r=>localMap[r.id]=r);
+    // Löschungen (Tombstones) aller Geräte laden und mit den lokalen zusammenführen
+    try{
+      const td=await fsMetaDoc('deletedRecipes').get();
+      if(td.exists){Object.entries(td.data().ids||{}).forEach(([id,ts])=>{if(!_tomb[id]||_tomb[id]<ts)_tomb[id]=ts;});}
+    }catch(e){console.warn('Tombstones konnten nicht geladen werden:',e);}
+    tombSave();
+    const tombDeleteRemote=[];
     const mergedIds=new Set([...Object.keys(remoteMap),...Object.keys(localMap)]);
     const merged=[];
     for(const id of mergedIds){
       const remote=remoteMap[id],local=localMap[id];
+      const cand=(remote&&local)?((remote._updatedAt||0)>=(local._updatedAt||0)?remote:local):(remote||local);
+      if(_tomb[id]&&(cand._updatedAt||0)<=_tomb[id]){ if(remote)tombDeleteRemote.push(id); continue; } // gelöscht
       if(remote&&local){
         if((remote._updatedAt||0)>=(local._updatedAt||0)){
           // Remote gewinnt: Foto-URL frisch von Storage holen statt dem evtl. veralteten lokalen Cache
@@ -1392,8 +1422,14 @@ async function fsInitialSync(){
     saveR(true);
     // Fehlende Rezepte (nur lokal vorhanden) hochladen
     for(const id of Object.keys(localMap)){
-      if(!remoteMap[id]) await fsPushRecipe(localMap[id]);
+      if(!remoteMap[id]) await fsPushRecipe(localMap[id]); // (fsPushRecipe überspringt gelöschte)
     }
+    // Noch in der Cloud vorhandene, aber gelöschte Rezepte entfernen + eigene Tombstones hochladen
+    for(const id of tombDeleteRemote){
+      _recipePendingDeletes.add(id);
+      try{await fsRecipesCol().doc(id).delete();await fsDeletePhoto(id);}catch{}
+    }
+    await fsPushTombs();
     // Kategorien mergen
     const catDoc=await fsMetaDoc('categories').get();
     if(catDoc.exists){
@@ -1706,9 +1742,11 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '4.1.3';
+const APP_VERSION = '4.2.0';
 const APP_DATE = '2026-09-19';
 const VERSION_HISTORY = [
+  { version:'4.2.0', date:'2026-09-19', de:['🚨 Fix: Gelöschte Rezepte tauchten immer wieder auf. Ursache: Beim Start wurde der lokale Stand mit der Cloud vereinigt – ein Gerät (oder derselbe Browser offline), das das Rezept noch lokal hatte, hat es wieder hochgeladen. Jetzt gibt es Lösch-Tombstones (auch offline gemerkt und beim nächsten Abgleich hochgeladen): gelöschte Rezepte werden nicht mehr hochgeladen und auf anderen Geräten entfernt; spätere Änderungen gewinnen weiterhin.','Kochsession: Pausen haben eine eigene, auffällige Zeile (⏸ PAUSE · Dauer, danach welches Rezept startet) – auch wenn die Wartezeit nicht mit einem anderen Rezept gefüllt wird','Kochsession: Passive Schritte deutlich erkennbar – Label ⏳ PASSIV / ⚡ AKTIV, gestrichelter Rand und schraffierter Hintergrund bei passiven Schritten','Kochsession: Der Hinweis „Fehlende Zeiten / Aktiv-Passiv\" erscheint nur noch im manuellen Modus (die KI schätzt selbst), zeigt pro Rezept „fehlend/gesamt\" und lässt sich ausblenden'], en:['🚨 Fix: deleted recipes kept coming back. Cause: at startup local data was merged with the cloud as a union – a device (or the same browser offline) that still had the recipe locally re-uploaded it. Deletion tombstones now exist (remembered offline too and uploaded on the next sync): deleted recipes are no longer uploaded and get removed on other devices; later edits still win.','Cooking session: pauses get their own prominent row (⏸ BREAK · duration, then which recipe starts) – also when the wait is not filled with another recipe','Cooking session: passive steps clearly recognizable – ⏳ PASSIVE / ⚡ ACTIVE label, dashed border and hatched background for passive steps','Cooking session: the \"Missing times / active-passive\" note only shows in manual mode (the AI estimates on its own), shows \"missing/total\" per recipe and can be hidden'] },
+  { version:'4.1.4', date:'2026-09-19', de:['Kochsession: Jedes Rezept bekommt eine eigene, eindeutige Farbe (bisher nach Kategorie – zwei Gerichte der gleichen Kategorie waren nicht zu unterscheiden)'], en:['Cooking session: every recipe gets its own unique color (previously by category – two dishes of the same category looked identical)'] },
   { version:'4.1.3', date:'2026-09-19', de:['Ablaufplan: Die feste Grenze für „lange Wartezeit\" (4 Std.) ist weg. Es zählt nur noch, wie viel Zeit frei ist: Passt der Rest eines anderen Rezepts in eine Wartezeit, wird er ans Ende gelegt und die Pause davor angezeigt – egal ob 40 Minuten oder über Nacht. Wird ein Rezept später komplett in eine Wartezeit passen, wird nicht vorher mit Vorbereitung begonnen.','KI-Ablaufplan: Prompt entsprechend angepasst'], en:['Timeline: the fixed limit for a \"long wait\" (4 h) is gone. Only the free time counts now: if the rest of another recipe fits into a wait it is placed at the end and the pause before it is shown – whether 40 minutes or overnight. If a recipe will fit completely into a later wait, no prep is started earlier.','AI timeline: prompt adjusted accordingly'] },
   { version:'4.1.2', date:'2026-09-19', de:['Ablaufplan: Bei Wartezeiten wird die freie Pause jetzt deutlich hervorgehoben (⏸ z. B. „1 Std. 29 Min. Pause – dann Spätzle starten\"), der Startschritt des anderen Rezepts trägt den Hinweis ⏰ „Hier beginnen – nach 1 Std. 29 Min. Pause\"'], en:['Timeline: waiting times now clearly show the free pause (⏸ e.g. \"1 h 29 min pause – then start spaetzle\"), and the first step of the other recipe carries the note ⏰ \"Start here – after 1 h 29 min pause\"'] },
   { version:'4.1.1', date:'2026-09-19', de:['🚨 Fix: Ablaufplan – bei Wartezeiten von 1–4 Std. (z. B. 2 Std. Gulasch schmoren) blieb das andere Rezept komplett außen vor, weil 2 Std. schon als „Pause\" galt. Echte Pause ist jetzt erst ab 4 Std. (Teig über Nacht).','Ablaufplan: Passt ein anderes Rezept in die Wartezeit, wird es „just in time\" ans Ende der Wartezeit gelegt – Beilagen wie Spätzle werden so erst kurz vor dem Servieren fertig, nicht zwei Stunden zu früh','KI-Ablaufplan: Prompt um Regel für mittlere Wartezeiten ergänzt'], en:['🚨 Fix: timeline – for waits of 1–4 h (e.g. goulash simmering for 2 h) the other recipe was left out completely because 2 h already counted as a \"pause\". A real pause now starts at 4 h (dough overnight).','Timeline: if another recipe fits into the wait it is placed \"just in time\" at the END of the wait – sides like spaetzle are ready shortly before serving instead of two hours early','AI timeline: prompt extended with a rule for medium waits'] },
@@ -6018,6 +6056,12 @@ function stepsMissingMarkers(steps){
     .some(l=>{const {mins,type}=parseStepTime(l);return mins===null||type===null;});
 }
 
+function countMissingMarkers(steps){
+  const lines=(steps||'').split('\n').map(l=>l.trim()).filter(l=>l&&!/^\*\*.*\*\*$/.test(l));
+  const missing=lines.filter(l=>{const {mins,type}=parseStepTime(l);return mins===null||type===null;}).length;
+  return {missing,total:lines.length};
+}
+
 function renderSessionSetup(app, session, recipes){
   const totalMins=recipes.reduce((s,r)=>{
     const prep=parseInt(r.prepTime)||0;
@@ -6025,22 +6069,25 @@ function renderSessionSetup(app, session, recipes){
     return s+prep+cook;
   },0);
   const incompleteRecipes=recipes.filter(r=>stepsMissingMarkers(r.steps));
+  // Nur im manuellen Modus relevant (die KI schätzt Zeiten selbst) und wegklickbar.
+  const showFixHint=incompleteRecipes.length>0&&session.mode==='manual'&&!session.hideFixHint;
 
   app.innerHTML=`<div style="padding:1rem 1.3rem 5rem">
     <div style="margin-bottom:1.2rem">
       <input id="sessionNameInp" value="${esc(session.name)}" style="width:100%;background:var(--surface2);border:1.5px solid var(--border2);border-radius:10px;padding:.6rem .9rem;font-family:var(--font);font-size:1rem;font-weight:700;color:var(--text);box-sizing:border-box">
     </div>
 
-    ${incompleteRecipes.length?`<div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:.8rem .9rem;margin-bottom:1.2rem">
+    ${showFixHint?`<div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:.8rem .9rem;margin-bottom:1.2rem">
       <div style="font-family:var(--font);font-weight:700;font-size:.85rem;color:#f59e0b;margin-bottom:.3rem">⚠️ ${S.lang==='en'?'Missing times / active-passive':'Fehlende Zeiten / Aktiv-Passiv'}</div>
       <div style="font-family:var(--ui);font-size:.78rem;color:var(--muted);margin-bottom:.6rem;line-height:1.4">${S.lang==='en'?'Some steps have no explicit duration or active/passive – the parallel timeline will just guess. Recommended to fill in first:':'Manche Schritte haben keine explizite Dauer/Aktiv-Passiv – der parallele Ablaufplan rät sonst nur. Am besten vorher nachtragen:'}</div>
       <div style="display:flex;flex-direction:column;gap:.4rem">
         ${incompleteRecipes.map(r=>`<div style="display:flex;align-items:center;gap:.5rem;background:var(--surface);border-radius:8px;padding:.4rem .6rem">
-          <span style="flex:1;min-width:0;font-family:var(--ui);font-size:.8rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.title)}</span>
+          <span style="flex:1;min-width:0;font-family:var(--ui);font-size:.8rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.title)}<span style="color:var(--faint)"> · ${(()=>{const c=countMissingMarkers(r.steps);return c.missing+'/'+c.total;})()}</span></span>
           <button type="button" class="btn bg sm" data-fixmanual="${r.id}">🪄 ${S.lang==='en'?'Manual':'Manuell'}</button>
           <button type="button" class="btn bg sm" data-fixai="${r.id}">✨ ${S.lang==='en'?'AI':'KI'}</button>
         </div>`).join('')}
       </div>
+      <button type="button" data-hidefix="1" style="margin-top:.6rem;background:none;border:none;color:var(--muted);font-family:var(--ui);font-size:.75rem;cursor:pointer;padding:.2rem 0;text-decoration:underline">${S.lang==='en'?'Hide – just guess':'Ausblenden – einfach schätzen lassen'}</button>
     </div>`:''}
 
     <!-- Recipe overview -->
@@ -6092,6 +6139,7 @@ function renderSessionSetup(app, session, recipes){
     session.name=e.target.value;saveSessions();
     renderHdr();
   });
+  app.querySelectorAll('[data-hidefix]').forEach(b=>b.addEventListener('click',()=>{session.hideFixHint=true;saveSessions();renderApp();}));
   app.querySelectorAll('[data-fixmanual]').forEach(b=>b.addEventListener('click',()=>openStepWizard(b.dataset.fixmanual)));
   app.querySelectorAll('[data-fixai]').forEach(b=>b.addEventListener('click',()=>openAiRecipeCheck(b.dataset.fixai)));
 }
@@ -6286,6 +6334,8 @@ function buildSmartTimeline(recipes){
       }
     }
     if(filled)scheduled[idxPrimary].note=`${fmtWait(nextPrimary.mins)} frei – parallelisieren`;
+    // Verbleibende freie Zeit dieser Wartezeit (nichts eingeschoben = die ganze Wartezeit)
+    scheduled[idxPrimary].pauseMins=window>=1?window:0;
   }
 
   // Calculate realistic total (not sum but max parallel path)
@@ -6374,10 +6424,20 @@ function renderSessionTimeline(app, session, recipes){
   const pct=Math.round(done/steps.length*100);
   const editing=session.editMode||false;
   const totalMins=session.timeline.totalMins;
-  const colors={'Fleisch':'#ef4444','Fisch':'#3b82f6','Pasta':'#f97316','Pizza & Flammkuchen':'#f59e0b','Vegetarisch':'#22c55e','Suppen':'#06b6d4','Desserts & Kuchen':'#ec4899'};
+  // Jedes Rezept der Session bekommt eine eigene Farbe (nach Position in der Session, nicht nach Kategorie –
+  // sonst haben z. B. zwei Fischgerichte dieselbe Farbe und sind nicht zu unterscheiden).
+  const RECIPE_PALETTE=['#3b82f6','#f97316','#a855f7','#22c55e','#ec4899','#06b6d4','#eab308','#ef4444','#6366f1','#84cc16'];
   const recipeColor=(r)=>{
-    const cat=r?.category||'';
-    return colors[cat]||getCatColor(cat)||'#8b5cf6';
+    const idx=r?recipes.findIndex(x=>x.id===r.id):-1;
+    return RECIPE_PALETTE[(idx<0?0:idx)%RECIPE_PALETTE.length];
+  };
+
+  // Freie Pause nach einem Schritt: neue Pläne speichern sie (pauseMins); ältere Sessions ohne Wert
+  // bekommen sie nur, wenn danach nichts von einem anderen Rezept kommt.
+  const pauseOf=(step,idx)=>{
+    if(step.pauseMins!==undefined)return step.pauseMins;
+    if(step.type==='passive'){const nx=steps[idx+1];if(!nx||nx.recipeId===step.recipeId)return step.mins;}
+    return 0;
   };
 
   // Compute start/end time display
@@ -6430,11 +6490,13 @@ function renderSessionTimeline(app, session, recipes){
         const r=recipes.find(x=>x.id===step.recipeId);
         const col=recipeColor(r);
         const isPassive=step.type==='passive';
-        return `<div class="tl-step${step.done?' tl-done':''}" data-stepid="${step.id}" data-idx="${idx}" style="
+        const pause=pauseOf(step,idx);
+        const stepHtml=`<div class="tl-step${step.done?' tl-done':''}" data-stepid="${step.id}" data-idx="${idx}" style="
           display:flex;align-items:flex-start;gap:.6rem;padding:.65rem .9rem;
           border-radius:12px;
           background:${step.done?'var(--surface)':'var(--surface2)'};
-          border-left:4px solid ${step.done?'var(--border)':col};
+          ${isPassive&&!step.done?'background-image:repeating-linear-gradient(135deg,transparent 0 9px,rgba(245,158,11,.09) 9px 18px);':''}
+          border-left:4px ${isPassive?'dashed':'solid'} ${step.done?'var(--border)':col};
           opacity:${step.done?'0.45':'1'};
           transition:background .2s,opacity .2s;
           user-select:none;-webkit-user-select:none">
@@ -6444,20 +6506,28 @@ function renderSessionTimeline(app, session, recipes){
             <div style="width:14px;height:2px;background:var(--muted);border-radius:1px"></div>
           </div>`:''}
           <div style="display:flex;flex-direction:column;align-items:center;gap:.15rem;flex-shrink:0;margin-top:.1rem">
-            <div style="width:24px;height:24px;border-radius:50%;border:2px solid ${step.done?'var(--border)':col};background:${step.done?col:'transparent'};display:flex;align-items:center;justify-content:center;font-size:.7rem;color:${step.done?'#fff':col};font-weight:700;transition:all .2s">${step.done?'✓':idx+1}</div>
+            <div style="width:24px;height:24px;border-radius:50%;border:2px ${isPassive?'dashed':'solid'} ${step.done?'var(--border)':col};background:${step.done?col:'transparent'};display:flex;align-items:center;justify-content:center;font-size:.7rem;color:${step.done?'#fff':col};font-weight:700;transition:all .2s">${step.done?'✓':idx+1}</div>
             <div onclick="event.stopPropagation();openStepEditModal('${session.id}','${step.id}')" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" style="font-size:.6rem;color:${step.done?'var(--faint)':col};font-family:var(--ui);cursor:pointer;text-decoration:underline;text-decoration-style:dotted">${fmtTlMins(step.mins)}</div>
           </div>
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem">
               <div style="font-size:.65rem;font-weight:700;color:${step.done?'var(--faint)':col};text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${esc(r?.title||'')}</div>
-              ${step.type?`<span onclick="event.stopPropagation();openStepEditModal('${session.id}','${step.id}')" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" style="font-size:.6rem;padding:.05rem .28rem;border-radius:4px;font-family:var(--ui);font-weight:600;flex-shrink:0;background:${step.type==='passive'?'rgba(248,113,113,.15)':'rgba(74,222,128,.15)'};color:${step.type==='passive'?'#f87171':'#4ade80'};cursor:pointer">${step.type==='passive'?'⏳':'⚡'}</span>`:''}
+              ${step.type?`<span onclick="event.stopPropagation();openStepEditModal('${session.id}','${step.id}')" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" style="font-size:.66rem;padding:.12rem .45rem;border-radius:6px;font-family:var(--ui);font-weight:800;letter-spacing:.3px;flex-shrink:0;white-space:nowrap;background:${isPassive?'rgba(245,158,11,.2)':'rgba(74,222,128,.15)'};color:${isPassive?'#f59e0b':'#4ade80'};cursor:pointer">${isPassive?(S.lang==='en'?'⏳ PASSIVE':'⏳ PASSIV'):(S.lang==='en'?'⚡ ACTIVE':'⚡ AKTIV')}</span>`:''}
             </div>
             <div style="font-size:.88rem;color:${step.done?'var(--muted)':'var(--text)'};line-height:1.5;${step.done?'text-decoration:line-through':''}">${esc(step.text)}</div>
-            ${step.pauseMins>0?`<div style="display:inline-block;margin-top:.3rem;padding:.2rem .5rem;border-radius:6px;background:rgba(245,158,11,.18);color:#f59e0b;font-size:.74rem;font-weight:700;font-family:var(--ui)">⏸ ${fmtPause(step.pauseMins)} Pause${step.pauseNext?' – dann '+esc(step.pauseNext)+' starten':''}</div>`:''}
             ${step.startAfterMins>0?`<div style="display:inline-block;margin-top:.3rem;padding:.2rem .5rem;border-radius:6px;background:rgba(74,222,128,.18);color:#4ade80;font-size:.74rem;font-weight:700;font-family:var(--ui)">⏰ Hier beginnen – nach ${fmtPause(step.startAfterMins)} Pause</div>`:''}
             ${step.note?`<div style="font-size:.68rem;color:var(--muted);margin-top:.2rem;font-style:italic">${esc(step.note)}</div>`:''}
           </div>
         </div>`;
+        // Eigene Pausen-Zeile: klar sichtbar, dass hier nichts zu tun ist – und wie lange
+        const pauseRow=(pause>=1&&!step.done)?`<div class="tl-pause" style="display:flex;align-items:center;gap:.7rem;padding:.6rem .9rem;border-radius:12px;border:2px dashed rgba(245,158,11,.6);background:rgba(245,158,11,.1);font-family:var(--ui)">
+          <span style="font-size:1.4rem;line-height:1">⏸</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:800;font-size:.9rem;letter-spacing:.6px;color:#f59e0b">${S.lang==='en'?'BREAK':'PAUSE'} · ${fmtPause(pause)}</div>
+            <div style="font-size:.72rem;color:var(--muted)">${step.pauseNext?(S.lang==='en'?'Nothing to do – then start ':'Nichts zu tun – danach ')+esc(step.pauseNext)+(S.lang==='en'?'':' starten'):(S.lang==='en'?'Nothing to do – just wait':'Nichts zu tun – einfach warten')}</div>
+          </div>
+        </div>`:'';
+        return stepHtml+pauseRow;
       }).join('')}
     </div>
 
@@ -6983,6 +7053,7 @@ function openStepEditModal(sessionId,stepId){
   document.getElementById('stepEditSave').onclick=()=>{
     const mins=Math.max(0,parseInt(document.getElementById('stepEditMins').value)||0);
     step.mins=mins;step.type=pendingType;
+    delete step.pauseMins;delete step.startAfterMins; // Zeit geändert → gespeicherte Pause wäre veraltet
     saveSessions();
     ov.remove();
     renderApp();
@@ -7159,12 +7230,14 @@ async function doExport(){
 }
 function delAll(){if(confirm('Wirklich ALLE Rezepte löschen?')){
   const ids=S.recipes.map(r=>r.id);
+  ids.forEach(id=>{_tomb[id]=Date.now();}); tombSave();
   S.recipes=[];
   saveR(true); // skipFbPush - wir löschen die Cloud-Rezepte hier gezielt
   if(fsReady()){
     (async()=>{
       const batch=fbDb.batch();
       ids.forEach(id=>{_recipePendingDeletes.add(id);batch.delete(fsRecipesCol().doc(id));});
+      await fsPushTombs();
       try{await batch.commit();}catch(e){console.warn('Firestore delAll failed:',e);}
       for(const id of ids){ await fsDeletePhoto(id); }
     })();
