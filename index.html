@@ -1705,9 +1705,13 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '3.8.9';
+const APP_VERSION = '3.9.3';
 const APP_DATE = '2026-09-19';
 const VERSION_HISTORY = [
+  { version:'3.9.3', date:'2026-09-19', de:['KI-Check überarbeitet: Vorher/Nachher jetzt für jedes Feld einzeln sichtbar (Zeiten & Aktiv/Passiv, Titel, Zutaten, Notizen), statt nur eine Zusammenfassung','Jedes Feld einzeln an-/abwählbar statt einer gemeinsamen "Sprache"-Checkbox für alle Textfelder','Der Vorschlagstext ist jetzt direkt editierbar, bevor man übernimmt – nicht mehr nur "annehmen oder verwerfen"'], en:['AI check revised: before/after now shown individually for each field (times & active/passive, title, ingredients, notes) instead of just a summary','Each field can be toggled independently instead of one combined "language" checkbox for all text fields','The suggested text is now directly editable before applying – no longer just "accept or discard"'] },
+  { version:'3.9.2', date:'2026-09-19', de:['Neu: ✨ KI-Check in der Rezept-Detailansicht (Button neben JSON/PDF) – die KI geht das Rezept rein strukturell durch (keine inhaltlichen Änderungen): trägt Zeiten & Aktiv/Passiv in die Schritte ein (teilt bei Bedarf einen Schritt in zwei), schlägt passende Tags zum Hinzufügen/Entfernen vor, korrigiert Rechtschreibung/Grammatik und listet Plausibilitäts-Auffälligkeiten (z.B. unstimmige Mengen) nur als Hinweis auf','Alle Vorschläge sind einzeln an-/abwählbar (Checkbox bei Zeiten & Sprache, antippbare Chips bei Tags) und werden erst nach "Übernehmen" gespeichert'], en:['New: ✨ AI check in the recipe detail view (button next to JSON/PDF) – the AI reviews the recipe purely structurally (no content changes): adds times & active/passive to steps (splitting a step in two if needed), suggests tags to add/remove, fixes spelling/grammar, and lists plausibility notes (e.g. mismatched quantities) purely as hints','All suggestions can be individually toggled (checkbox for times & language, tappable chips for tags) and are only saved after tapping "Apply"'] },
+  { version:'3.9.1', date:'2026-09-19', de:['Schritt-Assistent: Dauer-Feld schmaler gemacht und um einen Einheiten-Button ergänzt (antippen wechselt Min. → Std. → Sek. → Min., Wert bleibt dabei erhalten); Dauer, Einheit und Aktiv/Passiv stehen jetzt in einer Zeile','Unterstützt jetzt auch Zeitangaben unter einer Minute (z.B. "30 Sek. scharf anbraten") – werden im Rezept als Dezimal-Minuten gespeichert, aber wieder in Sekunden angezeigt, wenn unter einer Minute'], en:['Step assistant: duration field made narrower and a unit button added (tap cycles min → hr → sec → min, value is preserved when switching); duration, unit and active/passive now sit in one row','Now also supports durations under a minute (e.g. "sear for 30 sec") – stored as decimal minutes in the recipe, but displayed back in seconds when under a minute'] },
+  { version:'3.9.0', date:'2026-09-19', de:['🪄 Schritt-Assistent ist jetzt auch direkt aus der Rezept-Detailansicht erreichbar (Button "Bearbeiten" bei "Zubereitung", bzw. "Schritte hinzufügen" wenn noch keine eingetragen sind) – nicht mehr nur über den Umweg "Bearbeiten"-Formular. Änderungen werden direkt am Rezept gespeichert.'], en:['🪄 Step assistant is now also reachable directly from the recipe detail view ("Edit" button next to "Instructions", or "Add steps" if none exist yet) – no longer only via the "Edit" form detour. Changes save directly to the recipe.'] },
   { version:'3.8.9', date:'2026-09-19', de:['Schritt-Assistent überarbeitet: Aktiv/Passiv ist jetzt ein einzelner Umschalt-Button statt zwei getrennter Buttons','Navigation auf eine Zeile mit 4 Buttons verkürzt: ◀ Zurück, ▶ Vor, + Schritt hinzufügen, ✓ Fertig','Löschen-Symbol (🗑) in die Kopfzeile neben das ✕ verschoben, um Platz für die neue Button-Zeile zu schaffen'], en:['Step assistant revised: Active/Passive is now a single toggle button instead of two separate buttons','Navigation condensed into one row of 4 buttons: ◀ Back, ▶ Forward, + Add step, ✓ Done','Delete icon (🗑) moved to the header row next to ✕ to make room for the new button row'] },
   { version:'3.8.8', date:'2026-09-19', de:['Schritt-Assistent: Button "Letzter Schritt" in "Fertig" umbenannt (war missverständlich – speichert & schließt, ist keine Navigation)','Schritt-Assistent: kein automatischer Fokus mehr im Textfeld – öffnete bisher sofort die Tastatur und verschob/verscrollte das Fenster'], en:['Step assistant: renamed the "Last step" button to "Done" (was confusing – it saves & closes, it\'s not navigation)','Step assistant: text field no longer auto-focuses – previously popped up the keyboard immediately and shifted/scrolled the window'] },
   { version:'3.8.7', date:'2026-09-19', de:['Neu: 🪄 Schritt-Assistent im Rezept-Formular – Zubereitungsschritte einzeln eintragen statt alles in einer Textarea, mit Feld für Zeit und Aktiv/Passiv-Umschalter pro Schritt, inkl. Zurück/Einfügen/Nächster-Schritt/Letzter-Schritt-Navigation und Umschalten Schritt ↔ Überschrift','Die freie Textarea bleibt vollständig erhalten und nutzbar – der Assistent ist eine Alternative, keine Pflicht','Explizit im Assistenten gesetzte Zeit/Art werden jetzt auch im Rezept-Detail (Timer-Button) und beim automatischen Kochsession-Ablaufplan (ohne KI) respektiert, statt sie immer neu zu erraten'], en:['New: 🪄 Step assistant in the recipe form – enter preparation steps one at a time instead of one big textarea, with a duration field and an active/passive toggle per step, including back/insert/next-step/last-step navigation and switching a step into a section header and back','The free-text textarea remains fully available – the assistant is an alternative, not a requirement','Duration/type set explicitly via the assistant are now also respected in the recipe detail view (timer button) and by the automatic (non-AI) cooking-session timeline builder, instead of always being re-guessed'] },
@@ -2103,7 +2107,7 @@ function renderHdr(){
     acts.innerHTML='';
   } else if(S.view==='detail'){
     const r=S.recipes.find(x=>x.id===S.selId);tit.textContent=r?r.title:'';sub.textContent=r?r.category:'';
-    acts.innerHTML=`<button class="btn bo sm" onclick="shareR()">📤</button><button class="btn bo sm" onclick="exportRecipeJSON('${S.selId}')">JSON</button><button class="btn bo sm" onclick="exportRecipePDF('${S.selId}')">PDF</button><button class="btn bo sm" onclick="openEdit('${S.selId}')">✏️</button><button class="btn bdo sm" onclick="askDel('${S.selId}')">🗑</button>`;  } else if(S.view==='form'){
+    acts.innerHTML=`<button class="btn bo sm" onclick="shareR()">📤</button><button class="btn bo sm" onclick="exportRecipeJSON('${S.selId}')">JSON</button><button class="btn bo sm" onclick="exportRecipePDF('${S.selId}')">PDF</button><button class="btn bo sm" onclick="openAiRecipeCheck('${S.selId}')" title="${S.lang==='en'?'AI check':'KI-Check'}">✨</button><button class="btn bo sm" onclick="openEdit('${S.selId}')">✏️</button><button class="btn bdo sm" onclick="askDel('${S.selId}')">🗑</button>`;  } else if(S.view==='form'){
     tit.textContent=S.editId?t('hdr_edit'):t('hdr_new');sub.textContent='';
     acts.innerHTML=`<button class="btn bp" onclick="submitForm()">${t('btn_save')}</button>`;
   } else if(S.view==='shopping'){tit.textContent=t('hdr_shopping');sub.textContent='';acts.innerHTML='';}
@@ -2893,7 +2897,7 @@ function stepRow(line,idx,done,ingMap){
     <span class="step-txt" style="font-size:.9rem;line-height:1.75;color:${done?'var(--muted)':'var(--text2)'};${done?'text-decoration:line-through;':''}transition:all .2s;flex:1">${displayText}</span>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;flex-shrink:0;margin-top:.2rem">
       <button class="step-toggle-btn" data-action="promote" data-line="${esc(line)}" title="${t('step_promote')}" style="background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:.65rem;cursor:pointer;padding:.1rem .35rem;font-family:var(--ui);opacity:.5">${t('step_promote')}</button>
-      ${mins?`<button class="step-toggle-btn" data-action="timer" data-mins="${mins}" data-label="${esc(text.slice(0,60))}" title="Timer starten" style="font-size:.65rem;font-weight:600;color:#fff;background:${done?'rgba(128,128,128,.15)':stepType==='passive'?'rgba(248,113,113,.18)':'rgba(74,222,128,.18)'};color:${done?'var(--faint)':typeColor};border:none;border-radius:5px;padding:.1rem .35rem;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;gap:.2rem">⏱ ${mins} Min.</button>`:''}
+      ${mins?`<button class="step-toggle-btn" data-action="timer" data-mins="${mins}" data-label="${esc(text.slice(0,60))}" title="Timer starten" style="font-size:.65rem;font-weight:600;color:#fff;background:${done?'rgba(128,128,128,.15)':stepType==='passive'?'rgba(248,113,113,.18)':'rgba(74,222,128,.18)'};color:${done?'var(--faint)':typeColor};border:none;border-radius:5px;padding:.1rem .35rem;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;gap:.2rem">⏱ ${fmtStepMins(mins)}</button>`:''}
     </div>
   </div>`;
 }
@@ -3029,12 +3033,18 @@ function renderDetail(app){
             <button onclick="resetSc()" style="background:none;border:none;font-size:.72rem;cursor:pointer;padding:.2rem .4rem;font-family:var(--ui);transition:opacity .2s;${sf===1?'opacity:.25;pointer-events:none':'color:var(--muted)'}">↺ ${r.servings}</button>
           </div>
           ${r.steps?`<div class="sec">
-            <div class="st" style="display:flex;justify-content:space-between;align-items:center">
+            <div class="st" style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
               <span>Zubereitung</span>
-              ${Object.keys(S.stepsDone[r.id]||{}).length?`<button style="background:none;border:none;font-family:var(--ui);font-size:.72rem;color:var(--faint);cursor:pointer" id="resetSteps">${t('det_reset_steps')}</button>`:''}
+              <div style="display:flex;gap:.6rem;align-items:center">
+                ${Object.keys(S.stepsDone[r.id]||{}).length?`<button style="background:none;border:none;font-family:var(--ui);font-size:.72rem;color:var(--faint);cursor:pointer" id="resetSteps">${t('det_reset_steps')}</button>`:''}
+                <button id="stepWizardDetailBtn" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:.2rem .55rem;font-family:var(--ui);font-size:.72rem;cursor:pointer;color:var(--text)">🪄 ${S.lang==='en'?'Edit':'Bearbeiten'}</button>
+              </div>
             </div>
             <div id="stepsList">${renderStepSections(r.steps, S.stepsDone[r.id]||{}, S.stepSections?.[r.id]||{}, buildIngMap(r.ingredients,sf,r.servings))}</div>
-          </div>`:'<div style="padding:1rem;color:var(--faint);font-size:.85rem">Keine Zubereitung eingetragen.</div>'}
+          </div>`:`<div style="padding:1rem;color:var(--faint);font-size:.85rem;display:flex;flex-direction:column;gap:.7rem;align-items:flex-start">
+            <span>Keine Zubereitung eingetragen.</span>
+            <button id="stepWizardDetailBtn" class="btn bg sm">🪄 ${S.lang==='en'?'Add steps':'Schritte hinzufügen'}</button>
+          </div>`}
           <!-- Erfahrungen -->
           <div style="margin-top:1.4rem;border-top:2px solid var(--border);padding-top:1rem;margin-bottom:.8rem">
             <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-family:var(--font);font-weight:700;margin-bottom:.6rem">${t('det_experiences').replace('📓 ','')}</div>
@@ -3166,7 +3176,7 @@ function renderDetail(app){
       e.stopPropagation();
       const action=toggleBtn.dataset.action;
       if(action==='timer'){
-        startTimer(parseInt(toggleBtn.dataset.mins), toggleBtn.dataset.label);
+        startTimer(parseFloat(toggleBtn.dataset.mins), toggleBtn.dataset.label);
         return;
       }
       const line=toggleBtn.dataset.line;
@@ -3225,6 +3235,7 @@ function renderDetail(app){
     e.stopPropagation();S.stepsDone[r.id]={};saveSession();
     document.getElementById('stepsList').innerHTML=renderStepSections(r.steps,{},S.stepSections?.[r.id]||{});
   });
+  document.getElementById('stepWizardDetailBtn')?.addEventListener('click',()=>openStepWizard(r.id));
   document.getElementById('shareBtn')?.addEventListener('click',shareR);
 
   // Star rating
@@ -5908,12 +5919,22 @@ function renderPlannerKanban(app){
 // ════════════════════════════════════════════════════
 
 // Parse step time + optional Aktiv/Passiv-Marker: "[15:p] Schritt text" → {mins:15, type:'passive', text:"Schritt text"}
+// Minuten dürfen Dezimalstellen haben (z.B. "[0.5:a]" = 30 Sekunden), damit auch Sekunden-Eingaben
+// unter einer Minute im Schritt-Assistenten verlustfrei gespeichert werden können.
 // Typ-Suffix ist optional (Rückwärtskompatibilität mit dem alten reinen "[15]"-Format) – fehlt er,
 // wird type:null zurückgegeben und der Aufrufer soll auf detectStepType() zurückfallen.
+// Formatiert eine (ggf. dezimale) Minutenangabe für die Anzeige – unter einer Minute in Sekunden,
+// sonst in Minuten (ohne unnötige Nachkommastelle bei ganzen Zahlen).
+function fmtStepMins(mins){
+  if(mins<1)return Math.round(mins*60)+' Sek.';
+  const rounded=Math.round(mins*10)/10;
+  return (Number.isInteger(rounded)?rounded:rounded.toFixed(1))+' Min.';
+}
+
 function parseStepTime(line){
-  const m=line.match(/^\[(\d+)(?::([ap]))?\]\s*(.*)/);
+  const m=line.match(/^\[(\d+(?:\.\d+)?)(?::([ap]))?\]\s*(.*)/);
   if(!m)return{mins:null,type:null,text:line};
-  return{mins:parseInt(m[1],10),type:m[2]==='p'?'passive':(m[2]==='a'?'active':null),text:m[3]};
+  return{mins:parseFloat(m[1]),type:m[2]==='p'?'passive':(m[2]==='a'?'active':null),text:m[3]};
 }
 
 function saveSessions(){
@@ -6371,24 +6392,42 @@ function renderSessionTimeline(app, session, recipes){
 // (a=aktiv, p=passiv), "**Text**" für Überschriften/Kategorien, sonst reiner Text.
 function parseStepsForWizard(raw){
   const lines=(raw||'').split('\n').map(l=>l.trim()).filter(l=>l!=='');
-  if(!lines.length)return[{isHeader:false,text:'',mins:0,type:'active'}];
+  if(!lines.length)return[{isHeader:false,text:'',mins:0,type:'active',unit:'min'}];
   return lines.map(line=>{
     const hm=line.match(/^\*\*(.*)\*\*$/);
-    if(hm)return{isHeader:true,text:hm[1],mins:0,type:'active'};
+    if(hm)return{isHeader:true,text:hm[1],mins:0,type:'active',unit:'min'};
     const {mins,type,text}=parseStepTime(line);
-    return{isHeader:false,text,mins:mins||0,type:type||detectStepType(text)};
+    return{isHeader:false,text,mins:mins||0,type:type||detectStepType(text),unit:'min'};
   });
 }
 function serializeStepsFromWizard(steps){
   return steps.filter(s=>s.text.trim()!=='').map(s=>{
     if(s.isHeader)return `**${s.text.trim()}**`;
-    return `[${s.mins||0}:${s.type==='passive'?'p':'a'}] ${s.text.trim()}`;
+    const m=Math.round((s.mins||0)*100)/100; // Gleitkomma-Artefakte vermeiden
+    return `[${m}:${s.type==='passive'?'p':'a'}] ${s.text.trim()}`;
   }).join('\n');
 }
+// Umrechnung zwischen der gespeicherten Einheit (immer Minuten, ggf. dezimal) und der im
+// Assistenten aktuell gewählten Anzeige-Einheit (Min./Std./Sek.).
+const STEP_UNITS=['min','std','sek'];
+const STEP_UNIT_LABEL={min:'Min.',std:'Std.',sek:'Sek.'};
+function minsToUnitValue(mins,unit){
+  const v=unit==='std'?(mins/60):unit==='sek'?(mins*60):mins;
+  return Math.round(v*100)/100;
+}
+function unitValueToMins(value,unit){
+  return unit==='std'?value*60:unit==='sek'?value/60:value;
+}
 
-function openStepWizard(){
-  const ta=document.getElementById('f-st');if(!ta)return;
-  let steps=parseStepsForWizard(ta.value);
+// recipeId optional: ohne Parameter arbeitet der Assistent auf der Formular-Textarea (Neu/Bearbeiten-
+// Formular), mit Parameter direkt auf dem gespeicherten Rezept (Aufruf aus der Detailansicht heraus,
+// ohne den Umweg über "Bearbeiten" nehmen zu müssen).
+function openStepWizard(recipeId){
+  const ta=recipeId?null:document.getElementById('f-st');
+  if(!recipeId&&!ta)return;
+  const rec=recipeId?S.recipes.find(x=>x.id===recipeId):null;
+  if(recipeId&&!rec)return;
+  let steps=parseStepsForWizard(recipeId?rec.steps:ta.value);
   let idx=0;
   document.getElementById('stepWizardOv')?.remove();
   const ov=document.createElement('div');
@@ -6402,13 +6441,22 @@ function openStepWizard(){
     if(txt)s.text=txt.value;
     if(!s.isHeader){
       const m=document.getElementById('swMins');
-      if(m)s.mins=Math.max(0,parseInt(m.value)||0);
+      if(m){
+        const raw=Math.max(0,parseFloat(m.value)||0);
+        s.mins=unitValueToMins(raw,s.unit||'min');
+      }
     }
   }
   function writeBack(){
     const val=serializeStepsFromWizard(steps);
-    ta.value=val;
-    S.formData.steps=val; // sonst würde ein späteres Re-Render des Formulars die Änderung wieder verwerfen
+    if(recipeId){
+      S.recipes=S.recipes.map(x=>x.id===recipeId?{...x,steps:val,_updatedAt:Date.now()}:x);
+      saveR();
+      const app=document.getElementById('app');if(app&&S.view==='detail')renderDetail(app);
+    } else {
+      ta.value=val;
+      S.formData.steps=val; // sonst würde ein späteres Re-Render des Formulars die Änderung wieder verwerfen
+    }
   }
   function close(){commitCurrent();writeBack();ov.remove();}
 
@@ -6429,13 +6477,13 @@ function openStepWizard(){
       </div>
       <textarea id="swText" rows="${s.isHeader?1:4}" placeholder="${s.isHeader?(S.lang==='en'?'e.g. For the sauce':'z.B. Für die Soße'):(S.lang==='en'?'Describe this step…':'Diesen Schritt beschreiben…')}" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.6rem .7rem;font-family:var(--ui);font-size:.9rem;color:var(--text);resize:vertical;margin-bottom:${s.isHeader?'0':'.9rem'}">${esc(s.text)}</textarea>
       ${s.isHeader?'':`
-      <div style="margin-bottom:.9rem">
-        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">${S.lang==='en'?'Duration (min, optional)':'Dauer (Min., optional)'}</div>
-        <input id="swMins" type="number" min="0" inputmode="numeric" value="${s.mins||0}" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .7rem;font-family:var(--ui);font-size:.95rem;color:var(--text)">
-      </div>
       <div style="margin-bottom:1.1rem">
-        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">${S.lang==='en'?'Type':'Art'}</div>
-        <button type="button" id="swTypeToggle" style="width:100%;padding:.55rem;border-radius:8px;border:1px solid ${s.type==='passive'?'#f87171':'#4ade80'};background:${s.type==='passive'?'rgba(248,113,113,.15)':'rgba(74,222,128,.15)'};color:${s.type==='passive'?'#f87171':'#4ade80'};font-family:var(--ui);font-weight:700;font-size:.82rem;cursor:pointer">${s.type==='passive'?'⏳ '+(S.lang==='en'?'Passive':'Passiv'):'⚡ '+(S.lang==='en'?'Active':'Aktiv')} <span style="opacity:.6;font-weight:400">(${S.lang==='en'?'tap to switch':'antippen zum Wechseln'})</span></button>
+        <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">${S.lang==='en'?'Duration & type (optional)':'Dauer & Art (optional)'}</div>
+        <div style="display:flex;gap:.4rem">
+          <input id="swMins" type="number" min="0" step="any" inputmode="decimal" value="${minsToUnitValue(s.mins||0,s.unit||'min')}" style="width:60px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .3rem;font-family:var(--ui);font-size:.95rem;color:var(--text);text-align:center">
+          <button type="button" id="swUnitToggle" style="width:58px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;font-family:var(--ui);font-size:.78rem;font-weight:700;color:var(--text);cursor:pointer">${STEP_UNIT_LABEL[s.unit||'min']}</button>
+          <button type="button" id="swTypeToggle" style="flex:1;padding:.55rem .3rem;border-radius:8px;border:1px solid ${s.type==='passive'?'#f87171':'#4ade80'};background:${s.type==='passive'?'rgba(248,113,113,.15)':'rgba(74,222,128,.15)'};color:${s.type==='passive'?'#f87171':'#4ade80'};font-family:var(--ui);font-weight:700;font-size:.82rem;cursor:pointer">${s.type==='passive'?'⏳ '+(S.lang==='en'?'Passive':'Passiv'):'⚡ '+(S.lang==='en'?'Active':'Aktiv')}</button>
+        </div>
       </div>`}
       <div style="display:flex;gap:.4rem">
         <button type="button" id="swPrev" ${idx===0?'disabled':''} style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:1rem;color:var(--muted);cursor:pointer;opacity:${idx===0?'.4':'1'}">◀</button>
@@ -6449,12 +6497,18 @@ function openStepWizard(){
     ov.onclick=e=>{if(e.target===ov)close();};
     document.getElementById('swModeStep').onclick=()=>{commitCurrent();s.isHeader=false;render();};
     document.getElementById('swModeHeader').onclick=()=>{commitCurrent();s.isHeader=true;render();};
+    document.getElementById('swUnitToggle')?.addEventListener('click',()=>{
+      commitCurrent(); // aktuellen Zahlenwert erst noch in der ALTEN Einheit sichern, bevor umgeschaltet wird
+      const cur=s.unit||'min';
+      s.unit=STEP_UNITS[(STEP_UNITS.indexOf(cur)+1)%STEP_UNITS.length];
+      render();
+    });
     document.getElementById('swTypeToggle')?.addEventListener('click',()=>{commitCurrent();s.type=s.type==='passive'?'active':'passive';render();});
     document.getElementById('swPrev').onclick=()=>{if(idx===0)return;commitCurrent();idx--;render();};
     document.getElementById('swNext').onclick=()=>{if(idx===steps.length-1)return;commitCurrent();idx++;render();};
     document.getElementById('swInsert').onclick=()=>{
       commitCurrent();
-      steps.splice(idx+1,0,{isHeader:false,text:'',mins:0,type:'active'});
+      steps.splice(idx+1,0,{isHeader:false,text:'',mins:0,type:'active',unit:'min'});
       idx++;render();
     };
     document.getElementById('swDelete')?.addEventListener('click',()=>{
@@ -6463,6 +6517,173 @@ function openStepWizard(){
       render();
     });
     document.getElementById('swDone').onclick=close;
+  }
+  render();
+}
+
+// ══════════════ KI-CHECK (strukturelle Verbesserungsvorschläge) ══════════════
+// Bewusst NICHT inhaltlich: die KI soll Zutaten/Mengen/Ablauf nicht verändern, sondern nur
+// Zeiten + Aktiv/Passiv in die Schritte eintragen (bei Bedarf einen Schritt in zwei aufteilen),
+// Rechtschreibung/Grammatik korrigieren, Tags vorschlagen und Auffälligkeiten (Plausibilität)
+// benennen, ohne sie selbst zu "reparieren".
+async function openAiRecipeCheck(recipeId){
+  const r=S.recipes.find(x=>x.id===recipeId);if(!r)return;
+  document.getElementById('aiCheckOv')?.remove();
+  const ov=document.createElement('div');
+  ov.id='aiCheckOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.innerHTML=`<div style="background:var(--surface);border-radius:16px;padding:2rem 1.4rem;width:100%;max-width:380px;text-align:center">
+    <div class="iload" style="justify-content:center"><span class="sp">✨</span>${S.lang==='en'?'Analyzing recipe…':'Rezept wird analysiert…'}</div>
+  </div>`;
+  document.body.appendChild(ov);
+
+  try{
+    const system=`Du bist ein technischer Qualitätsprüfer für Kochrezepte in einer Rezept-App. Du veränderst NIEMALS den
+inhaltlichen Ablauf, die Zutaten, Mengen oder die Reihenfolge der Zubereitung. Deine Aufgabe ist rein
+strukturell/technisch:
+
+1. SCHRITTE: Ergänze jede Zubereitungs-Zeile (sofern sinnvoll ableitbar) am Anfang um einen Marker
+   "[Minuten:a]" (aktiv = ich muss dabei sein, kann nicht parallel etwas anderes tun) oder "[Minuten:p]"
+   (passiv = läuft von selbst, z.B. köcheln/backen/ruhen/marinieren/kühlen). Minuten dürfen Dezimalzahlen
+   sein (z.B. 0.5 für 30 Sekunden). Enthält EIN Schritt sowohl einen aktiven als auch einen anschließenden
+   passiven Teil, teile ihn in ZWEI Zeilen auf (z.B. "Zwiebeln anbraten und 20 Min. köcheln lassen" wird zu
+   "[3:a] Zwiebeln anbraten" und "[20:p] Köcheln lassen"). Zeilen, die komplett in "**...**" eingeschlossen
+   sind, sind Abschnittsüberschriften – unverändert lassen (kein Zeit-Marker). Rechtschreibung/Grammatik
+   dabei korrigieren, aber NICHTS inhaltlich umformulieren oder umsortieren.
+2. ZUTATEN/TITEL/NOTIZEN: Nur Rechtschreibung/Grammatik korrigieren, inhaltlich exakt gleich lassen. Wenn
+   nichts zu korrigieren ist, das Feld unverändert zurückgeben.
+3. TAGS: Schlage aus dem Inhalt ableitbare, fehlende Tags vor (z.B. "Vegetarisch", "Schnell", "Glutenfrei")
+   und vorhandene Tags, die nicht (mehr) passen, zum Entfernen. Keine Tags erfinden, die nicht klar zutreffen.
+4. PLAUSIBILITÄT: Liste kurze, konkrete Hinweise zu Auffälligkeiten (z.B. Mengenangabe wirkt für die
+   Portionszahl unstimmig, ein Zutat wird in der Zubereitung nie erwähnt, ein Schritt fehlt vermutlich).
+   Nur benennen, NICHT selbst ändern.
+
+Antworte NUR mit JSON in diesem Format (keine weiteren Erklärungen):
+{"steps":"...","ingredients":"...","title":"...","notes":"...","tagsAdd":["..."],"tagsRemove":["..."],"plausibility":["..."]}`;
+    const payload={title:r.title,category:r.category,servings:r.servings,ingredients:r.ingredients||'',steps:r.steps||'',notes:r.notes||'',tags:r.tags||[]};
+    const result=await window.geminiJSON({feature:'recipe_check',system,contentParts:[{text:JSON.stringify(payload)}]});
+    ov.remove();
+    renderAiCheckReview(r,result);
+  }catch(e){
+    ov.innerHTML=`<div style="background:var(--surface);border-radius:16px;padding:1.4rem;width:100%;max-width:380px">
+      <div class="ierr">⚠️ ${esc(e.message)}</div>
+      <button type="button" id="aiCheckErrClose" class="btn bg" style="width:100%;justify-content:center;margin-top:.9rem">${t('btn_close')}</button>
+    </div>`;
+    document.getElementById('aiCheckErrClose').onclick=()=>ov.remove();
+  }
+}
+
+function renderAiCheckReview(r,result){
+  document.getElementById('aiCheckOv')?.remove();
+  const ov=document.createElement('div');
+  ov.id='aiCheckOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem';
+  document.body.appendChild(ov);
+
+  const stepsChanged=(result.steps||'').trim()!==(r.steps||'').trim();
+  const ingredientsChanged=(result.ingredients||'').trim()!==(r.ingredients||'').trim();
+  const titleChanged=(result.title||'').trim()!==(r.title||'').trim();
+  const notesChanged=(result.notes||'').trim()!==(r.notes||'').trim();
+  const tagsAdd=(result.tagsAdd||[]).filter(t=>!(r.tags||[]).includes(t));
+  const tagsRemove=(result.tagsRemove||[]).filter(t=>(r.tags||[]).includes(t));
+  const plausibility=result.plausibility||[];
+
+  // Jedes Feld einzeln an-/abwählbar UND bearbeitbar, bevor übernommen wird.
+  const state={
+    tagsAdd:Object.fromEntries(tagsAdd.map(t=>[t,true])),
+    tagsRemove:Object.fromEntries(tagsRemove.map(t=>[t,true]))
+  };
+
+  // Baut einen Vorher/Nachher-Block: Checkbox + read-only "Vorher" + editierbares "Nachher"-Feld.
+  function fieldBlock(key,label,before,after,multiline){
+    const inputId='aiField_'+key;
+    const chkId='aiChk_'+key;
+    const rows=multiline?Math.min(10,Math.max(3,(after.split('\n').length))):1;
+    return `<div style="margin-bottom:1.1rem">
+      <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;margin-bottom:.5rem">
+        <input type="checkbox" id="${chkId}" checked>
+        <span style="font-family:var(--font);font-weight:700;font-size:.85rem;color:var(--text)">${label}</span>
+      </label>
+      <div id="${key}_wrap">
+        <div style="font-size:.68rem;color:var(--faint);font-family:var(--ui);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.2rem">${S.lang==='en'?'Before':'Vorher'}</div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.5rem .65rem;font-family:var(--ui);font-size:.76rem;color:var(--faint);white-space:pre-wrap;max-height:110px;overflow-y:auto;line-height:1.5;margin-bottom:.5rem">${esc(before)||'–'}</div>
+        <div style="font-size:.68rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.2rem">${S.lang==='en'?'After (editable)':'Nachher (bearbeitbar)'}</div>
+        ${multiline
+          ?`<textarea id="${inputId}" rows="${rows}" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .65rem;font-family:var(--ui);font-size:.82rem;color:var(--text);resize:vertical;line-height:1.5">${esc(after)}</textarea>`
+          :`<input id="${inputId}" value="${esc(after)}" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .65rem;font-family:var(--ui);font-size:.85rem;color:var(--text)">`}
+      </div>
+    </div>`;
+  }
+
+  function render(){
+    ov.innerHTML=`<div style="background:var(--surface);border-radius:16px;padding:1.2rem;width:100%;max-width:440px;max-height:88dvh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.4)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <div style="font-family:var(--font);font-weight:800;font-size:1.05rem;color:var(--text)">✨ ${S.lang==='en'?'AI suggestions':'KI-Verbesserungsvorschläge'}</div>
+        <button type="button" id="aiCheckClose" style="background:none;border:none;font-size:1.3rem;color:var(--muted);cursor:pointer;line-height:1;padding:0">✕</button>
+      </div>
+
+      ${stepsChanged?fieldBlock('steps','⏱ '+(S.lang==='en'?'Times & active/passive':'Zeiten & Aktiv/Passiv'),r.steps||'',result.steps||'',true):''}
+      ${titleChanged?fieldBlock('title','✍️ '+(S.lang==='en'?'Title':'Titel'),r.title||'',result.title||'',false):''}
+      ${ingredientsChanged?fieldBlock('ingredients','✍️ '+(S.lang==='en'?'Ingredients':'Zutaten'),r.ingredients||'',result.ingredients||'',true):''}
+      ${notesChanged?fieldBlock('notes','✍️ '+(S.lang==='en'?'Notes':'Notizen'),r.notes||'',result.notes||'',true):''}
+
+      ${(tagsAdd.length||tagsRemove.length)?`<div style="margin-bottom:1.1rem">
+        <div style="font-family:var(--font);font-weight:700;font-size:.85rem;color:var(--text);margin-bottom:.4rem">🏷 ${S.lang==='en'?'Tags':'Tags'}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:.35rem">
+          ${tagsAdd.map(t=>`<button type="button" class="aicheck-tag" data-tagadd="${esc(t)}" style="padding:.25rem .65rem;border-radius:20px;font-size:.78rem;font-family:var(--ui);cursor:pointer;border:1px solid ${state.tagsAdd[t]?'#4ade80':'var(--border2)'};background:${state.tagsAdd[t]?'rgba(74,222,128,.15)':'var(--surface2)'};color:${state.tagsAdd[t]?'#4ade80':'var(--muted)'}">+ ${esc(t)}</button>`).join('')}
+          ${tagsRemove.map(t=>`<button type="button" class="aicheck-tag" data-tagremove="${esc(t)}" style="padding:.25rem .65rem;border-radius:20px;font-size:.78rem;font-family:var(--ui);cursor:pointer;border:1px solid ${state.tagsRemove[t]?'#f87171':'var(--border2)'};background:${state.tagsRemove[t]?'rgba(248,113,113,.15)':'var(--surface2)'};color:${state.tagsRemove[t]?'#f87171':'var(--muted)'};text-decoration:${state.tagsRemove[t]?'line-through':'none'}">− ${esc(t)}</button>`).join('')}
+        </div>
+        <div style="font-size:.7rem;color:var(--faint);font-family:var(--ui);margin-top:.35rem;font-style:italic">${S.lang==='en'?'Tap to accept/reject individually':'Antippen zum Annehmen/Ablehnen'}</div>
+      </div>`:''}
+
+      ${plausibility.length?`<div style="margin-bottom:1.1rem">
+        <div style="font-family:var(--font);font-weight:700;font-size:.85rem;color:var(--text);margin-bottom:.4rem">🔍 ${S.lang==='en'?'Plausibility notes':'Plausibilität'}</div>
+        <div style="background:var(--surface2);border-radius:8px;padding:.7rem .8rem">
+          ${plausibility.map(p=>`<div style="font-family:var(--ui);font-size:.78rem;color:var(--muted);padding:.15rem 0;display:flex;gap:.4rem"><span style="flex-shrink:0">•</span>${esc(p)}</div>`).join('')}
+        </div>
+      </div>`:''}
+
+      ${(!stepsChanged&&!titleChanged&&!ingredientsChanged&&!notesChanged&&!tagsAdd.length&&!tagsRemove.length&&!plausibility.length)?`<div style="padding:1rem 0;text-align:center;font-family:var(--ui);font-size:.85rem;color:var(--muted)">${S.lang==='en'?'No suggestions – looks good already.':'Keine Vorschläge – sieht schon gut aus.'}</div>`:''}
+
+      <div style="display:flex;gap:.6rem;margin-top:.4rem">
+        <button type="button" id="aiCheckCancel" style="flex:1;background:var(--surface2);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:.85rem;color:var(--muted);cursor:pointer">${t('btn_cancel')}</button>
+        <button type="button" id="aiCheckApply" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:.65rem;font-family:var(--font);font-size:.85rem;font-weight:700;color:#fff;cursor:pointer">✓ ${S.lang==='en'?'Apply selected':'Ausgewähltes übernehmen'}</button>
+      </div>
+    </div>`;
+
+    document.getElementById('aiCheckClose').onclick=()=>ov.remove();
+    ov.onclick=e=>{if(e.target===ov)ov.remove();};
+    document.getElementById('aiCheckCancel').onclick=()=>ov.remove();
+    // Checkbox schaltet nur das zugehörige Editier-Feld aus (kein Re-Render), damit laufende
+    // Bearbeitungen in den anderen Feldern nicht verloren gehen.
+    ['steps','title','ingredients','notes'].forEach(key=>{
+      const chk=document.getElementById('aiChk_'+key);
+      const wrap=document.getElementById(key+'_wrap');
+      if(!chk||!wrap)return;
+      chk.addEventListener('change',()=>{wrap.style.opacity=chk.checked?'1':'.4';wrap.style.pointerEvents=chk.checked?'auto':'none';});
+    });
+    ov.querySelectorAll('[data-tagadd]').forEach(b=>b.addEventListener('click',()=>{const tg=b.dataset.tagadd;state.tagsAdd[tg]=!state.tagsAdd[tg];render();}));
+    ov.querySelectorAll('[data-tagremove]').forEach(b=>b.addEventListener('click',()=>{const tg=b.dataset.tagremove;state.tagsRemove[tg]=!state.tagsRemove[tg];render();}));
+    document.getElementById('aiCheckApply').onclick=()=>{
+      const patch={};
+      ['steps','title','ingredients','notes'].forEach(key=>{
+        const chk=document.getElementById('aiChk_'+key);
+        const val=document.getElementById('aiField_'+key);
+        if(chk&&val&&chk.checked)patch[key]=val.value;
+      });
+      let newTags=[...(r.tags||[])];
+      Object.entries(state.tagsAdd).forEach(([tg,on])=>{if(on&&!newTags.includes(tg))newTags.push(tg);});
+      Object.entries(state.tagsRemove).forEach(([tg,on])=>{if(on)newTags=newTags.filter(x=>x!==tg);});
+      if(newTags.length!==(r.tags||[]).length||newTags.some((x,i)=>x!==(r.tags||[])[i]))patch.tags=newTags;
+      if(Object.keys(patch).length){
+        patch._updatedAt=Date.now();
+        S.recipes=S.recipes.map(x=>x.id===r.id?{...x,...patch}:x);
+        saveR();
+        const app=document.getElementById('app');if(app&&S.view==='detail')renderDetail(app);
+        toast('✓ '+(S.lang==='en'?'Applied':'Übernommen'));
+      }
+      ov.remove();
+    };
   }
   render();
 }
