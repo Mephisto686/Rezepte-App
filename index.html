@@ -1706,9 +1706,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '4.0.0';
+const APP_VERSION = '4.1.0';
 const APP_DATE = '2026-09-19';
 const VERSION_HISTORY = [
+  { version:'4.1.0', date:'2026-09-19', de:['🚨 Fix: Suchfeld im Kochmodus – der Cursor sprang nach jedem Buchstaben an den Anfang, weil bei jedem Tastendruck das ganze Fenster neu aufgebaut wurde. Es wird jetzt nur noch die Rezeptliste aktualisiert.','🚨 Fix: Kochsessions waren nach dem Verlassen nicht mehr auffindbar (gespeichert waren sie, es gab aber keinen Weg zurück). Im Kochmodus stehen gespeicherte Sessions jetzt oben mit Fortschritt zum Weitermachen oder Löschen.','Kochmodus: Rezeptauswahl nach Kategorien gruppiert und alphabetisch sortiert','Ablaufplan (ohne KI): Lange Wartezeiten (ab 2 Std., z. B. Teig über Nacht) werden nicht mehr mit Schritten anderer Rezepte aufgefüllt – Vorbereitung wie Linsen abspülen oder Gemüse schneiden landet nicht mehr Stunden vor dem eigentlichen Kochen. Die anderen Rezepte starten erst nach der Wartezeit.','Ablaufplan (ohne KI): Beim Auffüllen von Wartezeiten wird die Reihenfolge der Schritte im Rezept jetzt eingehalten (vorher konnten Schritte übersprungen werden, z. B. Pürieren vor dem Köcheln)','Ablaufplan (KI): Prompt um Regeln für lange Wartezeiten, Reihenfolge und gemeinsame Fertigstellung ergänzt; lange Zeiten werden als Std. angezeigt (480m → 8h)','KI-Check: Vorher/Nachher jetzt nebeneinander. Nur tatsächlich geänderte Wörter werden markiert; wird nur eine Zeit oder Aktiv/Passiv ergänzt, bleibt der Schritt neutral und die Zeit erscheint als Hinweis-Chip. Unveränderte Zeilen werden zusammengeklappt.','Startseite: Kachel „Einkaufsliste\" steht jetzt an Platz 2; Kochmodus-Kachel zeigt die Anzahl gespeicherter Sessions','Home-Button ist jetzt auch in Rezepten (Detail und Formular) verfügbar'], en:['🚨 Fix: search field in cooking mode – the cursor jumped to the start after every letter because the whole dialog was rebuilt on each keystroke. Only the recipe list is updated now.','🚨 Fix: cooking sessions could not be found again after leaving them (they were saved, but there was no way back). Saved sessions now appear at the top of cooking mode with progress, to resume or delete.','Cooking mode: recipe selection is grouped by category and sorted alphabetically','Timeline (non-AI): long waits (2 h and more, e.g. dough overnight) are no longer filled with steps of other recipes – prep like rinsing lentils or chopping vegetables no longer lands hours before the actual cooking. The other recipes start after the wait.','Timeline (non-AI): when filling waiting times the order of steps within a recipe is now respected (before, steps could be skipped, e.g. pureeing before simmering)','Timeline (AI): prompt extended with rules for long waits, step order and common finishing time; long durations are shown in hours (480m → 8h)','AI check: before/after now side by side. Only actually changed words are highlighted; if just a duration or active/passive is added, the step stays neutral and the duration appears as a hint chip. Unchanged lines are collapsed.','Home: \"Shopping list\" tile is now in 2nd place; cooking-mode tile shows the number of saved sessions','Home button is now also available inside recipes (detail and form)'] },
   { version:'4.0.0', date:'2026-09-19', de:['🚨 Fix: Tab-Flippen zwischen Zutaten/Zubereitung behoben – Panel-Container sprang bei jedem Re-Render kurz auf Tab 1 zurück (per requestAnimationFrame + CSS scroll-behavior:smooth), was wie ein Hin-und-Her-Flippen aussah. Positionierung ist jetzt synchron und ohne Animation.','Neu: 🏠 Home-Button oben im Header, von (fast) überall mit einem Klick zur Startseite (außer Detail/Formular, dort führt der Zurück-Pfeil ohnehin dorthin zurück)','Neu: Kachel "Kochmodus" auf der Startseite – Rezepte für eine parallele Kochsession direkt auswählen, ohne den Umweg über den Mehrfachauswahl-Modus der Liste','Neu: Beim Start einer Kochsession wird geprüft, ob allen Schritten Zeiten/Aktiv-Passiv fehlen – falls ja, Hinweis mit Option zum manuellen oder KI-gestützten Nachtragen pro Rezept, bevor der Ablaufplan erstellt wird','KI-Check prüft jetzt auch, ob bei Zutaten Mengenangaben fehlen, und schlägt plausible Mengen vor (mit "~" als Schätzung markiert) – bestehende Mengen werden nie verändert'], en:['🚨 Fix: fixed the tab flip between ingredients/steps – the panel container briefly jumped back to tab 1 on every re-render (via requestAnimationFrame + CSS scroll-behavior:smooth), which looked like flickering back and forth. Positioning is now synchronous and unanimated.','New: 🏠 home button at the top of the header, one tap back to the home screen from (almost) anywhere (except detail/form, where the back arrow already leads there)','New: "Cooking mode" tile on the home screen – pick recipes for a parallel cooking session directly, without the detour via the list\'s multi-select mode','New: starting a cooking session now checks whether steps are missing times/active-passive – if so, a note offers manual or AI-assisted fixing per recipe before the timeline is built','AI check now also checks whether ingredients are missing quantities and suggests plausible ones (marked with "~" as an estimate) – existing quantities are never changed'] },
   { version:'3.9.7', date:'2026-09-19', de:['KI-Check: "Vorher"-Block durch echte Zeilen-Diff ersetzt – geänderte/neue Zeilen grün, entfernte rot durchgestrichen, statt zwei ähnlich aussehender kompletter Textblöcke, in denen der Unterschied unterging','Neuer Hinweis oben im KI-Check-Fenster, dass nur angehakte Punkte beim "Übernehmen" gespeichert werden'], en:['AI check: replaced the "Before" block with a real line diff – changed/new lines highlighted green, removed lines shown red/struck-through, instead of two similar-looking full text blocks where the difference got lost','Added a note at the top of the AI check window clarifying that only checked items are saved on "Apply"'] },
   { version:'3.9.6', date:'2026-09-19', de:['Schritt-Assistent: Textfeld jetzt immer gleich groß (6 Zeilen), egal ob Schritt oder Überschrift – kein Größensprung mehr beim Umschalten, und insgesamt mehr Platz zum Schreiben'], en:['Step assistant: text field is now always the same size (6 rows) regardless of step or section header mode – no more size jump when switching, and more room to write overall'] },
@@ -2102,7 +2103,7 @@ function renderHdr(){
   const inDetail=S.view==='detail'||S.view==='form';
   back.style.display=inDetail?'block':'none';
   if(menuBtn)menuBtn.style.display=inDetail?'none':'block';
-  if(homeBtn)homeBtn.style.display=(S.view==='home'||inDetail)?'none':'block';
+  if(homeBtn)homeBtn.style.display=(S.view==='home')?'none':'block';
   if(icon)icon.style.display=(S.view==='list'||S.view==='favorites'||S.view==='home')?'block':'none';
   fab.style.display=(S.view==='list'||S.view==='favorites'||S.view==='home')?'flex':'none';
   if(S.saving&&(S.view==='list'||S.view==='favorites')){acts.innerHTML=`<span class="svg">${t('hdr_saving')}</span>`;return;}
@@ -2251,9 +2252,9 @@ function renderHome(app){
     <div class="home-search" id="homeSearch"><span class="hs-ic">🔍</span><span class="hs-txt">${t('list_search')}</span></div>
     <div class="hscroll" id="homeTeasers">
       <button class="teaser-card" data-teaser="newrecipe"><span class="ti">➕</span><span class="tt">${S.lang==='en'?'New Recipe':'Neues Rezept'}</span><span class="ts">${S.lang==='en'?'AI, import or manual':'KI, Import oder manuell'}</span></button>
-      <button class="teaser-card" data-teaser="cookmode"><span class="ti">👨‍🍳</span><span class="tt">${S.lang==='en'?'Cooking mode':'Kochmodus'}</span><span class="ts">${S.lang==='en'?'Cook recipes in parallel':'Rezepte parallel kochen'}</span></button>
-      <button class="teaser-card" data-teaser="planner"><span class="ti">📅</span><span class="tt">${S.lang==='en'?'Meal Plan':'Speiseplan'}</span><span class="ts">${S.lang==='en'?'Plan your week':'Woche planen'}</span></button>
       <button class="teaser-card" data-teaser="shopping">${shopCnt?`<span class="badge tbadge">${shopCnt}</span>`:''}<span class="ti">🛒</span><span class="tt">${t('nav_list')}</span><span class="ts">${shopCnt?`${shopCnt} ${S.lang==='en'?'open':'offen'}`:S.lang==='en'?'All done':'Alles erledigt'}</span></button>
+      <button class="teaser-card" data-teaser="cookmode"><span class="ti">👨‍🍳</span><span class="tt">${S.lang==='en'?'Cooking mode':'Kochmodus'}</span><span class="ts">${S.sessions.length?(S.lang==='en'?`${S.sessions.length} saved`:`${S.sessions.length} gespeichert`):(S.lang==='en'?'Cook recipes in parallel':'Rezepte parallel kochen')}</span></button>
+      <button class="teaser-card" data-teaser="planner"><span class="ti">📅</span><span class="tt">${S.lang==='en'?'Meal Plan':'Speiseplan'}</span><span class="ts">${S.lang==='en'?'Plan your week':'Woche planen'}</span></button>
       <button class="teaser-card" data-teaser="pantry">${pantryCnt?`<span class="badge tbadge">${pantryCnt}</span>`:''}<span class="ti">📦</span><span class="tt">${S.lang==='en'?'Pantry':'Vorratskammer'}</span><span class="ts">${pantryCnt?(S.lang==='en'?`${pantryCnt} expired`:`${pantryCnt} abgelaufen`):(S.lang==='en'?'All fresh':'Alles frisch')}</span></button>
       <button class="teaser-card" data-teaser="settings"><span class="ti">⚙️</span><span class="tt">${t('hdr_settings')}</span><span class="ts">${S.lang==='en'?'Account & more':'Konto & mehr'}</span></button>
     </div>
@@ -5943,6 +5944,14 @@ function fmtStepMins(mins){
   return (Number.isInteger(rounded)?rounded:rounded.toFixed(1))+' Min.';
 }
 
+// Kurzformat für die Dauer in der Timeline: 5m, 45s, 8h, 1h 30m
+function fmtTlMins(m){
+  if(m<1)return Math.round(m*60)+'s';
+  if(m>=60){const h=Math.floor(m/60),r=Math.round(m%60);return h+'h'+(r?' '+r+'m':'');}
+  const x=Math.round(m*10)/10;
+  return (Number.isInteger(x)?x:x.toFixed(1))+'m';
+}
+
 function parseStepTime(line){
   const m=line.match(/^\[(\d+(?:\.\d+)?)(?::([ap]))?\]\s*(.*)/);
   if(!m)return{mins:null,type:null,text:line};
@@ -5950,12 +5959,15 @@ function parseStepTime(line){
 }
 
 function saveSessions(){
-  openDB().then(db=>{
+  return openDB().then(db=>new Promise((resolve,reject)=>{
     const tx=db.transaction('sessions','readwrite');
     const store=tx.objectStore('sessions');
     store.clear();
     S.sessions.forEach(s=>store.put(s));
-  }).catch(()=>{});
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+    tx.onabort=()=>reject(tx.error);
+  })).catch(e=>{console.error('Sessions konnten nicht gespeichert werden:',e);});
 }
 
 function createCookSession(recipeIds){
@@ -6182,8 +6194,18 @@ function buildSmartTimeline(recipes){
   // Greedy scheduler
   const pending=[...allSteps]; // all steps not yet scheduled
 
-  // Process: take next unscheduled step of primary recipe
-  // If it's passive: fill that window with active steps from other recipes
+  // Lange Wartezeiten (z. B. Teig über Nacht) sind eine PAUSE, keine Lücke zum Auffüllen:
+  // Schritte anderer Rezepte, die davor einsortiert würden, wären Stunden zu früh (Gemüse
+  // geschnitten, Suppe lange vor dem Brot fertig). Alles bis zur letzten langen Wartezeit des
+  // Hauptrezepts läuft daher ohne Einschübe, die anderen Rezepte starten erst danach.
+  const LONG_WAIT_MIN=120;
+  const isLongWait=s=>s.type==='passive'&&s.mins>=LONG_WAIT_MIN;
+  const primaryAll=allSteps.filter(s=>s.recipeId===primary.id);
+  let lastLongIdx=-1;
+  primaryAll.forEach((s,i)=>{if(isLongWait(s))lastLongIdx=i;});
+  let primaryPos=0;
+  const fmtWait=m=>m>=60?(Math.round(m/6)/10)+' Std.':m+' Min.';
+
   while(pending.length>0){
     // Find next pending step from primary recipe
     const nextPrimary=pending.find(s=>s.recipeId===primary.id&&!used.has(s.id));
@@ -6200,20 +6222,32 @@ function buildSmartTimeline(recipes){
     // Schedule this primary step
     used.add(nextPrimary.id);
     pending.splice(pending.indexOf(nextPrimary),1);
+    const posInPrimary=primaryPos++;
 
-    if(nextPrimary.type==='passive'&&others.length>0){
+    if(isLongWait(nextPrimary)){
+      const note=others.length
+        ?`${fmtWait(nextPrimary.mins)} Wartezeit – hier ist Pause (z. B. über Nacht). Die anderen Rezepte starten erst danach.`
+        :`${fmtWait(nextPrimary.mins)} Wartezeit`;
+      scheduled.push({...nextPrimary,order:scheduled.length,note});
+    } else if(nextPrimary.type==='passive'&&others.length>0&&posInPrimary>lastLongIdx){
       // During this passive window, schedule active steps from other recipes
       let window=nextPrimary.mins;
       const note=`${nextPrimary.mins} Min. frei – parallelisieren`;
       scheduled.push({...nextPrimary,order:scheduled.length,note});
 
-      // Fill window with active steps from other recipes
+      // Fill window with the next steps of the other recipes – IN Rezept-Reihenfolge (nichts wird übersprungen).
       for(const other of others){
-        const activeOther=pending.filter(s=>s.recipeId===other.id&&!used.has(s.id)&&s.type==='active');
-        for(const step of activeOther){
+        const queue=pending.filter(s=>s.recipeId===other.id&&!used.has(s.id));
+        for(const step of queue){
           if(window<=0)break;
           used.add(step.id);
           pending.splice(pending.indexOf(step),1);
+          if(step.type!=='active'){
+            // Passiver Schritt: kann jetzt angestoßen werden und läuft nebenher – die folgenden
+            // Schritte dieses Rezepts hängen davon ab, deshalb hier Schluss für dieses Rezept.
+            scheduled.push({...step,order:scheduled.length,note:`Läuft nebenher – ${nextPrimary.recipeTitle} wartet ebenfalls`});
+            break;
+          }
           scheduled.push({...step,order:scheduled.length,note:`Während ${nextPrimary.recipeTitle} wartet`});
           window-=step.mins;
         }
@@ -6256,7 +6290,12 @@ Klassifizierung:
 - "active": Ich muss aktiv dabei sein – kann NICHT parallel anderes machen (schneiden, rühren, formen, abgießen, Spätzle schaben etc.)
 - "passive": Läuft von selbst – ich kann parallel anderes erledigen (kochen, backen, braten ohne Aufsicht, marinieren, ruhen, warten)
 
-Erstelle einen optimierten Ablaufplan. Nutze passive Wartezeiten eines Rezepts für aktive Schritte anderer Rezepte. Beginne mit dem Schritt der am längsten passiv wartet.
+Regeln für den Ablaufplan:
+- Die Reihenfolge der Schritte INNERHALB eines Rezepts bleibt immer erhalten.
+- Nutze passive Wartezeiten eines Rezepts für aktive Schritte anderer Rezepte – aber nur, wenn diese Rezepte danach zügig weitergehen.
+- LANGE WARTEZEITEN: Ist ein passiver Schritt länger als 2 Stunden (z. B. Teig über Nacht), ist das eine Pause und keine Lücke zum Auffüllen. Setze KEINE Schritte anderer Rezepte davor (weder Vorbereitung wie Abspülen/Schneiden noch Kochen) – Zutaten würden stundenlang herumstehen bzw. Gerichte viel zu früh fertig sein. Die anderen Rezepte starten erst NACH der Wartezeit.
+- Plane rückwärts vom Servieren: Alle Gerichte sollen möglichst gleichzeitig fertig werden.
+- Schreibe bei langen Wartezeiten im Feld \"note\" einen kurzen Hinweis (z. B. \"über Nacht\").
 
 Antworte NUR mit validem JSON, kein weiterer Text:
 {
@@ -6374,7 +6413,7 @@ function renderSessionTimeline(app, session, recipes){
           </div>`:''}
           <div style="display:flex;flex-direction:column;align-items:center;gap:.15rem;flex-shrink:0;margin-top:.1rem">
             <div style="width:24px;height:24px;border-radius:50%;border:2px solid ${step.done?'var(--border)':col};background:${step.done?col:'transparent'};display:flex;align-items:center;justify-content:center;font-size:.7rem;color:${step.done?'#fff':col};font-weight:700;transition:all .2s">${step.done?'✓':idx+1}</div>
-            <div onclick="event.stopPropagation();openStepEditModal('${session.id}','${step.id}')" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" style="font-size:.6rem;color:${step.done?'var(--faint)':col};font-family:var(--ui);cursor:pointer;text-decoration:underline;text-decoration-style:dotted">${step.mins}m</div>
+            <div onclick="event.stopPropagation();openStepEditModal('${session.id}','${step.id}')" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" style="font-size:.6rem;color:${step.done?'var(--faint)':col};font-family:var(--ui);cursor:pointer;text-decoration:underline;text-decoration-style:dotted">${fmtTlMins(step.mins)}</div>
           </div>
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem">
@@ -6608,31 +6647,143 @@ Antworte NUR mit JSON in diesem Format (keine weiteren Erklärungen):
   }
 }
 
-// Einfacher zeilenbasierter Diff (LCS), damit im KI-Check sichtbar ist, was sich WIRKLICH ändert,
-// statt zwei komplette Textblöcke nebeneinander zu zeigen, in denen der Unterschied untergeht.
-function diffLines(oldStr,newStr){
-  const a=(oldStr||'').split('\n'),b=(newStr||'').split('\n');
+// ── Vorher/Nachher-Vergleich für den KI-Check ──
+// Zeilenweise Ausrichtung (LCS) + Wort-Diff innerhalb geänderter Zeilen. Bei Schritten werden Zeit-/Aktiv-Passiv-Marker
+// ("[15:p]") getrennt vom Text verglichen: Ändert sich nur der Marker, gilt der Schritt NICHT als geänderter
+// Text, sondern bekommt nur einen Hinweis-Chip. So geht der eigentliche Unterschied nicht unter.
+function aiDiffTokens(str){return (str||'').split(/(\s+|[.,;:!?()\/"„“”])/).filter(x=>x!=='');}
+function aiDiffKey(t){return /^\s+$/.test(t)?' ':t;}
+function aiLcsOps(a,b,keyFn){
   const n=a.length,m=b.length;
   const dp=Array.from({length:n+1},()=>new Array(m+1).fill(0));
   for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--){
-    dp[i][j]=a[i]===b[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+    dp[i][j]=keyFn(a[i])===keyFn(b[j])?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
   }
   const ops=[];let i=0,j=0;
   while(i<n&&j<m){
-    if(a[i]===b[j]){ops.push({type:'same',text:a[i]});i++;j++;}
-    else if(dp[i+1][j]>=dp[i][j+1]){ops.push({type:'del',text:a[i]});i++;}
-    else{ops.push({type:'add',text:b[j]});j++;}
+    if(keyFn(a[i])===keyFn(b[j])){ops.push({t:'same',a:a[i],b:b[j]});i++;j++;}
+    else if(dp[i+1][j]>=dp[i][j+1]){ops.push({t:'del',a:a[i]});i++;}
+    else{ops.push({t:'add',b:b[j]});j++;}
   }
-  while(i<n){ops.push({type:'del',text:a[i]});i++;}
-  while(j<m){ops.push({type:'add',text:b[j]});j++;}
+  while(i<n){ops.push({t:'del',a:a[i]});i++;}
+  while(j<m){ops.push({t:'add',b:b[j]});j++;}
   return ops;
 }
-function renderLineDiffHtml(oldStr,newStr){
-  return diffLines(oldStr,newStr).map(op=>{
-    if(op.type==='same')return `<div style="padding:.08rem 0;color:var(--faint)">${esc(op.text)||'&nbsp;'}</div>`;
-    if(op.type==='del')return `<div style="padding:.1rem .35rem;margin:.1rem 0;background:rgba(248,113,113,.14);color:#f87171;text-decoration:line-through;border-radius:4px">${esc(op.text)||'&nbsp;'}</div>`;
-    return `<div style="padding:.1rem .35rem;margin:.1rem 0;background:rgba(74,222,128,.14);color:#4ade80;border-radius:4px">${esc(op.text)||'&nbsp;'}</div>`;
+function aiWordSim(x,y){
+  const ta=aiDiffTokens(x).filter(t=>t.trim()),tb=aiDiffTokens(y).filter(t=>t.trim());
+  if(!ta.length&&!tb.length)return 1;
+  const same=aiLcsOps(ta,tb,t=>t.toLowerCase()).filter(o=>o.t==='same').length;
+  return 2*same/(ta.length+tb.length);
+}
+// Ausrichtung eines Blocks gelöschter/hinzugefügter Zeilen: ähnliche Zeilen werden zu "geändert" gepaart,
+// der Rest bleibt als entfernt/neu stehen (z. B. wenn die KI einen Schritt in zwei teilt).
+function aiAlignBlock(dels,adds,textOf){
+  const n=dels.length,m=adds.length,TH=0.34;
+  const sim=Array.from({length:n},(_,i)=>Array.from({length:m},(_,j)=>aiWordSim(textOf(dels[i]),textOf(adds[j]))));
+  const dp=Array.from({length:n+1},()=>new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--){
+    let best=Math.max(dp[i+1][j],dp[i][j+1]);
+    if(sim[i][j]>=TH)best=Math.max(best,dp[i+1][j+1]+sim[i][j]);
+    dp[i][j]=best;
+  }
+  const rows=[];let i=0,j=0;
+  while(i<n&&j<m){
+    if(sim[i][j]>=TH&&Math.abs(dp[i][j]-(dp[i+1][j+1]+sim[i][j]))<1e-9){rows.push({kind:'mod',old:dels[i],new:adds[j]});i++;j++;}
+    else if(dp[i+1][j]>=dp[i][j+1]){rows.push({kind:'del',old:dels[i]});i++;}
+    else{rows.push({kind:'add',new:adds[j]});j++;}
+  }
+  while(i<n){rows.push({kind:'del',old:dels[i]});i++;}
+  while(j<m){rows.push({kind:'add',new:adds[j]});j++;}
+  return rows;
+}
+function aiBuildDiffRows(oldStr,newStr,isSteps){
+  const A=(oldStr||'').split('\n'),B=(newStr||'').split('\n');
+  const textOf=l=>isSteps?parseStepTime((l||'').trim()).text:(l||'');
+  const ops=aiLcsOps(A,B,l=>textOf(l).trim());
+  const rows=[];let dels=[],adds=[];
+  const flush=()=>{if(dels.length||adds.length)aiAlignBlock(dels,adds,textOf).forEach(r=>rows.push(r));dels=[];adds=[];};
+  ops.forEach(o=>{
+    if(o.t==='del'){dels.push(o.a);return;}
+    if(o.t==='add'){adds.push(o.b);return;}
+    flush();
+    // gleicher Text – nur Marker/Whitespace könnten sich unterscheiden
+    const po=isSteps?parseStepTime(o.a.trim()):null,pn=isSteps?parseStepTime(o.b.trim()):null;
+    const markerDiff=isSteps&&(po.mins!==pn.mins||po.type!==pn.type);
+    rows.push({kind:markerDiff?'meta':'same',old:o.a,new:o.b});
+  });
+  flush();
+  return rows;
+}
+function aiMarkerChip(p,highlight){
+  if(!p||p.mins===null)return '';
+  const ic=p.type==='passive'?'⏳':(p.type==='active'?'⚡':'');
+  const col=highlight?'#4ade80':'var(--muted)';
+  const bg=highlight?'rgba(74,222,128,.16)':'var(--surface2)';
+  return `<span style="display:inline-block;margin-right:.3rem;padding:.02rem .32rem;border-radius:5px;font-size:.66rem;font-weight:700;background:${bg};color:${col};white-space:nowrap">${ic} ${fmtStepMins(p.mins)}</span>`;
+}
+function aiWordDiffHtml(oldTxt,newTxt,side){
+  const ops=aiLcsOps(aiDiffTokens(oldTxt),aiDiffTokens(newTxt),aiDiffKey);
+  return ops.map(o=>{
+    if(o.t==='same')return esc(side==='old'?o.a:o.b);
+    if(o.t==='del')return side==='old'?`<span style="background:rgba(248,113,113,.22);color:#f87171;text-decoration:line-through;border-radius:3px;padding:0 .1rem">${esc(o.a)}</span>`:'';
+    return side==='new'?`<span style="background:rgba(74,222,128,.22);color:#4ade80;border-radius:3px;padding:0 .1rem">${esc(o.b)}</span>`:'';
   }).join('');
+}
+function aiSideBySideHtml(oldStr,newStr,isSteps){
+  const en=S.lang==='en';
+  const rows=aiBuildDiffRows(oldStr,newStr,isSteps);
+  const cellBase='padding:.3rem .4rem;border-radius:6px;font-size:.75rem;line-height:1.45;word-break:break-word;white-space:pre-wrap;min-width:0';
+  const empty=`<div style="${cellBase};color:var(--faint);opacity:.5">—</div>`;
+  let cntMarker=0,cntText=0,cntNew=0;
+  let out='';
+  let sameRun=[];
+  const flushSame=()=>{
+    if(sameRun.length>2){
+      out+=`<div style="grid-column:1/-1;text-align:center;font-size:.68rem;color:var(--faint);padding:.15rem 0">… ${sameRun.length} ${en?'unchanged lines':'unveränderte Zeilen'} …</div>`;
+    } else {
+      sameRun.forEach(r=>{
+        const txt=esc(isSteps?parseStepTime(r.old.trim()).text:r.old)||'&nbsp;';
+        out+=`<div style="${cellBase};color:var(--faint)">${txt}</div><div style="${cellBase};color:var(--faint)">${txt}</div>`;
+      });
+    }
+    sameRun=[];
+  };
+  rows.forEach(r=>{
+    if(r.kind==='same'){sameRun.push(r);return;}
+    flushSame();
+    if(r.kind==='meta'){
+      const po=parseStepTime(r.old.trim()),pn=parseStepTime(r.new.trim());
+      if(pn.mins!==null)cntMarker++;
+      const txt=esc(pn.text)||'&nbsp;';
+      out+=`<div style="${cellBase};color:var(--muted)">${aiMarkerChip(po,false)}${txt}</div>
+            <div style="${cellBase};color:var(--muted)">${aiMarkerChip(pn,true)}${txt}</div>`;
+    } else if(r.kind==='mod'){
+      const po=isSteps?parseStepTime(r.old.trim()):{mins:null,type:null,text:r.old};
+      const pn=isSteps?parseStepTime(r.new.trim()):{mins:null,type:null,text:r.new};
+      const markerChanged=isSteps&&(po.mins!==pn.mins||po.type!==pn.type);
+      if(markerChanged&&pn.mins!==null)cntMarker++;
+      cntText++;
+      out+=`<div style="${cellBase};background:rgba(248,113,113,.07);color:var(--text)">${aiMarkerChip(po,false)}${aiWordDiffHtml(po.text,pn.text,'old')}</div>
+            <div style="${cellBase};background:rgba(74,222,128,.07);color:var(--text)">${aiMarkerChip(pn,markerChanged)}${aiWordDiffHtml(po.text,pn.text,'new')}</div>`;
+    } else if(r.kind==='del'){
+      cntText++;
+      const po=isSteps?parseStepTime(r.old.trim()):{mins:null,type:null,text:r.old};
+      out+=`<div style="${cellBase};background:rgba(248,113,113,.14);color:#f87171;text-decoration:line-through">${aiMarkerChip(po,false)}${esc(po.text)||'&nbsp;'}</div>${empty}`;
+    } else {
+      cntNew++;
+      const pn=isSteps?parseStepTime(r.new.trim()):{mins:null,type:null,text:r.new};
+      if(pn.mins!==null)cntMarker++;
+      out+=`${empty}<div style="${cellBase};background:rgba(74,222,128,.14);color:#4ade80">${aiMarkerChip(pn,true)}${esc(pn.text)||'&nbsp;'}</div>`;
+    }
+  });
+  flushSame();
+  const parts=[];
+  if(isSteps&&cntMarker)parts.push(`⏱ ${cntMarker} ${en?'durations/types added':'Zeiten/Aktiv-Passiv ergänzt'}`);
+  if(cntText)parts.push(`✍️ ${cntText} ${en?(cntText===1?'text change':'text changes'):(cntText===1?'Textänderung':'Textänderungen')}`);
+  if(cntNew)parts.push(`➕ ${cntNew} ${en?(cntNew===1?'new line':'new lines'):(cntNew===1?'neue Zeile':'neue Zeilen')}`);
+  const hdr=`<div style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--faint);padding:0 .2rem">${en?'Before':'Vorher'}</div><div style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);padding:0 .2rem">${en?'After':'Nachher'}</div>`;
+  return `${parts.length?`<div style="font-size:.72rem;color:var(--muted);margin-bottom:.4rem">${parts.join(' · ')}</div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.25rem .35rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.45rem;max-height:340px;overflow-y:auto;font-family:var(--ui)">${hdr}${out}</div>`;
 }
 
 function renderAiCheckReview(r,result){
@@ -6668,25 +6819,26 @@ function renderAiCheckReview(r,result){
         <span style="font-family:var(--font);font-weight:700;font-size:.85rem;color:var(--text)">${label}</span>
       </label>
       <div id="${key}_wrap">
-        <div style="font-size:.68rem;color:var(--faint);font-family:var(--ui);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.2rem">${S.lang==='en'?'What changes':'Was sich ändert'}</div>
-        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.5rem .65rem;font-family:var(--ui);font-size:.76rem;white-space:pre-wrap;max-height:160px;overflow-y:auto;line-height:1.5;margin-bottom:.5rem">${renderLineDiffHtml(before,after)}</div>
-        <div style="font-size:.68rem;color:var(--muted);font-family:var(--ui);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.2rem">${S.lang==='en'?'After (editable)':'Nachher (bearbeitbar)'}</div>
-        ${multiline
-          ?`<textarea id="${inputId}" rows="${rows}" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .65rem;font-family:var(--ui);font-size:.82rem;color:var(--text);resize:vertical;line-height:1.5">${esc(after)}</textarea>`
-          :`<input id="${inputId}" value="${esc(after)}" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .65rem;font-family:var(--ui);font-size:.85rem;color:var(--text)">`}
+        ${aiSideBySideHtml(before,after,key==='steps')}
+        <details style="margin-top:.5rem">
+          <summary style="font-size:.72rem;color:var(--muted);font-family:var(--ui);cursor:pointer">✏️ ${S.lang==='en'?'Edit "After"':'„Nachher“ bearbeiten'}</summary>
+          ${multiline
+            ?`<textarea id="${inputId}" rows="${rows}" style="width:100%;margin-top:.4rem;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .65rem;font-family:var(--ui);font-size:.82rem;color:var(--text);resize:vertical;line-height:1.5;box-sizing:border-box">${esc(after)}</textarea>`
+            :`<input id="${inputId}" value="${esc(after)}" style="width:100%;margin-top:.4rem;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:.55rem .65rem;font-family:var(--ui);font-size:.85rem;color:var(--text);box-sizing:border-box">`}
+        </details>
       </div>
     </div>`;
   }
 
   function render(){
-    ov.innerHTML=`<div style="background:var(--surface);border-radius:16px;padding:1.2rem;width:100%;max-width:440px;max-height:88dvh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.4)">
+    ov.innerHTML=`<div style="background:var(--surface);border-radius:16px;padding:1.2rem;width:100%;max-width:560px;max-height:88dvh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.4)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
         <div style="font-family:var(--font);font-weight:800;font-size:1.05rem;color:var(--text)">✨ ${S.lang==='en'?'AI suggestions':'KI-Verbesserungsvorschläge'}</div>
         <button type="button" id="aiCheckClose" style="background:none;border:none;font-size:1.3rem;color:var(--muted);cursor:pointer;line-height:1;padding:0">✕</button>
       </div>
       <div style="font-family:var(--ui);font-size:.74rem;color:var(--faint);margin-bottom:1rem;line-height:1.4">${S.lang==='en'?'Only checked items below are saved when you tap "Apply selected" – uncheck anything you don\'t want.':'Nur angehakte Punkte werden beim Tippen auf "Ausgewähltes übernehmen" gespeichert – Haken entfernen, was du nicht willst.'}</div>
 
-      ${stepsChanged?fieldBlock('steps','⏱ '+(S.lang==='en'?'Times & active/passive':'Zeiten & Aktiv/Passiv'),r.steps||'',result.steps||'',true):''}
+      ${stepsChanged?fieldBlock('steps','⏱ '+(S.lang==='en'?'Steps':'Schritte'),r.steps||'',result.steps||'',true):''}
       ${titleChanged?fieldBlock('title','✍️ '+(S.lang==='en'?'Title':'Titel'),r.title||'',result.title||'',false):''}
       ${ingredientsChanged?fieldBlock('ingredients','✍️ '+(S.lang==='en'?'Ingredients':'Zutaten'),r.ingredients||'',result.ingredients||'',true):''}
       ${notesChanged?fieldBlock('notes','✍️ '+(S.lang==='en'?'Notes':'Notizen'),r.notes||'',result.notes||'',true):''}
@@ -7799,6 +7951,7 @@ function showMealPlanModal(recipes,onDone){
 // ══════════════ CATEGORY PICKER ══════════════
 // ══════════════ KOCHMODUS-AUSWAHL (von der Startseite aus) ══════════════
 function openCookModePicker(){
+  const en=S.lang==='en';
   const ov=document.createElement('div');
   ov.id='cookPickOv';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:200;padding:0';
@@ -7806,41 +7959,125 @@ function openCookModePicker(){
   md.style.cssText='background:var(--surface);border-radius:20px 20px 0 0;padding:1.2rem;width:100%;max-width:520px;max-height:85dvh;overflow-y:auto;font-family:var(--ui);display:flex;flex-direction:column';
   const picked=new Set();
   let query='';
+  const closeOv=()=>{if(ov.parentNode)document.body.removeChild(ov);};
 
-  function render(){
-    const list=S.recipes.filter(r=>!query||r.title.toLowerCase().includes(query.toLowerCase()));
-    md.innerHTML=`
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem">
-        <div style="font-family:var(--font);font-weight:800;font-size:1.05rem;color:var(--text)">👨‍🍳 ${S.lang==='en'?'Cooking mode':'Kochmodus'}</div>
-        <button type="button" id="cookPickClose" style="background:none;border:none;font-size:1.3rem;color:var(--muted);cursor:pointer;line-height:1;padding:0">✕</button>
+  // Rezepte nach Kategorie gruppiert (Reihenfolge der Kategorien wie in der App), darin alphabetisch
+  function groupedRecipes(){
+    const q=query.trim().toLowerCase();
+    const list=S.recipes.filter(r=>!q||r.title.toLowerCase().includes(q));
+    const order=getCats();
+    const known=new Set(order);
+    const groups=[];
+    order.forEach(c=>{const items=list.filter(r=>r.category===c);if(items.length)groups.push({cat:c,items});});
+    const rest=list.filter(r=>!known.has(r.category));
+    if(rest.length){
+      const misc=groups.find(g=>g.cat==='Sonstiges');
+      if(misc)misc.items.push(...rest);else groups.push({cat:'Sonstiges',items:rest});
+    }
+    groups.forEach(g=>g.items.sort((a,b)=>a.title.localeCompare(b.title,'de')));
+    return groups;
+  }
+
+  function sessionsHtml(){
+    if(!S.sessions.length)return '';
+    const sorted=[...S.sessions].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    return `<div style="margin-bottom:1rem">
+      <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:.4rem">${en?'Saved sessions':'Gespeicherte Sessions'}</div>
+      <div style="display:flex;flex-direction:column;gap:.35rem">
+        ${sorted.map(se=>{
+          const steps=se.timeline?.steps||[];
+          const done=steps.filter(x=>x.done).length;
+          const status=se.timeline?`${done}/${steps.length} ${en?'steps done':'Schritte erledigt'}`:(en?'Not planned yet':'Noch nicht geplant');
+          const d=se.createdAt?new Date(se.createdAt).toLocaleDateString(en?'en-GB':'de-DE',{day:'2-digit',month:'2-digit'}):'';
+          return `<div style="display:flex;align-items:center;gap:.4rem;background:var(--surface2);border-radius:9px">
+            <div data-opensess="${esc(se.id)}" style="flex:1;min-width:0;padding:.5rem .7rem;cursor:pointer">
+              <div style="font-size:.85rem;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">👨‍🍳 ${esc(se.name||'Kochsession')}</div>
+              <div style="font-size:.7rem;color:var(--muted)">${status}${d?' · '+d:''}</div>
+            </div>
+            <button type="button" data-delsess="${esc(se.id)}" title="${en?'Delete':'Löschen'}" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:.95rem;padding:.5rem .7rem">✕</button>
+          </div>`;
+        }).join('')}
       </div>
-      <div style="font-size:.8rem;color:var(--muted);margin-bottom:.7rem">${S.lang==='en'?'Choose the recipes you want to cook (in parallel).':'Wähle die Rezepte, die du (parallel) kochen möchtest.'}</div>
-      <input id="cookPickSearch" value="${esc(query)}" placeholder="${S.lang==='en'?'Search…':'Suchen…'}" style="width:100%;padding:.5rem .7rem;border:1px solid var(--border2);border-radius:8px;background:var(--bg);font-family:var(--font);font-size:.85rem;color:var(--text);outline:none;margin-bottom:.7rem">
-      <div style="display:flex;flex-direction:column;gap:.35rem;overflow-y:auto;flex:1;min-height:0;margin-bottom:.9rem">
-        ${list.length?list.map(r=>`<label style="display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border-radius:9px;background:${picked.has(r.id)?'var(--accent-bg,rgba(99,102,241,.12))':'var(--surface2)'};cursor:pointer">
-          <input type="checkbox" data-rid="${r.id}" ${picked.has(r.id)?'checked':''}>
-          <span style="width:8px;height:8px;border-radius:50%;background:${getCatColor(r.category)};flex-shrink:0"></span>
-          <span style="font-family:var(--ui);font-size:.85rem;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.title)}</span>
-        </label>`).join(''):`<div style="padding:1rem;text-align:center;color:var(--faint);font-size:.85rem">${S.lang==='en'?'No recipes found.':'Keine Rezepte gefunden.'}</div>`}
+    </div>`;
+  }
+
+  function listHtml(){
+    const groups=groupedRecipes();
+    if(!groups.length)return `<div style="padding:1rem;text-align:center;color:var(--faint);font-size:.85rem">${en?'No recipes found.':'Keine Rezepte gefunden.'}</div>`;
+    return groups.map(g=>`
+      <div style="display:flex;align-items:center;gap:.4rem;margin:.55rem 0 .25rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted)">
+        <span style="width:8px;height:8px;border-radius:50%;background:${getCatColor(g.cat)};flex-shrink:0"></span>${esc(g.cat)}<span style="font-weight:600;color:var(--faint)">${g.items.length}</span>
       </div>
-      <button type="button" id="cookPickStart" ${picked.size?'':'disabled'} style="width:100%;background:${picked.size?'var(--accent)':'var(--surface2)'};color:${picked.size?'#fff':'var(--faint)'};border:none;border-radius:12px;padding:.7rem;font-family:var(--font);font-size:.9rem;font-weight:700;cursor:${picked.size?'pointer':'default'}">👨‍🍳 ${S.lang==='en'?'Start cooking session':'Kochsession starten'}${picked.size?` (${picked.size})`:''}</button>
-    `;
-    md.querySelector('#cookPickClose').onclick=()=>document.body.removeChild(ov);
-    md.querySelector('#cookPickSearch').addEventListener('input',e=>{query=e.target.value;render();md.querySelector('#cookPickSearch').focus();});
-    md.querySelectorAll('[data-rid]').forEach(cb=>cb.addEventListener('change',()=>{
-      const rid=cb.dataset.rid;
-      cb.checked?picked.add(rid):picked.delete(rid);
+      ${g.items.map(r=>`<label data-row="${r.id}" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border-radius:9px;margin-bottom:.3rem;background:${picked.has(r.id)?'var(--accent-bg,rgba(99,102,241,.12))':'var(--surface2)'};cursor:pointer">
+        <input type="checkbox" data-rid="${r.id}" ${picked.has(r.id)?'checked':''}>
+        <span style="font-family:var(--ui);font-size:.85rem;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.title)}</span>
+      </label>`).join('')}`).join('');
+  }
+
+  function updateStartBtn(){
+    const btn=md.querySelector('#cookPickStart');
+    btn.disabled=!picked.size;
+    btn.style.background=picked.size?'var(--accent)':'var(--surface2)';
+    btn.style.color=picked.size?'#fff':'var(--faint)';
+    btn.style.cursor=picked.size?'pointer':'default';
+    btn.textContent='👨‍🍳 '+(en?'Start cooking session':'Kochsession starten')+(picked.size?` (${picked.size})`:'');
+  }
+
+  function bindSessions(){
+    md.querySelectorAll('[data-opensess]').forEach(el=>el.addEventListener('click',()=>{
+      closeOv();
+      S.activeSession=el.dataset.opensess;
+      S.view='session';
       render();
     }));
-    md.querySelector('#cookPickStart').addEventListener('click',()=>{
-      if(!picked.size)return;
-      document.body.removeChild(ov);
-      createCookSession([...picked]);
-    });
+    md.querySelectorAll('[data-delsess]').forEach(el=>el.addEventListener('click',()=>{
+      const id=el.dataset.delsess;
+      const se=S.sessions.find(x=>x.id===id);
+      if(!confirm((en?'Delete session "':'Session „')+(se?.name||'')+(en?'"?':'" löschen?')))return;
+      S.sessions=S.sessions.filter(x=>x.id!==id);
+      if(S.activeSession===id)S.activeSession=null;
+      saveSessions();
+      md.querySelector('#cookPickSessions').innerHTML=sessionsHtml();
+      bindSessions();
+      if(S.view==='home')renderApp(); // Kachel-Zähler aktualisieren
+    }));
   }
-  render();
+
+  // Gerüst wird nur EINMAL aufgebaut – Suche/Auswahl aktualisieren nur die Liste,
+  // damit das Suchfeld Fokus und Cursorposition behält.
+  md.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem">
+      <div style="font-family:var(--font);font-weight:800;font-size:1.05rem;color:var(--text)">👨‍🍳 ${en?'Cooking mode':'Kochmodus'}</div>
+      <button type="button" id="cookPickClose" style="background:none;border:none;font-size:1.3rem;color:var(--muted);cursor:pointer;line-height:1;padding:0">✕</button>
+    </div>
+    <div id="cookPickSessions">${sessionsHtml()}</div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.7rem">${en?'Choose the recipes you want to cook (in parallel).':'Wähle die Rezepte, die du (parallel) kochen möchtest.'}</div>
+    <input id="cookPickSearch" type="search" autocomplete="off" placeholder="${en?'Search…':'Suchen…'}" style="width:100%;padding:.5rem .7rem;border:1px solid var(--border2);border-radius:8px;background:var(--bg);font-family:var(--font);font-size:.85rem;color:var(--text);outline:none;margin-bottom:.4rem;box-sizing:border-box">
+    <div id="cookPickList" style="overflow-y:auto;flex:1;min-height:0;margin-bottom:.9rem">${listHtml()}</div>
+    <button type="button" id="cookPickStart" disabled style="width:100%;border:none;border-radius:12px;padding:.7rem;font-family:var(--font);font-size:.9rem;font-weight:700"></button>`;
+  updateStartBtn();
+  bindSessions();
+
+  md.querySelector('#cookPickClose').onclick=closeOv;
+  md.querySelector('#cookPickSearch').addEventListener('input',e=>{
+    query=e.target.value;
+    md.querySelector('#cookPickList').innerHTML=listHtml();
+  });
+  md.querySelector('#cookPickList').addEventListener('change',e=>{
+    const cb=e.target.closest('[data-rid]');if(!cb)return;
+    const rid=cb.dataset.rid;
+    cb.checked?picked.add(rid):picked.delete(rid);
+    const row=cb.closest('[data-row]');
+    if(row)row.style.background=cb.checked?'var(--accent-bg,rgba(99,102,241,.12))':'var(--surface2)';
+    updateStartBtn();
+  });
+  md.querySelector('#cookPickStart').addEventListener('click',()=>{
+    if(!picked.size)return;
+    closeOv();
+    createCookSession([...picked]);
+  });
   ov.appendChild(md);document.body.appendChild(ov);
-  ov.addEventListener('click',e=>{if(e.target===ov)document.body.removeChild(ov);});
+  ov.addEventListener('click',e=>{if(e.target===ov)closeOv();});
 }
 
 function showCatPicker(currentCat, onSelect){
