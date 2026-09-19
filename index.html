@@ -1706,9 +1706,12 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '4.1.0';
+const APP_VERSION = '4.1.3';
 const APP_DATE = '2026-09-19';
 const VERSION_HISTORY = [
+  { version:'4.1.3', date:'2026-09-19', de:['Ablaufplan: Die feste Grenze für „lange Wartezeit\" (4 Std.) ist weg. Es zählt nur noch, wie viel Zeit frei ist: Passt der Rest eines anderen Rezepts in eine Wartezeit, wird er ans Ende gelegt und die Pause davor angezeigt – egal ob 40 Minuten oder über Nacht. Wird ein Rezept später komplett in eine Wartezeit passen, wird nicht vorher mit Vorbereitung begonnen.','KI-Ablaufplan: Prompt entsprechend angepasst'], en:['Timeline: the fixed limit for a \"long wait\" (4 h) is gone. Only the free time counts now: if the rest of another recipe fits into a wait it is placed at the end and the pause before it is shown – whether 40 minutes or overnight. If a recipe will fit completely into a later wait, no prep is started earlier.','AI timeline: prompt adjusted accordingly'] },
+  { version:'4.1.2', date:'2026-09-19', de:['Ablaufplan: Bei Wartezeiten wird die freie Pause jetzt deutlich hervorgehoben (⏸ z. B. „1 Std. 29 Min. Pause – dann Spätzle starten\"), der Startschritt des anderen Rezepts trägt den Hinweis ⏰ „Hier beginnen – nach 1 Std. 29 Min. Pause\"'], en:['Timeline: waiting times now clearly show the free pause (⏸ e.g. \"1 h 29 min pause – then start spaetzle\"), and the first step of the other recipe carries the note ⏰ \"Start here – after 1 h 29 min pause\"'] },
+  { version:'4.1.1', date:'2026-09-19', de:['🚨 Fix: Ablaufplan – bei Wartezeiten von 1–4 Std. (z. B. 2 Std. Gulasch schmoren) blieb das andere Rezept komplett außen vor, weil 2 Std. schon als „Pause\" galt. Echte Pause ist jetzt erst ab 4 Std. (Teig über Nacht).','Ablaufplan: Passt ein anderes Rezept in die Wartezeit, wird es „just in time\" ans Ende der Wartezeit gelegt – Beilagen wie Spätzle werden so erst kurz vor dem Servieren fertig, nicht zwei Stunden zu früh','KI-Ablaufplan: Prompt um Regel für mittlere Wartezeiten ergänzt'], en:['🚨 Fix: timeline – for waits of 1–4 h (e.g. goulash simmering for 2 h) the other recipe was left out completely because 2 h already counted as a \"pause\". A real pause now starts at 4 h (dough overnight).','Timeline: if another recipe fits into the wait it is placed \"just in time\" at the END of the wait – sides like spaetzle are ready shortly before serving instead of two hours early','AI timeline: prompt extended with a rule for medium waits'] },
   { version:'4.1.0', date:'2026-09-19', de:['🚨 Fix: Suchfeld im Kochmodus – der Cursor sprang nach jedem Buchstaben an den Anfang, weil bei jedem Tastendruck das ganze Fenster neu aufgebaut wurde. Es wird jetzt nur noch die Rezeptliste aktualisiert.','🚨 Fix: Kochsessions waren nach dem Verlassen nicht mehr auffindbar (gespeichert waren sie, es gab aber keinen Weg zurück). Im Kochmodus stehen gespeicherte Sessions jetzt oben mit Fortschritt zum Weitermachen oder Löschen.','Kochmodus: Rezeptauswahl nach Kategorien gruppiert und alphabetisch sortiert','Ablaufplan (ohne KI): Lange Wartezeiten (ab 2 Std., z. B. Teig über Nacht) werden nicht mehr mit Schritten anderer Rezepte aufgefüllt – Vorbereitung wie Linsen abspülen oder Gemüse schneiden landet nicht mehr Stunden vor dem eigentlichen Kochen. Die anderen Rezepte starten erst nach der Wartezeit.','Ablaufplan (ohne KI): Beim Auffüllen von Wartezeiten wird die Reihenfolge der Schritte im Rezept jetzt eingehalten (vorher konnten Schritte übersprungen werden, z. B. Pürieren vor dem Köcheln)','Ablaufplan (KI): Prompt um Regeln für lange Wartezeiten, Reihenfolge und gemeinsame Fertigstellung ergänzt; lange Zeiten werden als Std. angezeigt (480m → 8h)','KI-Check: Vorher/Nachher jetzt nebeneinander. Nur tatsächlich geänderte Wörter werden markiert; wird nur eine Zeit oder Aktiv/Passiv ergänzt, bleibt der Schritt neutral und die Zeit erscheint als Hinweis-Chip. Unveränderte Zeilen werden zusammengeklappt.','Startseite: Kachel „Einkaufsliste\" steht jetzt an Platz 2; Kochmodus-Kachel zeigt die Anzahl gespeicherter Sessions','Home-Button ist jetzt auch in Rezepten (Detail und Formular) verfügbar'], en:['🚨 Fix: search field in cooking mode – the cursor jumped to the start after every letter because the whole dialog was rebuilt on each keystroke. Only the recipe list is updated now.','🚨 Fix: cooking sessions could not be found again after leaving them (they were saved, but there was no way back). Saved sessions now appear at the top of cooking mode with progress, to resume or delete.','Cooking mode: recipe selection is grouped by category and sorted alphabetically','Timeline (non-AI): long waits (2 h and more, e.g. dough overnight) are no longer filled with steps of other recipes – prep like rinsing lentils or chopping vegetables no longer lands hours before the actual cooking. The other recipes start after the wait.','Timeline (non-AI): when filling waiting times the order of steps within a recipe is now respected (before, steps could be skipped, e.g. pureeing before simmering)','Timeline (AI): prompt extended with rules for long waits, step order and common finishing time; long durations are shown in hours (480m → 8h)','AI check: before/after now side by side. Only actually changed words are highlighted; if just a duration or active/passive is added, the step stays neutral and the duration appears as a hint chip. Unchanged lines are collapsed.','Home: \"Shopping list\" tile is now in 2nd place; cooking-mode tile shows the number of saved sessions','Home button is now also available inside recipes (detail and form)'] },
   { version:'4.0.0', date:'2026-09-19', de:['🚨 Fix: Tab-Flippen zwischen Zutaten/Zubereitung behoben – Panel-Container sprang bei jedem Re-Render kurz auf Tab 1 zurück (per requestAnimationFrame + CSS scroll-behavior:smooth), was wie ein Hin-und-Her-Flippen aussah. Positionierung ist jetzt synchron und ohne Animation.','Neu: 🏠 Home-Button oben im Header, von (fast) überall mit einem Klick zur Startseite (außer Detail/Formular, dort führt der Zurück-Pfeil ohnehin dorthin zurück)','Neu: Kachel "Kochmodus" auf der Startseite – Rezepte für eine parallele Kochsession direkt auswählen, ohne den Umweg über den Mehrfachauswahl-Modus der Liste','Neu: Beim Start einer Kochsession wird geprüft, ob allen Schritten Zeiten/Aktiv-Passiv fehlen – falls ja, Hinweis mit Option zum manuellen oder KI-gestützten Nachtragen pro Rezept, bevor der Ablaufplan erstellt wird','KI-Check prüft jetzt auch, ob bei Zutaten Mengenangaben fehlen, und schlägt plausible Mengen vor (mit "~" als Schätzung markiert) – bestehende Mengen werden nie verändert'], en:['🚨 Fix: fixed the tab flip between ingredients/steps – the panel container briefly jumped back to tab 1 on every re-render (via requestAnimationFrame + CSS scroll-behavior:smooth), which looked like flickering back and forth. Positioning is now synchronous and unanimated.','New: 🏠 home button at the top of the header, one tap back to the home screen from (almost) anywhere (except detail/form, where the back arrow already leads there)','New: "Cooking mode" tile on the home screen – pick recipes for a parallel cooking session directly, without the detour via the list\'s multi-select mode','New: starting a cooking session now checks whether steps are missing times/active-passive – if so, a note offers manual or AI-assisted fixing per recipe before the timeline is built','AI check now also checks whether ingredients are missing quantities and suggests plausible ones (marked with "~" as an estimate) – existing quantities are never changed'] },
   { version:'3.9.7', date:'2026-09-19', de:['KI-Check: "Vorher"-Block durch echte Zeilen-Diff ersetzt – geänderte/neue Zeilen grün, entfernte rot durchgestrichen, statt zwei ähnlich aussehender kompletter Textblöcke, in denen der Unterschied unterging','Neuer Hinweis oben im KI-Check-Fenster, dass nur angehakte Punkte beim "Übernehmen" gespeichert werden'], en:['AI check: replaced the "Before" block with a real line diff – changed/new lines highlighted green, removed lines shown red/struck-through, instead of two similar-looking full text blocks where the difference got lost','Added a note at the top of the AI check window clarifying that only checked items are saved on "Apply"'] },
@@ -5944,6 +5947,14 @@ function fmtStepMins(mins){
   return (Number.isInteger(rounded)?rounded:rounded.toFixed(1))+' Min.';
 }
 
+// Ausgeschrieben: 1 Std. 29 Min.
+function fmtPause(m){
+  m=Math.round(m);
+  if(m<60)return m+' Min.';
+  const h=Math.floor(m/60),r=m%60;
+  return h+' Std.'+(r?' '+r+' Min.':'');
+}
+
 // Kurzformat für die Dauer in der Timeline: 5m, 45s, 8h, 1h 30m
 function fmtTlMins(m){
   if(m<1)return Math.round(m*60)+'s';
@@ -6194,17 +6205,15 @@ function buildSmartTimeline(recipes){
   // Greedy scheduler
   const pending=[...allSteps]; // all steps not yet scheduled
 
-  // Lange Wartezeiten (z. B. Teig über Nacht) sind eine PAUSE, keine Lücke zum Auffüllen:
-  // Schritte anderer Rezepte, die davor einsortiert würden, wären Stunden zu früh (Gemüse
-  // geschnitten, Suppe lange vor dem Brot fertig). Alles bis zur letzten langen Wartezeit des
-  // Hauptrezepts läuft daher ohne Einschübe, die anderen Rezepte starten erst danach.
-  const LONG_WAIT_MIN=120;
-  const isLongWait=s=>s.type==='passive'&&s.mins>=LONG_WAIT_MIN;
-  const primaryAll=allSteps.filter(s=>s.recipeId===primary.id);
-  let lastLongIdx=-1;
-  primaryAll.forEach((s,i)=>{if(isLongWait(s))lastLongIdx=i;});
-  let primaryPos=0;
-  const fmtWait=m=>m>=60?(Math.round(m/6)/10)+' Std.':m+' Min.';
+  // Keine feste Grenze, was eine "lange" Wartezeit ist – stattdessen zählt nur, wie viel Zeit frei ist:
+  // 1) Passt der RESTLICHE Ablauf eines anderen Rezepts komplett in eine Wartezeit, wird er ans ENDE
+  //    dieser Wartezeit gelegt (alles wird zusammen fertig) und die freie Pause davor wird angezeigt.
+  // 2) Sonst werden Wartezeiten mit den nächsten Schritten der anderen Rezepte aufgefüllt (in Rezept-Reihenfolge) –
+  //    außer das andere Rezept passt später komplett in eine Wartezeit; dann wird nicht schon vorher damit begonnen
+  //    (sonst läge z. B. geschnittenes Gemüse stundenlang herum).
+  const fmtWait=m=>m>=60?fmtPause(m):m+' Min.';
+  const remaining=o=>pending.filter(x=>x.recipeId===o.id&&!used.has(x.id));
+  const sumMins=a=>a.reduce((t,x)=>t+x.mins,0);
 
   while(pending.length>0){
     // Find next pending step from primary recipe
@@ -6212,7 +6221,7 @@ function buildSmartTimeline(recipes){
 
     if(!nextPrimary){
       // Primary done, schedule remaining in order
-      pending.filter(s=>!used.has(s.id)).forEach((s,i)=>{
+      pending.filter(s=>!used.has(s.id)).forEach(s=>{
         used.add(s.id);
         scheduled.push({...s,order:scheduled.length,note:''});
       });
@@ -6222,39 +6231,61 @@ function buildSmartTimeline(recipes){
     // Schedule this primary step
     used.add(nextPrimary.id);
     pending.splice(pending.indexOf(nextPrimary),1);
-    const posInPrimary=primaryPos++;
 
-    if(isLongWait(nextPrimary)){
-      const note=others.length
-        ?`${fmtWait(nextPrimary.mins)} Wartezeit – hier ist Pause (z. B. über Nacht). Die anderen Rezepte starten erst danach.`
-        :`${fmtWait(nextPrimary.mins)} Wartezeit`;
-      scheduled.push({...nextPrimary,order:scheduled.length,note});
-    } else if(nextPrimary.type==='passive'&&others.length>0&&posInPrimary>lastLongIdx){
-      // During this passive window, schedule active steps from other recipes
-      let window=nextPrimary.mins;
-      const note=`${nextPrimary.mins} Min. frei – parallelisieren`;
-      scheduled.push({...nextPrimary,order:scheduled.length,note});
-
-      // Fill window with the next steps of the other recipes – IN Rezept-Reihenfolge (nichts wird übersprungen).
-      for(const other of others){
-        const queue=pending.filter(s=>s.recipeId===other.id&&!used.has(s.id));
-        for(const step of queue){
-          if(window<=0)break;
-          used.add(step.id);
-          pending.splice(pending.indexOf(step),1);
-          if(step.type!=='active'){
-            // Passiver Schritt: kann jetzt angestoßen werden und läuft nebenher – die folgenden
-            // Schritte dieses Rezepts hängen davon ab, deshalb hier Schluss für dieses Rezept.
-            scheduled.push({...step,order:scheduled.length,note:`Läuft nebenher – ${nextPrimary.recipeTitle} wartet ebenfalls`});
-            break;
-          }
-          scheduled.push({...step,order:scheduled.length,note:`Während ${nextPrimary.recipeTitle} wartet`});
-          window-=step.mins;
-        }
-      }
-    } else {
+    if(!(nextPrimary.type==='passive'&&nextPrimary.mins>0&&others.length>0)){
       scheduled.push({...nextPrimary,order:scheduled.length,note:''});
+      continue;
     }
+
+    // 1) Komplett passende Rezepte just in time ans Ende der Wartezeit
+    const jit=[];
+    let budget=nextPrimary.mins;
+    for(const other of others){
+      const q=remaining(other);
+      const tot=sumMins(q);
+      if(q.length&&tot<=budget){jit.push({other,q,tot});budget-=tot;}
+    }
+    if(jit.length){
+      const need=sumMins(jit.flatMap(j=>j.q));
+      const pause=Math.max(0,nextPrimary.mins-need);
+      const names=jit.map(j=>j.other.title).join(', ');
+      scheduled.push({...nextPrimary,order:scheduled.length,
+        note:`${fmtWait(nextPrimary.mins)} Wartezeit – ${names} braucht danach ca. ${fmtWait(need)}`,
+        pauseMins:pause>=1?pause:0,pauseNext:names});
+      let first=true;
+      jit.forEach(j=>j.q.forEach(step=>{
+        used.add(step.id);
+        pending.splice(pending.indexOf(step),1);
+        scheduled.push({...step,order:scheduled.length,note:'Gegen Ende der Wartezeit – so wird alles zusammen fertig',startAfterMins:first&&pause>=1?pause:0});
+        first=false;
+      }));
+      continue;
+    }
+
+    // 2) Wartezeit mit den nächsten Schritten anderer Rezepte auffüllen
+    const laterWindows=pending.filter(x=>x.recipeId===primary.id&&x.type==='passive');
+    const idxPrimary=scheduled.length;
+    scheduled.push({...nextPrimary,order:idxPrimary,note:''});
+    let window=nextPrimary.mins,filled=false;
+    for(const other of others){
+      const q=remaining(other);
+      if(laterWindows.some(w=>w.mins>=sumMins(q)))continue;
+      for(const step of q){
+        if(window<=0)break;
+        used.add(step.id);
+        pending.splice(pending.indexOf(step),1);
+        filled=true;
+        if(step.type!=='active'){
+          // Passiver Schritt: kann jetzt angestoßen werden und läuft nebenher; die folgenden Schritte
+          // dieses Rezepts hängen davon ab, deshalb hier Schluss für dieses Rezept.
+          scheduled.push({...step,order:scheduled.length,note:`Läuft nebenher – ${nextPrimary.recipeTitle} wartet ebenfalls`});
+          break;
+        }
+        scheduled.push({...step,order:scheduled.length,note:`Während ${nextPrimary.recipeTitle} wartet`});
+        window-=step.mins;
+      }
+    }
+    if(filled)scheduled[idxPrimary].note=`${fmtWait(nextPrimary.mins)} frei – parallelisieren`;
   }
 
   // Calculate realistic total (not sum but max parallel path)
@@ -6293,9 +6324,10 @@ Klassifizierung:
 Regeln für den Ablaufplan:
 - Die Reihenfolge der Schritte INNERHALB eines Rezepts bleibt immer erhalten.
 - Nutze passive Wartezeiten eines Rezepts für aktive Schritte anderer Rezepte – aber nur, wenn diese Rezepte danach zügig weitergehen.
-- LANGE WARTEZEITEN: Ist ein passiver Schritt länger als 2 Stunden (z. B. Teig über Nacht), ist das eine Pause und keine Lücke zum Auffüllen. Setze KEINE Schritte anderer Rezepte davor (weder Vorbereitung wie Abspülen/Schneiden noch Kochen) – Zutaten würden stundenlang herumstehen bzw. Gerichte viel zu früh fertig sein. Die anderen Rezepte starten erst NACH der Wartezeit.
+- WARTEZEITEN (egal wie lang, auch über Nacht): Passt der komplette Rest eines anderen Rezepts in die Wartezeit, lege ihn ans ENDE der Wartezeit (just in time), damit alles zusammen fertig wird – Beilagen wie Spätzle oder Reis erst kurz vor dem Servieren. Schreibe im Feld \"note\" des Wartesteps, wie viel freie Zeit bis dahin bleibt (z. B. \"1 Std. 29 Min. Pause, dann Spätzle starten\").
+- Beginne kein Rezept mit Vorbereitung (Abspülen, Schneiden …), wenn dessen nächster Schritt erst nach einer langen Wartezeit kommt – sonst liegt Vorbereitetes stundenlang herum.
 - Plane rückwärts vom Servieren: Alle Gerichte sollen möglichst gleichzeitig fertig werden.
-- Schreibe bei langen Wartezeiten im Feld \"note\" einen kurzen Hinweis (z. B. \"über Nacht\").
+
 
 Antworte NUR mit validem JSON, kein weiterer Text:
 {
@@ -6421,6 +6453,8 @@ function renderSessionTimeline(app, session, recipes){
               ${step.type?`<span onclick="event.stopPropagation();openStepEditModal('${session.id}','${step.id}')" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" style="font-size:.6rem;padding:.05rem .28rem;border-radius:4px;font-family:var(--ui);font-weight:600;flex-shrink:0;background:${step.type==='passive'?'rgba(248,113,113,.15)':'rgba(74,222,128,.15)'};color:${step.type==='passive'?'#f87171':'#4ade80'};cursor:pointer">${step.type==='passive'?'⏳':'⚡'}</span>`:''}
             </div>
             <div style="font-size:.88rem;color:${step.done?'var(--muted)':'var(--text)'};line-height:1.5;${step.done?'text-decoration:line-through':''}">${esc(step.text)}</div>
+            ${step.pauseMins>0?`<div style="display:inline-block;margin-top:.3rem;padding:.2rem .5rem;border-radius:6px;background:rgba(245,158,11,.18);color:#f59e0b;font-size:.74rem;font-weight:700;font-family:var(--ui)">⏸ ${fmtPause(step.pauseMins)} Pause${step.pauseNext?' – dann '+esc(step.pauseNext)+' starten':''}</div>`:''}
+            ${step.startAfterMins>0?`<div style="display:inline-block;margin-top:.3rem;padding:.2rem .5rem;border-radius:6px;background:rgba(74,222,128,.18);color:#4ade80;font-size:.74rem;font-weight:700;font-family:var(--ui)">⏰ Hier beginnen – nach ${fmtPause(step.startAfterMins)} Pause</div>`:''}
             ${step.note?`<div style="font-size:.68rem;color:var(--muted);margin-top:.2rem;font-style:italic">${esc(step.note)}</div>`:''}
           </div>
         </div>`;
