@@ -657,6 +657,11 @@ const ALLOWED_TAGS=["Vegetarisch","Vegan","Italienisch","Französisch","Deutsch"
 const TAG_GROUPS=[["Ernährung",["Vegetarisch","Vegan"]],["Küche",["Italienisch","Französisch","Deutsch","Asiatisch","Orientalisch","Mediterran"]],["Hauptzutat",["Fisch","Fleisch","Nudeln","Reis","Kartoffel","Tofu","Käse","Hülsenfrüchte","Obst"]],["Charakter",["Klassiker","Comfort Food","Kinderfreundlich","Festlich","Scharf"]]];
 function qTagStyle(sel){return `padding:.32rem .75rem;border-radius:20px;font-size:.82rem;font-family:var(--ui);cursor:pointer;border:1px solid ${sel?'var(--accent)':'var(--border2)'};background:${sel?'var(--accent)':'var(--surface2)'};color:${sel?'#fff':'var(--muted)'};transition:all .12s`;}
 function sortTags(arr){const o=ALLOWED_TAGS;return [...new Set(arr)].sort((a,b)=>{const ia=o.indexOf(a),ib=o.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib)||a.localeCompare(b);});}
+function quickTagChips(selected){
+  const counts={};S.recipes.forEach(r=>(r.tags||[]).forEach(x=>{counts[x]=(counts[x]||0)+1;}));
+  const clr=selected.length?`<button type="button" data-qclear="1" title="${S.lang==='en'?'Clear':'Zurücksetzen'}" style="${qTagStyle(false)};flex-shrink:0;white-space:nowrap;font-weight:700">✕</button>`:'';
+  return clr+ALLOWED_TAGS.filter(x=>counts[x]).map(x=>`<button type="button" data-qf="${esc(x)}" style="${qTagStyle(selected.includes(x))};flex-shrink:0;white-space:nowrap">${esc(x)}</button>`).join('');
+}
 const TAG_RULE='Tags: 2–5 Stück, ausschließlich aus dieser Liste (exakte Schreibweise): '+ALLOWED_TAGS.join(', ')+'. Vegan nur zusammen mit Vegetarisch; Fisch-/Austern-/Worcestersauce und Sardellen gelten als nicht vegetarisch, Honig als nicht vegan; Cocktails bekommen keine Tags.';
 // Zuordnung bestehender Rezepte: id -> [Kategorie-Index in DEFAULT_CATS, "Tag1,Tag2"]
 const SCHEMA_MAP={"r17801427430290jy":[0,"Asiatisch,Tofu"],"r178014274302916p":[0,"Vegetarisch,Vegan,Deutsch,Kartoffel"],"r17801427430291z1":[5,"Vegetarisch,Vegan"],"r178014274302929o":[4,"Vegetarisch,Orientalisch"],"r17801427430292u5":[3,"Vegetarisch,Französisch"],"r17801427430293x2":[0,"Vegetarisch,Vegan,Orientalisch,Reis"],"r178014274302943u":[0,"Asiatisch,Nudeln"],"r178014274302949k":[6,"Vegetarisch,Vegan,Französisch"],"r178014274302957u":[4,"Vegetarisch,Orientalisch"],"r1780142743029681":[0,"Fisch"],"r17801427430296kd":[7,"Vegetarisch,Obst"],"r17801427430297vn":[5,"Vegetarisch,Vegan,Französisch"],"r17801427430299u9":[5,"Vegetarisch,Vegan"],"r1780142743029a2u":[3,"Vegetarisch,Deutsch,Klassiker"],"r1780142743029a7x":[0,"Vegetarisch,Vegan,Asiatisch,Scharf"],"r1780142743029aai":[5,"Vegetarisch,Vegan"],"r1780142743029aqe":[0,"Vegetarisch,Deutsch,Klassiker"],"r1780142743029bz0":[0,"Mediterran,Fisch"],"r1780142743029c9m":[3,"Deutsch,Kartoffel"],"r1780142743029dg7":[0,"Fisch"],"r1780142743029enc":[0,"Italienisch,Fleisch,Nudeln,Klassiker"],"r1780142743029gv4":[2,"Orientalisch,Fleisch,Käse"],"r1780142743029h4u":[3,"Vegetarisch,Mediterran"],"r1780142743029hjt":[7,"Vegetarisch,Französisch,Kinderfreundlich"],"r1780142743029ho4":[0,"Vegetarisch,Französisch,Käse,Kinderfreundlich"],"r1780142743029hsm":[1,"Fleisch,Käse"],"r1780142743029jag":[0,"Vegetarisch,Französisch,Kinderfreundlich"],"r1780142743029ldi":[0,"Orientalisch,Fleisch"],"r1780142743029miv":[7,"Vegetarisch,Vegan,Obst"],"r1780142743029mr7":[0,"Vegetarisch,Französisch,Kinderfreundlich"],"r1780142743029n86":[0,"Fleisch,Festlich"],"r1780142743029o48":[0,"Deutsch,Fleisch,Klassiker"],"r1780142743029ooh":[0,"Deutsch,Fisch"],"r1780142743029qbj":[0,"Französisch,Fleisch,Klassiker,Festlich"],"r1780142743029sdz":[6,"Vegetarisch,Vegan,Italienisch"],"r1780142743029sgm":[0,"Fisch,Nudeln"],"r1780142743029sry":[0,"Vegetarisch,Italienisch"],"r1780142743029ugu":[1,"Vegetarisch,Französisch"],"r1780142743029vg2":[0,"Mediterran,Fisch"],"r1780142743029voq":[1,"Französisch,Fisch"],"r1780142743029vta":[0,"Fleisch"],"r1780142743029wbz":[0,"Vegetarisch,Mediterran,Käse"],"r1780142743029wz2":[7,"Vegetarisch,Obst"],"r1780142743029x6z":[7,"Vegetarisch,Vegan,Obst"],"r1780142743029xp4":[0,"Fleisch"],"r1780142743029y1y":[0,"Vegetarisch,Deutsch,Käse,Comfort Food"],"r1780142743029y7i":[4,"Vegetarisch,Vegan,Orientalisch,Hülsenfrüchte"],"r1780142743029zvz":[4,"Italienisch,Fleisch,Klassiker"],"r178014274303013a":[0,"Deutsch,Fleisch"],"r17801427430301sn":[0,"Französisch"],"r17801427430302ja":[4,"Vegetarisch,Vegan,Orientalisch,Hülsenfrüchte"],"r17801427430303d5":[0,"Fisch"],"r17801427430304h1":[0,"Italienisch,Nudeln,Comfort Food"],"r17801427430307lg":[0,"Orientalisch,Fleisch"],"r1780142743030btk":[0,"Deutsch,Fleisch,Klassiker"],"r1780142743030e7y":[1,"Vegetarisch,Vegan,Orientalisch,Hülsenfrüchte"],"r1780142743030fjc":[0,"Asiatisch,Fisch"],"r1780142743030fk6":[4,"Vegetarisch,Orientalisch,Scharf"],"r1780142743030g6v":[0,"Vegetarisch,Reis"],"r1780142743030gb9":[0,"Mediterran,Fisch"],"r1780142743030j2c":[8,"Vegetarisch"],"r1780142743030lf8":[4,"Vegetarisch,Vegan,Italienisch"],"r1780142743030mpn":[8,"Italienisch,Fisch"],"r1780142743030ozh":[3,"Vegetarisch,Vegan,Deutsch,Kartoffel,Klassiker,Comfort Food"],"r1780142743030q73":[7,"Vegetarisch"],"r1780142743030r5d":[0,"Fisch"],"r1780142743030uoy":[3,"Vegetarisch,Vegan"],"r1780142743030vic":[0,"Französisch,Fisch"],"r1780142743030yan":[0,"Vegetarisch,Vegan,Asiatisch,Nudeln"],"r1780142743030yj0":[0,"Deutsch,Fisch,Klassiker,Comfort Food"],"r1780250506951thh":[0,"Mediterran,Fisch"],"r1780341764970apb":[4,"Vegetarisch,Vegan,Italienisch"],"r1780726732324tj3":[0,"Vegetarisch,Italienisch,Reis,Klassiker,Comfort Food"],"r1780949719857swc":[6,"Vegetarisch,Vegan"],"r17809497272290l1":[5,"Vegetarisch,Vegan"],"r1781201364168e1x":[8,"Deutsch,Klassiker,Kinderfreundlich"],"r1781526620393f0z":[7,"Vegetarisch,Italienisch,Klassiker,Festlich"],"r1781862799859izz":[0,"Deutsch,Fisch,Comfort Food"],"r1781901666144squ":[0,"Französisch,Fisch,Hülsenfrüchte,Comfort Food"],"r1782149482250lry":[0,"Italienisch,Fleisch,Nudeln,Comfort Food"],"r17826446552281cg":[9,""],"r17826446552281so":[9,""],"r17826446552282k4":[9,""],"r17826446552287w5":[9,""],"r1782644655228bn7":[9,""],"r1782644655228f7q":[9,""],"r1782644655228lj5":[9,""],"r1782644655228mi0":[9,""],"r1782644655228ovk":[9,""],"r1782644655228pim":[9,""],"r1782644655228pzf":[9,""],"r1782644655228qqq":[9,""],"r1782644655228r1x":[9,""],"r1782644655228rhy":[9,""],"r1782644655228set":[9,""],"r1782644655228tm7":[9,""],"r1782644655228tui":[9,""],"r1782644655228x54":[9,""],"r17830985025840vg":[0,"Französisch,Fisch,Festlich"],"r1783232648400sip":[0,"Mediterran,Fisch,Festlich"],"r1783267067074qmn":[1,"Vegetarisch,Orientalisch,Hülsenfrüchte,Klassiker,Comfort Food"],"r1783607443662uir":[0,"Fleisch,Hülsenfrüchte,Klassiker,Comfort Food"],"r17842218341045h8":[0,"Asiatisch,Fleisch,Nudeln,Käse,Scharf"],"r1784381608093mud":[0,"Vegetarisch,Asiatisch,Nudeln,Tofu,Scharf"],"r1784910575163atc":[0,"Asiatisch,Fleisch,Nudeln"],"r1784915057543rdg":[1,"Asiatisch,Fleisch,Nudeln,Comfort Food,Scharf"],"r17860176617588er":[6,"Vegetarisch,Vegan,Italienisch"],"r17860269495959hu":[3,"Vegetarisch,Vegan,Mediterran,Kartoffel,Comfort Food"],"r1786027344348k31":[2,"Vegetarisch,Vegan,Deutsch,Kartoffel,Klassiker,Comfort Food"],"r1786388801725mgq":[0,"Deutsch,Fleisch,Klassiker"],"r1787316312513047":[6,"Vegetarisch,Italienisch,Nudeln,Klassiker"],"r1787316312513b73":[6,"Vegetarisch,Vegan,Italienisch,Nudeln,Klassiker"],"r1787316312513zfg":[6,"Vegetarisch,Italienisch,Nudeln,Klassiker"],"r1788672805708tli":[2,"Asiatisch,Obst,Scharf"],"r1788699207266v2v":[5,"Vegetarisch,Vegan,Klassiker"],"r1788700247164jsd":[5,"Vegetarisch,Vegan,Klassiker"],"r1788952566005d2x":[1,"Kartoffel"],"r1789708341721tec":[4,"Vegetarisch,Vegan,Orientalisch,Hülsenfrüchte"],"r1789708371545k1n":[0,"Fleisch,Nudeln,Scharf"],"r1790427769049tcq":[0,"Vegetarisch,Asiatisch,Nudeln"],"r17904604932115f6":[5,"Vegetarisch,Vegan"],"r1791641345483ubg":[0,"Asiatisch,Reis,Tofu"],"r1794066672904gnr":[0,"Vegetarisch,Nudeln"],"r1784915008709lh2":[1,"Asiatisch,Fleisch,Nudeln,Comfort Food,Scharf"],"r1786017539105ls6":[6,"Vegetarisch,Vegan,Italienisch"],"r17873162890222wk":[6,"Vegetarisch,Italienisch,Nudeln,Klassiker"],"r1787316289022483":[6,"Vegetarisch,Italienisch,Nudeln,Klassiker"],"r17873162890229r1":[6,"Vegetarisch,Vegan,Italienisch,Nudeln,Klassiker"]};
@@ -1800,9 +1805,11 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '4.3.2';
+const APP_VERSION = '4.4.1';
 const APP_DATE = '2026-11-07';
 const VERSION_HISTORY = [
+  { version:'4.4.1', date:'2026-11-07', de:['Rezept-Formular: Tag-Schnellauswahl sauber ausgerichtet – Gruppenname links, Tags rechts in einer Spalte; umgebrochene Zeilen beginnen jetzt bündig unter dem ersten Tag statt unter dem Gruppennamen.'], en:['Recipe form: quick tag picker aligned cleanly – group name on the left, tags in one column on the right; wrapped lines now start flush under the first tag instead of under the group name.'] },
+  { version:'4.4.0', date:'2026-11-07', de:['🆕 Tag-Schnellfilter: Direkt unter der Suche – auf der Startseite und unter „Rezepte“ – steht eine waagerecht scrollbare Leiste mit allen Tags, die es in deinen Rezepten gibt. Ein Tipp filtert sofort (mehrere Tags = UND), ✕ setzt zurück. Auf der Startseite werden die Reihen direkt gefiltert; „Alle anzeigen“ und die Suche übernehmen die gewählten Tags.','Rezepte-Liste: Mit gewähltem Tag-Filter erscheint eine flache Trefferliste statt der eingeklappten Kategorien. Der Filter-Button leuchtet jetzt auch dann, wenn Filter über die Leiste gesetzt wurden.'], en:['🆕 Quick tag filter: right below the search – on the home screen and in “Rezepte” – a horizontally scrollable bar with all tags in use. One tap filters instantly (several tags = AND), ✕ resets. On the home screen the rows are filtered directly; “See all” and search carry the chosen tags over.','Recipe list: with a tag filter active you get a flat result list instead of collapsed categories. The filter button now also lights up when filters were set via the bar.'] },
   { version:'4.3.2', date:'2026-11-07', de:['Tag „Schnell“ entfernt (doppelt zum Filter „Gesamtzeit“) – es bleiben 22 feste Tags. Wer ihn schon an Rezepten hat: Einstellungen → Tags → „Schnell“ löschen oder das Schema erneut anwenden.'], en:['Removed the “Schnell” tag (redundant with the total-time filter) – 22 fixed tags remain. If recipes already carry it: Settings → Tags → delete “Schnell”, or apply the scheme again.'] },
   { version:'4.3.1', date:'2026-11-07', de:['Rezept-Formular: Die festen Tags stehen jetzt als Schnellauswahl nach Gruppen (Ernährung, Küche, Hauptzutat, Charakter) direkt sichtbar da – ein Tipp schaltet um, ohne dass sich die Maske neu aufbaut. „Vegan“ setzt automatisch auch „Vegetarisch“.','Weitere/eigene Tags und das Feld für neue Tags sind darunter aufklappbar („Weitere Tags“). Beim Speichern werden die Tags einheitlich sortiert.'], en:['Recipe form: the fixed tags are now a quick-pick grouped by diet, cuisine, main ingredient and character – one tap toggles without rebuilding the form. “Vegan” also sets “Vegetarisch” automatically.','Other/custom tags and the new-tag field are collapsed below (“Weitere Tags”). Tags are sorted consistently on save.'] },
   { version:'4.3.0', date:'2026-11-07', de:['🆕 Neues Kategorie- & Tag-Schema: 11 Kategorien nach Gerichtstyp (Hauptgerichte, Suppen, Salate, Beilagen, Saucen & Dips, Brot & Gebäck, Grundrezepte & Teige, Desserts & Kuchen, Frühstück & Snacks, Cocktails & Longdrinks, Sonstiges) und 23 feste Tags (Ernährung, Küche, Hauptzutat, Charakter, Schnell). Fisch, Fleisch und Pasta findet man jetzt über Tags statt über Kategorien.','Neu: Einstellungen → Kategorien → „Neues Kategorie- & Tag-Schema anwenden“ stellt alle bestehenden Rezepte einmalig um (Zuordnung über die Rezept-ID, Rezepte ohne Zuordnung über die alte Kategorie).','KI-Import, Websuche, Rezept-Generator und KI-Check nutzen jetzt automatisch deine aktuellen Kategorien und die feste Tag-Liste.'], en:['🆕 New category & tag scheme: 11 categories by dish type and 23 fixed tags (diet, cuisine, main ingredient, character, quick). Fish, meat and pasta are now found via tags instead of categories.','New: Settings → Categories → “Apply new category & tag scheme” converts all existing recipes once (matched by recipe ID, others via their old category).','AI import, web search, recipe generator and AI check now use your current categories and the fixed tag list automatically.'] },
@@ -2263,12 +2270,12 @@ function closeMenu(){
   document.getElementById('menuOv').classList.remove('on');
   document.getElementById('menuPanel').classList.remove('on');
 }
-function navFromMenu(view){
+function navFromMenu(view,tags){
   closeMenu();
   if(S.view===view&&view!=='newrecipe'){return;}
   const prevView=S.view;
   saveScroll();
-  if(view==='list'||view==='favorites'){S.lastSelId=null;S.search='';S.filters={cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};saveSession();}
+  if(view==='list'||view==='favorites'){S.lastSelId=null;S.search='';S.filters={cats:[],tags:[...(tags||[])],rating:0,cooked:'all',maxTime:0,favOnly:false};saveSession();}
   if(view==='newrecipe'){S.aiSearchChat=[];S.formFrom=prevView;}
   S.view=view;S.selId=null;
   render();restoreScroll(view);
@@ -2339,20 +2346,23 @@ function homeCatRow(title,items,onMoreView,onMoreExtra){
 function renderHome(app){
   const shopCnt=S.shopping.filter(x=>!x.done).length;
   const pantryCnt=S.pantry.filter(x=>pantryStatus(x)==='expired').length;
-  const favs=S.recipes.filter(r=>r.favorite);
+  if(!S.homeTags)S.homeTags=[];
+  const passTags=r=>S.homeTags.every(x=>(r.tags||[]).includes(x));
+  const favs=S.recipes.filter(r=>r.favorite&&passTags(r));
   const cats=getCats();
   const rows=[]; // {title, items, filterCat}
   if(favs.length)rows.push({title:'❤️ '+t('nav_favorites'),items:favs,goto:'favorites'});
   cats.forEach(c=>{
-    const items=S.recipes.filter(r=>r.category===c);
+    const items=S.recipes.filter(r=>r.category===c&&passTags(r));
     if(items.length)rows.push({title:c,items,goto:'list',cat:c});
   });
   const knownCats=new Set(cats);
-  const misc=S.recipes.filter(r=>!knownCats.has(r.category));
+  const misc=S.recipes.filter(r=>!knownCats.has(r.category)&&passTags(r));
   if(misc.length)rows.push({title:'Sonstiges',items:misc,goto:'list',cat:null});
 
   app.innerHTML=`
     <div class="home-search" id="homeSearch"><span class="hs-ic">🔍</span><span class="hs-txt">${t('list_search')}</span></div>
+    <div class="hscroll" id="homeQuick" style="gap:.4rem;margin:.1rem 0 .7rem">${quickTagChips(S.homeTags)}</div>
     <div class="hscroll" id="homeTeasers">
       <button class="teaser-card" data-teaser="newrecipe"><span class="ti">➕</span><span class="tt">${S.lang==='en'?'New Recipe':'Neues Rezept'}</span><span class="ts">${S.lang==='en'?'AI, import or manual':'KI, Import oder manuell'}</span></button>
       <button class="teaser-card" data-teaser="shopping">${shopCnt?`<span class="badge tbadge">${shopCnt}</span>`:''}<span class="ti">🛒</span><span class="tt">${t('nav_list')}</span><span class="ts">${shopCnt?`${shopCnt} ${S.lang==='en'?'open':'offen'}`:S.lang==='en'?'All done':'Alles erledigt'}</span></button>
@@ -2362,10 +2372,18 @@ function renderHome(app){
       <button class="teaser-card" data-teaser="settings"><span class="ti">⚙️</span><span class="tt">${t('hdr_settings')}</span><span class="ts">${S.lang==='en'?'Account & more':'Konto & mehr'}</span></button>
     </div>
     <div id="homeRows">
-      ${rows.length?rows.map(r=>homeCatRow(r.title,r.items)).join(''):`<div class="empty"><div class="ei">📖</div><p>${t('list_empty')}</p><button class="btn bp" id="homeAddFirstBtn">${t('list_add_first')}</button></div>`}
+      ${rows.length?rows.map(r=>homeCatRow(r.title,r.items)).join(''):S.homeTags.length?`<div class="empty"><div class="ei">🔍</div><p>${t('list_no_results')}</p></div>`:`<div class="empty"><div class="ei">📖</div><p>${t('list_empty')}</p><button class="btn bp" id="homeAddFirstBtn">${t('list_add_first')}</button></div>`}
     </div>`;
 
-  document.getElementById('homeSearch').addEventListener('click',()=>navFromMenu('list'));
+  document.getElementById('homeSearch').addEventListener('click',()=>navFromMenu('list',S.homeTags));
+  document.getElementById('homeQuick')?.addEventListener('click',e=>{
+    const b=e.target.closest('[data-qf],[data-qclear]');if(!b)return;
+    if(b.dataset.qclear)S.homeTags=[];
+    else{const x=b.dataset.qf;S.homeTags=S.homeTags.includes(x)?S.homeTags.filter(y=>y!==x):[...S.homeTags,x];}
+    const sl=document.getElementById('homeQuick')?.scrollLeft||0;
+    renderHome(app);
+    const nb=document.getElementById('homeQuick');if(nb)nb.scrollLeft=sl;
+  });
   document.getElementById('homeAddFirstBtn')?.addEventListener('click',()=>navFromMenu('newrecipe'));
   document.querySelectorAll('[data-teaser]').forEach(b=>b.addEventListener('click',()=>{
     if(b.dataset.teaser==='cookmode'){openCookModePicker();return;}
@@ -2374,9 +2392,9 @@ function renderHome(app){
   document.querySelectorAll('[data-morerow]').forEach(b=>b.addEventListener('click',()=>{
     const row=rows.find(r=>r.title===b.dataset.morerow);if(!row)return;
     saveScroll();
-    if(row.goto==='favorites'){S.view='favorites';S.search='';S.filters={cats:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};}
+    if(row.goto==='favorites'){S.view='favorites';S.search='';S.filters={cats:[],tags:[...S.homeTags],rating:0,cooked:'all',maxTime:0,favOnly:false};}
     else{
-      S.view='list';S.search='';S.filters={cats:row.cat?[row.cat]:[],tags:[],rating:0,cooked:'all',maxTime:0,favOnly:false};
+      S.view='list';S.search='';S.filters={cats:row.cat?[row.cat]:[],tags:[...S.homeTags],rating:0,cooked:'all',maxTime:0,favOnly:false};
       if(row.cat){if(!S.collapsedCats)S.collapsedCats=new Set(getCats());S.collapsedCats.delete(row.cat);}
     }
     S.lastSelId=null;S.selId=null;render();restoreScroll(S.view);
@@ -2540,7 +2558,15 @@ function renderList(app){
           <button id="collapseAllBtn" class="btn sm" style="flex:0 0 auto;padding:.4rem .55rem;background:var(--surface);border:none;box-shadow:var(--shadow);font-size:.95rem" title="${S.lang==='en'?'Expand/Collapse all':'Alle auf-/zuklappen'}">${S.collapsedCats&&S.collapsedCats.size===0?'⊟':'⊞'}</button>
         </div>
       </div>
+      <div class="hscroll" id="listQuick" style="gap:.4rem;margin:.1rem 0 .7rem"></div>
       <div id="rezepteGrid"></div>`;
+    document.getElementById('listQuick').addEventListener('click',e=>{
+      const b=e.target.closest('[data-qf],[data-qclear]');if(!b)return;
+      const f=S.filters;
+      if(b.dataset.qclear)f.tags=[];
+      else{const x=b.dataset.qf;f.tags=f.tags.includes(x)?f.tags.filter(y=>y!==x):[...f.tags,x];}
+      renderGrid();
+    });
     document.querySelectorAll('[data-listtab]').forEach(b=>b.addEventListener('click',()=>{
       const n=b.dataset.listtab;
       if(n===S.view)return;
@@ -2586,6 +2612,12 @@ function renderList(app){
   function renderGrid(){
     const isFav=S.view==='favorites';
     const grid=document.getElementById('rezepteGrid');if(!grid)return;
+    { // Schnellfilter-Leiste + Filter-Button an den aktuellen Stand angleichen
+      const q=document.getElementById('listQuick');
+      if(q){const sl=q.scrollLeft;q.innerHTML=quickTagChips(S.filters.tags);q.scrollLeft=sl;}
+      const fb=document.getElementById('filterBtn');
+      if(fb){const on=activeFilterCount()>0;fb.style.background=on?'var(--accent)':'var(--surface)';fb.style.color=on?'#fff':'var(--muted)';}
+    }
     const rs=S.recipes.filter(r=>{
       const f=S.filters;
       if((isFav||f.favOnly)&&!r.favorite)return false;
@@ -2607,7 +2639,7 @@ function renderList(app){
       return;
     }
     // If searching/filtering: flat list. Otherwise: category sections.
-    if(S.search||S.filterCat!=='Alle'||S.filterTag||isFav){
+    if(S.search||S.filterCat!=='Alle'||S.filterTag||S.filters.tags.length||isFav){
       grid.innerHTML=`<div class="rlist">${rs.map(cardH).join('')}</div>`;
       attachCardEvents(grid);return;
     }
@@ -3502,7 +3534,7 @@ function renderForm(app){
       <div class="cf">
         <div class="fl">${t('form_tags')}</div>
         <div id="tagQuick" style="margin-bottom:.5rem">
-          ${TAG_GROUPS.map(([g,ts])=>`<div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-bottom:.45rem"><span style="font-size:.68rem;color:var(--muted);font-family:var(--ui);width:5.3rem;flex-shrink:0;text-transform:uppercase;letter-spacing:.03em">${g}</span>${ts.map(tg=>`<button type="button" data-qtag="${esc(tg)}" style="${qTagStyle(S.formTags.includes(tg))}">${esc(tg)}</button>`).join('')}</div>`).join('')}
+          ${TAG_GROUPS.map(([g,ts])=>`<div style="display:flex;gap:.6rem;align-items:flex-start;margin-bottom:.55rem"><span style="font-size:.68rem;color:var(--muted);font-family:var(--ui);width:5.2rem;flex-shrink:0;padding-top:.5rem;text-transform:uppercase;letter-spacing:.03em">${g}</span><div style="flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:.35rem">${ts.map(tg=>`<button type="button" data-qtag="${esc(tg)}" style="${qTagStyle(S.formTags.includes(tg))}">${esc(tg)}</button>`).join('')}</div></div>`).join('')}
         </div>
         ${(()=>{const others=allTags().filter(x=>!ALLOWED_TAGS.includes(x));const open=S.formTags.some(x=>!ALLOWED_TAGS.includes(x));return `<details${open?' open':''} style="margin-top:.2rem"><summary style="cursor:pointer;font-size:.78rem;color:var(--muted);font-family:var(--ui);padding:.2rem 0">Weitere Tags (${others.length}) &amp; neuer Tag</summary>
         ${others.length>8?`<input id="formTagSearch" style="width:100%;padding:.4rem .65rem;border:1px solid var(--border2);border-radius:8px;background:var(--bg);font-family:var(--font);font-size:.85rem;color:var(--text);outline:none;margin:.45rem 0" placeholder="${t('flt_tag_search')}">`:''}
