@@ -645,10 +645,43 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
 
 <script>
 // ══════════════ CONSTANTS ══════════════
-const DEFAULT_CATS=["Suppen","Pizza & Pasta","Fleisch","Fisch","Aufläufe","Vegetarisch","Salate","Beilagen","Saucen & Dips","Frühstück & Gebäck","Desserts & Kuchen","Sonstiges"];
+const DEFAULT_CATS=["Hauptgerichte", "Suppen", "Salate", "Beilagen", "Saucen & Dips", "Brot & Gebäck", "Grundrezepte & Teige", "Desserts & Kuchen", "Frühstück & Snacks", "Cocktails & Longdrinks", "Sonstiges"];
 const CLR={"Frühstück":"#f59e0b","Suppen":"#ef4444","Pasta & Nudeln":"#f97316","Fleisch & Fisch":"#8b5cf6","Vegetarisch":"#22c55e","Salate":"#84cc16","Desserts":"#ec4899","Backen":"#a16207","Sonstiges":"#6b7280"};
 const COLOR_POOL=["#3b82f6","#06b6d4","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#f97316","#84cc16","#6b7280","#a16207","#0ea5e9"];
-const DEFAULT_CAT_ICONS={"Suppen":"🫕","Pizza & Pasta":"🍝","Fleisch":"🥩","Fisch":"🐟","Aufläufe":"🧀","Vegetarisch":"🥦","Salate":"🥗","Beilagen":"🥔","Saucen & Dips":"🫒","Frühstück & Gebäck":"🥐","Desserts":"🍮","Sonstiges":"🍽"};
+const DEFAULT_CAT_ICONS={"Hauptgerichte":"🍽","Suppen":"🫕","Salate":"🥗","Beilagen":"🥔","Saucen & Dips":"🫒","Brot & Gebäck":"🍞","Grundrezepte & Teige":"🫓","Desserts & Kuchen":"🍰","Frühstück & Snacks":"🥐","Cocktails & Longdrinks":"🍹","Sonstiges":"🍴"};
+const DEFAULT_CAT_COLORS={"Hauptgerichte":"#f97316","Suppen":"#ef4444","Salate":"#84cc16","Beilagen":"#a16207","Saucen & Dips":"#10b981","Brot & Gebäck":"#f59e0b","Grundrezepte & Teige":"#0ea5e9","Desserts & Kuchen":"#ec4899","Frühstück & Snacks":"#06b6d4","Cocktails & Longdrinks":"#8b5cf6","Sonstiges":"#6b7280"};
+
+// ══════════════ KATEGORIEN- & TAG-SCHEMA (Stand 2026-11-07) ══════════════
+// Kategorie = was es ist (genau eine). Tags = wie es ist (2–5, nur aus dieser Liste).
+const ALLOWED_TAGS=["Vegetarisch","Vegan","Italienisch","Französisch","Deutsch","Asiatisch","Orientalisch","Mediterran","Fisch","Fleisch","Nudeln","Reis","Kartoffel","Tofu","Käse","Hülsenfrüchte","Obst","Klassiker","Comfort Food","Kinderfreundlich","Festlich","Scharf","Schnell"];
+const TAG_RULE='Tags: 2–5 Stück, ausschließlich aus dieser Liste (exakte Schreibweise): '+ALLOWED_TAGS.join(', ')+'. Vegan nur zusammen mit Vegetarisch; Fisch-/Austern-/Worcestersauce und Sardellen gelten als nicht vegetarisch, Honig als nicht vegan; "Schnell" nur wenn Vorbereitungs- plus Kochzeit höchstens 30 Min. beträgt; Cocktails bekommen keine Tags.';
+// Zuordnung bestehender Rezepte: id -> [Kategorie-Index in DEFAULT_CATS, "Tag1,Tag2"]
+const SCHEMA_MAP={"r17801427430290jy":[0,"Asiatisch,Tofu,Schnell"],"r178014274302916p":[0,"Vegetarisch,Vegan,Deutsch,Kartoffel"],"r17801427430291z1":[5,"Vegetarisch,Vegan"],"r178014274302929o":[4,"Vegetarisch,Orientalisch,Schnell"],"r17801427430292u5":[3,"Vegetarisch,Französisch,Schnell"],"r17801427430293x2":[0,"Vegetarisch,Vegan,Orientalisch,Reis"],"r178014274302943u":[0,"Asiatisch,Nudeln"],"r178014274302949k":[6,"Vegetarisch,Vegan,Französisch"],"r178014274302957u":[4,"Vegetarisch,Orientalisch,Schnell"],"r1780142743029681":[0,"Fisch,Schnell"],"r17801427430296kd":[7,"Vegetarisch,Obst,Schnell"],"r17801427430297vn":[5,"Vegetarisch,Vegan,Französisch"],"r17801427430299u9":[5,"Vegetarisch,Vegan"],"r1780142743029a2u":[3,"Vegetarisch,Deutsch,Klassiker"],"r1780142743029a7x":[0,"Vegetarisch,Vegan,Asiatisch,Scharf"],"r1780142743029aai":[5,"Vegetarisch,Vegan"],"r1780142743029aqe":[0,"Vegetarisch,Deutsch,Klassiker,Schnell"],"r1780142743029bz0":[0,"Mediterran,Fisch,Schnell"],"r1780142743029c9m":[3,"Deutsch,Kartoffel"],"r1780142743029dg7":[0,"Fisch,Schnell"],"r1780142743029enc":[0,"Italienisch,Fleisch,Nudeln,Klassiker"],"r1780142743029gv4":[2,"Orientalisch,Fleisch,Käse"],"r1780142743029h4u":[3,"Vegetarisch,Mediterran,Schnell"],"r1780142743029hjt":[7,"Vegetarisch,Französisch,Kinderfreundlich,Schnell"],"r1780142743029ho4":[0,"Vegetarisch,Französisch,Käse,Kinderfreundlich,Schnell"],"r1780142743029hsm":[1,"Fleisch,Käse"],"r1780142743029jag":[0,"Vegetarisch,Französisch,Kinderfreundlich,Schnell"],"r1780142743029ldi":[0,"Orientalisch,Fleisch"],"r1780142743029miv":[7,"Vegetarisch,Vegan,Obst,Schnell"],"r1780142743029mr7":[0,"Vegetarisch,Französisch,Kinderfreundlich,Schnell"],"r1780142743029n86":[0,"Fleisch,Festlich"],"r1780142743029o48":[0,"Deutsch,Fleisch,Klassiker"],"r1780142743029ooh":[0,"Deutsch,Fisch,Schnell"],"r1780142743029qbj":[0,"Französisch,Fleisch,Klassiker,Festlich"],"r1780142743029sdz":[6,"Vegetarisch,Vegan,Italienisch"],"r1780142743029sgm":[0,"Fisch,Nudeln,Schnell"],"r1780142743029sry":[0,"Vegetarisch,Italienisch"],"r1780142743029ugu":[1,"Vegetarisch,Französisch"],"r1780142743029vg2":[0,"Mediterran,Fisch,Schnell"],"r1780142743029voq":[1,"Französisch,Fisch"],"r1780142743029vta":[0,"Fleisch"],"r1780142743029wbz":[0,"Vegetarisch,Mediterran,Käse,Schnell"],"r1780142743029wz2":[7,"Vegetarisch,Obst"],"r1780142743029x6z":[7,"Vegetarisch,Vegan,Obst,Schnell"],"r1780142743029xp4":[0,"Fleisch"],"r1780142743029y1y":[0,"Vegetarisch,Deutsch,Käse,Comfort Food"],"r1780142743029y7i":[4,"Vegetarisch,Vegan,Orientalisch,Hülsenfrüchte"],"r1780142743029zvz":[4,"Italienisch,Fleisch,Klassiker"],"r178014274303013a":[0,"Deutsch,Fleisch"],"r17801427430301sn":[0,"Französisch,Schnell"],"r17801427430302ja":[4,"Vegetarisch,Vegan,Orientalisch,Hülsenfrüchte,Schnell"],"r17801427430303d5":[0,"Fisch"],"r17801427430304h1":[0,"Italienisch,Nudeln,Comfort Food"],"r17801427430307lg":[0,"Orientalisch,Fleisch"],"r1780142743030btk":[0,"Deutsch,Fleisch,Klassiker"],"r1780142743030e7y":[1,"Vegetarisch,Vegan,Orientalisch,Hülsenfrüchte"],"r1780142743030fjc":[0,"Asiatisch,Fisch,Schnell"],"r1780142743030fk6":[4,"Vegetarisch,Orientalisch,Scharf,Schnell"],"r1780142743030g6v":[0,"Vegetarisch,Reis"],"r1780142743030gb9":[0,"Mediterran,Fisch"],"r1780142743030j2c":[8,"Vegetarisch,Schnell"],"r1780142743030lf8":[4,"Vegetarisch,Vegan,Italienisch,Schnell"],"r1780142743030mpn":[8,"Italienisch,Fisch,Schnell"],"r1780142743030ozh":[3,"Vegetarisch,Vegan,Deutsch,Kartoffel,Klassiker,Comfort Food"],"r1780142743030q73":[7,"Vegetarisch"],"r1780142743030r5d":[0,"Fisch,Schnell"],"r1780142743030uoy":[3,"Vegetarisch,Vegan,Schnell"],"r1780142743030vic":[0,"Französisch,Fisch"],"r1780142743030yan":[0,"Vegetarisch,Vegan,Asiatisch,Nudeln,Schnell"],"r1780142743030yj0":[0,"Deutsch,Fisch,Klassiker,Comfort Food"],"r1780250506951thh":[0,"Mediterran,Fisch"],"r1780341764970apb":[4,"Vegetarisch,Vegan,Italienisch"],"r1780726732324tj3":[0,"Vegetarisch,Italienisch,Reis,Klassiker,Comfort Food"],"r1780949719857swc":[6,"Vegetarisch,Vegan"],"r17809497272290l1":[5,"Vegetarisch,Vegan"],"r1781201364168e1x":[8,"Deutsch,Klassiker,Kinderfreundlich,Schnell"],"r1781526620393f0z":[7,"Vegetarisch,Italienisch,Klassiker,Festlich,Schnell"],"r1781862799859izz":[0,"Deutsch,Fisch,Comfort Food"],"r1781901666144squ":[0,"Französisch,Fisch,Hülsenfrüchte,Comfort Food"],"r1782149482250lry":[0,"Italienisch,Fleisch,Nudeln,Comfort Food,Schnell"],"r17826446552281cg":[9,""],"r17826446552281so":[9,""],"r17826446552282k4":[9,""],"r17826446552287w5":[9,""],"r1782644655228bn7":[9,""],"r1782644655228f7q":[9,""],"r1782644655228lj5":[9,""],"r1782644655228mi0":[9,""],"r1782644655228ovk":[9,""],"r1782644655228pim":[9,""],"r1782644655228pzf":[9,""],"r1782644655228qqq":[9,""],"r1782644655228r1x":[9,""],"r1782644655228rhy":[9,""],"r1782644655228set":[9,""],"r1782644655228tm7":[9,""],"r1782644655228tui":[9,""],"r1782644655228x54":[9,""],"r17830985025840vg":[0,"Französisch,Fisch,Festlich"],"r1783232648400sip":[0,"Mediterran,Fisch,Festlich,Schnell"],"r1783267067074qmn":[1,"Vegetarisch,Orientalisch,Hülsenfrüchte,Klassiker,Comfort Food"],"r1783607443662uir":[0,"Fleisch,Hülsenfrüchte,Klassiker,Comfort Food,Schnell"],"r17842218341045h8":[0,"Asiatisch,Fleisch,Nudeln,Käse,Scharf,Schnell"],"r1784381608093mud":[0,"Vegetarisch,Asiatisch,Nudeln,Tofu,Scharf"],"r1784910575163atc":[0,"Asiatisch,Fleisch,Nudeln,Schnell"],"r1784915057543rdg":[1,"Asiatisch,Fleisch,Nudeln,Comfort Food,Scharf,Schnell"],"r17860176617588er":[6,"Vegetarisch,Vegan,Italienisch"],"r17860269495959hu":[3,"Vegetarisch,Vegan,Mediterran,Kartoffel,Comfort Food"],"r1786027344348k31":[2,"Vegetarisch,Vegan,Deutsch,Kartoffel,Klassiker,Comfort Food"],"r1786388801725mgq":[0,"Deutsch,Fleisch,Klassiker"],"r1787316312513047":[6,"Vegetarisch,Italienisch,Nudeln,Klassiker"],"r1787316312513b73":[6,"Vegetarisch,Vegan,Italienisch,Nudeln,Klassiker"],"r1787316312513zfg":[6,"Vegetarisch,Italienisch,Nudeln,Klassiker"],"r1788672805708tli":[2,"Asiatisch,Obst,Scharf,Schnell"],"r1788699207266v2v":[5,"Vegetarisch,Vegan,Klassiker"],"r1788700247164jsd":[5,"Vegetarisch,Vegan,Klassiker"],"r1788952566005d2x":[1,"Kartoffel"],"r1789708341721tec":[4,"Vegetarisch,Vegan,Orientalisch,Hülsenfrüchte,Schnell"],"r1789708371545k1n":[0,"Fleisch,Nudeln,Scharf,Schnell"],"r1790427769049tcq":[0,"Vegetarisch,Asiatisch,Nudeln"],"r17904604932115f6":[5,"Vegetarisch,Vegan"],"r1791641345483ubg":[0,"Asiatisch,Reis,Tofu"],"r1794066672904gnr":[0,"Vegetarisch,Nudeln"],"r1784915008709lh2":[1,"Asiatisch,Fleisch,Nudeln,Comfort Food,Scharf,Schnell"],"r1786017539105ls6":[6,"Vegetarisch,Vegan,Italienisch"],"r17873162890222wk":[6,"Vegetarisch,Italienisch,Nudeln,Klassiker"],"r1787316289022483":[6,"Vegetarisch,Italienisch,Nudeln,Klassiker"],"r17873162890229r1":[6,"Vegetarisch,Vegan,Italienisch,Nudeln,Klassiker"]};
+const OLD_CAT_MAP={"Fisch":[0,"Fisch"],"Fleisch":[0,"Fleisch"],"Pasta":[0,"Nudeln"],"Pizza & Pasta":[0,"Nudeln"],"Pasta & Nudeln":[0,"Nudeln"],"Fleisch & Fisch":[0,""],"Vegetarisch":[0,"Vegetarisch"],"Pizza & Flammkuchen":[0,""],"Asia":[0,"Asiatisch"],"Aufläufe":[0,""],"Frühstück & Gebäck":[5,""],"Backen":[5,""],"Frühstück":[8,""],"Desserts & Kuchen":[7,""],"Desserts":[7,""],"Suppen":[1,""],"Salate":[2,""],"Beilagen":[3,""],"Saucen & Dips":[4,""],"Cocktails & Longdrinks":[9,""],"Sonstiges":[10,""]};
+function applyNewSchema(){
+  const cats=DEFAULT_CATS, allowed=new Map(ALLOWED_TAGS.map(x=>[x.toLowerCase(),x]));
+  let mapped=0,fallback=0;
+  S.recipes=S.recipes.map(r=>{
+    let cat,tags;
+    const hit=SCHEMA_MAP[r.id];
+    if(hit){cat=cats[hit[0]];tags=hit[1]?hit[1].split(','):[];mapped++;}
+    else{
+      const o=OLD_CAT_MAP[r.category]||[10,""];
+      cat=cats[o[0]];
+      const keep=(r.tags||[]).map(x=>allowed.get(String(x).toLowerCase())).filter(Boolean);
+      tags=[...new Set([...(o[1]?o[1].split(','):[]),...keep])];
+      if(tags.includes('Vegan')&&!tags.includes('Vegetarisch'))tags.unshift('Vegetarisch');
+      if(cat==='Cocktails & Longdrinks')tags=[];
+      fallback++;
+    }
+    return {...r,category:cat,tags,_updatedAt:Date.now()};
+  });
+  S.customCats=[...cats];
+  S.customCatColors=S.customCatColors||{};
+  cats.forEach(c=>{if(!S.customCatColors[c])S.customCatColors[c]=DEFAULT_CAT_COLORS[c];});
+  saveCats();saveR();
+  return {mapped,fallback};
+}
 const ICON_COLLECTION=[
   // Warm & Getränke
   "☕","🍵","🫖","🍷","🥂","🥃","🍾","🧋","🫗","🧃","🍺","🫙",
@@ -685,7 +718,7 @@ function getCats(){return S.customCats&&S.customCats.length?S.customCats:DEFAULT
 function getCatColor(cat){return CLR[cat]||(S.customCatColors&&S.customCatColors[cat])||COLOR_POOL[Math.abs(cat.split('').reduce((a,c)=>a+c.charCodeAt(0),0))%COLOR_POOL.length];}
 const ADMIN_UID='bgDIU86EH1T2CLYB7e3TrSN06rr1';
 function isAdmin(){return S.user&&S.user.uid===ADMIN_UID;}
-const SAMPLE=[{"cooked":false,"rating":0,"experiences":[],"title":"Spaghetti Bolognese","category":"Pasta","servings":4,"prepTime":"20","cookTime":"40","ingredients":"500 g Hackfleisch\n400 g Spaghetti\n1 Zwiebel\n2 Knoblauchzehen\n400 g gehackte Tomaten\n2 EL Tomatenmark\n2 EL Olivenöl\nSalz und Pfeffer\nfrisches Basilikum","steps":"1. Zwiebel und Knoblauch fein hacken, in Olivenöl bei mittlerer Hitze andünsten.\n2. Hackfleisch dazugeben und krümelig anbraten.\n3. Tomatenmark einrühren und kurz mitrösten.\n4. Mit gehackten Tomaten ablöschen, mit Salz und Pfeffer würzen und 30 Minuten köcheln lassen.\n5. Spaghetti nach Packungsanweisung al dente kochen.\n6. Sauce über die Nudeln geben, mit frischem Basilikum garnieren.","notes":"Schmeckt am nächsten Tag noch besser! Mit Parmesan servieren.","favorite":false,"tags":["Klassiker"],"nutrition":{"kcal":"620","protein":"36","carbs":"72","fat":"19","fiber":"5","salt":"1.8"},"id":"sample001","createdAt":1000000000000}];
+const SAMPLE=[{"cooked":false,"rating":0,"experiences":[],"title":"Spaghetti Bolognese","category":"Hauptgerichte","servings":4,"prepTime":"20","cookTime":"40","ingredients":"500 g Hackfleisch\n400 g Spaghetti\n1 Zwiebel\n2 Knoblauchzehen\n400 g gehackte Tomaten\n2 EL Tomatenmark\n2 EL Olivenöl\nSalz und Pfeffer\nfrisches Basilikum","steps":"1. Zwiebel und Knoblauch fein hacken, in Olivenöl bei mittlerer Hitze andünsten.\n2. Hackfleisch dazugeben und krümelig anbraten.\n3. Tomatenmark einrühren und kurz mitrösten.\n4. Mit gehackten Tomaten ablöschen, mit Salz und Pfeffer würzen und 30 Minuten köcheln lassen.\n5. Spaghetti nach Packungsanweisung al dente kochen.\n6. Sauce über die Nudeln geben, mit frischem Basilikum garnieren.","notes":"Schmeckt am nächsten Tag noch besser! Mit Parmesan servieren.","favorite":false,"tags":["Klassiker"],"nutrition":{"kcal":"620","protein":"36","carbs":"72","fat":"19","fiber":"5","salt":"1.8"},"id":"sample001","createdAt":1000000000000}];
 
 const S={
   view:'home', recipes:[], shopping:[], pantry:[], shopDoneSuggest:[], shopTab:'shopping', pantryScanPending:null, pantryEditIdx:null, selId:null, editId:null, delId:null,
@@ -1764,9 +1797,10 @@ const LANG={
 function t(key){return(LANG[S&&S.lang?S.lang:'de']||LANG.de)[key]||key;}
 function setLang(l){S.lang=l;try{localStorage.setItem('mrlang',l);}catch{}document.documentElement.lang=l==='en'?'en':'de';render();}
 
-const APP_VERSION = '4.2.1';
+const APP_VERSION = '4.3.0';
 const APP_DATE = '2026-11-07';
 const VERSION_HISTORY = [
+  { version:'4.3.0', date:'2026-11-07', de:['🆕 Neues Kategorie- & Tag-Schema: 11 Kategorien nach Gerichtstyp (Hauptgerichte, Suppen, Salate, Beilagen, Saucen & Dips, Brot & Gebäck, Grundrezepte & Teige, Desserts & Kuchen, Frühstück & Snacks, Cocktails & Longdrinks, Sonstiges) und 23 feste Tags (Ernährung, Küche, Hauptzutat, Charakter, Schnell). Fisch, Fleisch und Pasta findet man jetzt über Tags statt über Kategorien.','Neu: Einstellungen → Kategorien → „Neues Kategorie- & Tag-Schema anwenden“ stellt alle bestehenden Rezepte einmalig um (Zuordnung über die Rezept-ID, Rezepte ohne Zuordnung über die alte Kategorie).','KI-Import, Websuche, Rezept-Generator und KI-Check nutzen jetzt automatisch deine aktuellen Kategorien und die feste Tag-Liste.'], en:['🆕 New category & tag scheme: 11 categories by dish type and 23 fixed tags (diet, cuisine, main ingredient, character, quick). Fish, meat and pasta are now found via tags instead of categories.','New: Settings → Categories → “Apply new category & tag scheme” converts all existing recipes once (matched by recipe ID, others via their old category).','AI import, web search, recipe generator and AI check now use your current categories and the fixed tag list automatically.'] },
   { version:'4.2.1', date:'2026-11-07', de:['🚨 Fix: Frisch importierte Rezepte verschwanden nach ein paar Sekunden und tauchten nach erneutem Import doppelt auf. Ursache: Der Start-Abgleich (fsInitialSync) holte pro Rezept nacheinander die Foto-URL (viele Sekunden) und überschrieb danach die Rezeptliste mit dem Stand vom Start – ein in dieser Zeit importiertes Rezept ging lokal verloren (blieb aber in der Cloud). Jetzt werden Foto-URLs parallel geholt und während des Abgleichs neu angelegte/geänderte Rezepte bleiben erhalten.','Fix: Ist Storage kurzzeitig nicht erreichbar (z.B. gesperrter Bucket, Netzwerkfehler), bleibt der lokale Foto-Cache erhalten, statt beim Abgleich alle Fotos zu löschen. Nur wenn ein Foto wirklich nicht existiert, wird es entfernt.'], en:['🚨 Fix: freshly imported recipes vanished after a few seconds and appeared twice after re-importing. Cause: the startup sync (fsInitialSync) fetched each photo URL one after another (many seconds) and then overwrote the recipe list with the state from the start – a recipe imported in that window was lost locally (but stayed in the cloud). Photo URLs are now fetched in parallel and recipes added/changed during the sync are kept.','Fix: if Storage is temporarily unreachable (e.g. locked bucket, network error) the local photo cache is kept instead of wiping all photos during sync. A photo is only removed if it truly does not exist.'] },
   { version:'4.2.0', date:'2026-09-19', de:['🚨 Fix: Gelöschte Rezepte tauchten immer wieder auf. Ursache: Beim Start wurde der lokale Stand mit der Cloud vereinigt – ein Gerät (oder derselbe Browser offline), das das Rezept noch lokal hatte, hat es wieder hochgeladen. Jetzt gibt es Lösch-Tombstones (auch offline gemerkt und beim nächsten Abgleich hochgeladen): gelöschte Rezepte werden nicht mehr hochgeladen und auf anderen Geräten entfernt; spätere Änderungen gewinnen weiterhin.','Kochsession: Pausen haben eine eigene, auffällige Zeile (⏸ PAUSE · Dauer, danach welches Rezept startet) – auch wenn die Wartezeit nicht mit einem anderen Rezept gefüllt wird','Kochsession: Passive Schritte deutlich erkennbar – Label ⏳ PASSIV / ⚡ AKTIV, gestrichelter Rand und schraffierter Hintergrund bei passiven Schritten','Kochsession: Der Hinweis „Fehlende Zeiten / Aktiv-Passiv\" erscheint nur noch im manuellen Modus (die KI schätzt selbst), zeigt pro Rezept „fehlend/gesamt\" und lässt sich ausblenden'], en:['🚨 Fix: deleted recipes kept coming back. Cause: at startup local data was merged with the cloud as a union – a device (or the same browser offline) that still had the recipe locally re-uploaded it. Deletion tombstones now exist (remembered offline too and uploaded on the next sync): deleted recipes are no longer uploaded and get removed on other devices; later edits still win.','Cooking session: pauses get their own prominent row (⏸ BREAK · duration, then which recipe starts) – also when the wait is not filled with another recipe','Cooking session: passive steps clearly recognizable – ⏳ PASSIVE / ⚡ ACTIVE label, dashed border and hatched background for passive steps','Cooking session: the \"Missing times / active-passive\" note only shows in manual mode (the AI estimates on its own), shows \"missing/total\" per recipe and can be hidden'] },
   { version:'4.1.4', date:'2026-09-19', de:['Kochsession: Jedes Rezept bekommt eine eigene, eindeutige Farbe (bisher nach Kategorie – zwei Gerichte der gleichen Kategorie waren nicht zu unterscheiden)'], en:['Cooking session: every recipe gets its own unique color (previously by category – two dishes of the same category looked identical)'] },
@@ -4562,6 +4596,10 @@ function renderSettings(app){
           <button class="btn bg sm" id="catAddBtn">${t('btn_add_cat')}</button>
           <button class="btn bg sm" id="catResetBtn" style="color:var(--muted)">${t('btn_default')}</button>
         </div>
+        <div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid var(--border2)">
+          <button class="btn bg sm" id="catSchemaBtn">🔄 Neues Kategorie- &amp; Tag-Schema anwenden</button>
+          <div style="font-size:.72rem;color:var(--muted);font-family:var(--ui);margin-top:.35rem">Stellt alle Rezepte auf ${DEFAULT_CATS.length} Kategorien und ${ALLOWED_TAGS.length} feste Tags um (Stand 07.11.2026).</div>
+        </div>
       </div>
     </div>
     <div class="ss"><div class="st2">${t('set_display')}</div>
@@ -4754,6 +4792,16 @@ function renderSettings(app){
     if(confirm('Kategorien auf Standard zurücksetzen?')){
       S.customCats=null;S.customCatColors={};saveCats();renderApp();
     }
+  });
+
+  document.getElementById('catSchemaBtn')?.addEventListener('click',()=>{
+    const msg=S.lang==='en'
+      ?`Apply the new category & tag scheme?\nCategories and tags of all ${S.recipes.length} recipes will be replaced. Tip: create a backup first.`
+      :`Neues Kategorie- & Tag-Schema anwenden?\nKategorien und Tags aller ${S.recipes.length} Rezepte werden ersetzt. Tipp: vorher ein Backup anlegen.`;
+    if(!confirm(msg))return;
+    const res=applyNewSchema();
+    toast((S.lang==='en'?'Scheme applied: ':'Schema angewendet: ')+res.mapped+(res.fallback?` + ${res.fallback} ${S.lang==='en'?'via old-category mapping':'über Alt-Zuordnung'}`:'')+' ✓');
+    renderApp();
   });
 
   document.getElementById('catList')?.addEventListener('click',e=>{
@@ -6753,8 +6801,8 @@ rein strukturell/technisch:
    einem vorangestellten "~" (z.B. "~1 TL Salz"). Zutaten, die bereits eine Menge haben, NIEMALS ändern.
 3. TITEL/NOTIZEN: Nur Rechtschreibung/Grammatik korrigieren, inhaltlich exakt gleich lassen.
    Wenn bei 2./3. nichts zu korrigieren/ergänzen ist, das jeweilige Feld unverändert zurückgeben.
-4. TAGS: Schlage aus dem Inhalt ableitbare, fehlende Tags vor (z.B. "Vegetarisch", "Schnell", "Glutenfrei")
-   und vorhandene Tags, die nicht (mehr) passen, zum Entfernen. Keine Tags erfinden, die nicht klar zutreffen.
+4. TAGS: Schlage aus dem Inhalt ableitbare, fehlende Tags vor und vorhandene Tags, die nicht (mehr) passen,
+   zum Entfernen. ${TAG_RULE} Tags außerhalb dieser Liste immer zum Entfernen vorschlagen. Keine Tags erfinden, die nicht klar zutreffen.
 5. PLAUSIBILITÄT: Liste kurze, konkrete Hinweise zu Auffälligkeiten (z.B. Mengenangabe wirkt für die
    Portionszahl unstimmig, eine Zutat wird in der Zubereitung nie erwähnt, ein Schritt fehlt vermutlich).
    Nur benennen, NICHT selbst ändern.
@@ -7330,7 +7378,8 @@ async function callClaude(contentParts, feature){
   return await window.geminiJSON({
     feature: feature||'import',
     system:`Du bist ein Rezept-Extraktor. Antworte NUR mit einem JSON-Objekt.
-Format: {"title":"string","category":"Frühstück|Suppen|Pasta & Nudeln|Fleisch & Fisch|Vegetarisch|Salate|Desserts|Backen|Sonstiges","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Tipps oder leer","tags":["Tag1"]}`,
+Format: {"title":"string","category":"${getCats().join('|')}","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Tipps oder leer","tags":["Tag1"]}
+${TAG_RULE}`,
     contentParts
   });
 }
@@ -7533,9 +7582,10 @@ async function callClaudeSearch(userPrompt,contentParts){
 Suche im Internet nach passenden Rezepten und schlage 2-3 konkrete Rezepte vor.
 Für das beste Ergebnis antworte am Ende IMMER mit einem JSON-Block im Format:
 <rezepte>
-[{"title":"...","category":"...","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Quelle: ...","tags":["Tag"]}]
+[{"title":"...","category":"${getCats().join('|')}","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Quelle: ...","tags":["Tag"]}]
 </rezepte>
-Davor kannst du kurz auf Deutsch erklären was du gefunden hast.`,
+Davor kannst du kurz auf Deutsch erklären was du gefunden hast.
+${TAG_RULE}`,
     contentParts
   });
 }
@@ -7602,7 +7652,7 @@ async function runAISearch(useWeb,images=[]){
         :[{text:'Erstelle ein Rezept für: '+fullQuery}];
       result=await window.geminiRecipeBlock({
         feature:'rezept_generieren',
-        system:`Erstelle ein detailliertes Rezept. Antworte mit einem Intro-Satz dann:\n<rezepte>\n[{"title":"...","category":"Frühstück|Suppen|Pasta & Nudeln|Fleisch & Fisch|Vegetarisch|Salate|Desserts|Backen|Sonstiges","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Tipps","tags":["Tag"]}]\n</rezepte>`,
+        system:`Erstelle ein detailliertes Rezept. Antworte mit einem Intro-Satz dann:\n<rezepte>\n[{"title":"...","category":"${getCats().join('|')}","servings":4,"prepTime":15,"cookTime":30,"ingredients":"Zutat 1\\nZutat 2","steps":"1. Schritt\\n2. Schritt","notes":"Tipps","tags":["Tag"]}]\n</rezepte>\n${TAG_RULE}`,
         contentParts:content});
     }
     S.aiSearchResults=result;
